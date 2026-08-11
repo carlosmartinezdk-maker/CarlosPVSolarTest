@@ -1,5 +1,5 @@
 # Run Report - Solar Underperformance Analysis
-Generated: 2026-08-11T17:58:22.980324
+Generated: 2026-08-11T18:37:19.608897
 **SCOPE: 100-site stratified validation subsample, per the brief's own BUILD ORDER (Section 12). Full 6,204-site scale-up is a tracked follow-up, not yet run.**
 
 ## NSRDB access status (READ FIRST)

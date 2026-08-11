@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PI/PRI Solar Underperformance Explorer</title>
+<style>
+:root {
+  --bg: #0f1420; --panel: #1a2132; --panel2: #222b40; --border: #2e3852;
+  --text: #e6ebf5; --muted: #93a0bd; --accent: #4f8cff; --good: #33c17a;
+  --warn: #e6b422; --bad: #e05a5a; --lead: #ff7a45;
+}
+* { box-sizing: border-box; }
+body { margin:0; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background: var(--bg); color: var(--text); font-size: 13px; }
+a { color: var(--accent); }
+header#topbar { position: sticky; top:0; z-index: 50; background: var(--panel);
+  border-bottom: 1px solid var(--border); padding: 8px 14px; display:flex; align-items:center; gap:14px; }
+header#topbar h1 { font-size: 15px; margin:0; font-weight:600; }
+header#topbar nav button { background:none; border:1px solid var(--border); color: var(--muted);
+  padding: 5px 12px; border-radius: 6px; cursor:pointer; font-size:12px; }
+header#topbar nav button.active { background: var(--accent); color:#fff; border-color: var(--accent); }
+#footer-caveat { position: sticky; bottom:0; background: var(--panel); border-top: 1px solid var(--border);
+  padding: 6px 14px; font-size: 11px; color: var(--warn); z-index: 50; }
+main { padding: 14px; max-width: 1500px; margin: 0 auto; }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.panel h2 { font-size: 13px; margin: 0 0 10px 0; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.kpi-strip { display:flex; flex-wrap:wrap; gap:10px; }
+.kpi { background: var(--panel2); border-radius: 6px; padding: 10px 14px; min-width: 130px; }
+.kpi .v { font-size: 20px; font-weight:700; }
+.kpi .l { font-size: 11px; color: var(--muted); }
+.grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+.grid3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; }
+svg text { fill: var(--muted); font-size: 10px; }
+.bar { fill: var(--accent); }
+.badge { display:inline-block; padding: 1px 7px; border-radius:10px; font-size:10px; font-weight:600; }
+.badge.Chronic { background:#5a1e1e; color:#ff9a9a; }
+.badge.Event { background:#5a3a1e; color:var(--lead); }
+.badge.New { background:#2e3852; color:var(--muted); }
+.badge.Improving { background:#1e4a30; color: var(--good); }
+.badge.Healthy { background:#1e4a30; color: var(--good); }
+.badge.WarrantyUrgent { background:#5a1e1e; color:#ff6a6a; }
+.badge.HIGH { background:#1e4a30; color:var(--good); }
+.badge.MEDIUM { background:#5a3a1e; color:var(--warn); }
+.badge.LOW { background:#3a2020; color:var(--muted); }
+#filterbar { display:flex; flex-wrap: wrap; gap:8px; align-items:center; margin-bottom:10px; }
+#filterbar select, #filterbar input { background: var(--panel2); color: var(--text); border:1px solid var(--border);
+  border-radius: 5px; padding: 4px 8px; font-size:12px; }
+#filterbar button { background: var(--panel2); color: var(--text); border:1px solid var(--border);
+  border-radius: 5px; padding: 4px 10px; font-size:12px; cursor:pointer; }
+table.triage { width:100%; border-collapse: collapse; font-size:12px; }
+table.triage th { position: sticky; top:0; background: var(--panel2); text-align:left; padding:6px 8px;
+  cursor:pointer; white-space:nowrap; border-bottom: 1px solid var(--border); }
+table.triage td { padding: 5px 8px; border-bottom: 1px solid #1f2740; white-space:nowrap; }
+table.triage tr:hover { background: var(--panel2); cursor:pointer; }
+#triage-scroll { height: 60vh; overflow-y:auto; border:1px solid var(--border); border-radius:6px; }
+.pos-indicator { color: var(--muted); font-size:12px; }
+.ribbon { display:flex; gap:1px; overflow-x:auto; padding: 4px 0; }
+.ribbon .cell { min-width: 7px; height: 22px; flex: 1 0 7px; cursor: default; }
+.sig-OUTAGE_FULL { background:#e05a5a; } .sig-BLOCK_OUTAGE { background:#ff7a45; }
+.sig-SOILING { background:#e6b422; } .sig-TRACKER { background:#c77dff; }
+.sig-BOS_INTERMITTENT { background:#4f8cff; } .sig-DEGRADATION { background:#9a6a3a; }
+.sig-UNATTRIBUTED { background:#6b7690; } .sig-CURTAILMENT { background:#3a4a6b; }
+.sig-SNOW { background:#dbe9ff; } .sig-CLIPPING { background:#5a5a7a; }
+.sig-NONE, .sig-UNSCORED, .sig-WATCH_NOT_A_FAULT { background: #232b3f; }
+.legend { display:flex; flex-wrap:wrap; gap:10px; font-size:11px; color:var(--muted); margin-top:6px; }
+.legend span.sw { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:middle; }
+.detail-header { display:flex; justify-content:space-between; align-items:flex-start; }
+.detail-header .meta { color: var(--muted); font-size:12px; line-height:1.6; }
+.navbtns { display:flex; gap:8px; align-items:center; }
+.navbtns button { background: var(--panel2); border:1px solid var(--border); color:var(--text);
+  border-radius:6px; padding:6px 12px; cursor:pointer; }
+textarea.note { width:100%; background: var(--panel2); color:var(--text); border:1px solid var(--border);
+  border-radius:6px; padding:6px; font-family:inherit; font-size:12px; min-height:50px; }
+.status-btns button { margin-right:6px; }
+.status-btns button.on { outline: 2px solid var(--accent); }
+table.ledger, table.risk { width:100%; border-collapse:collapse; font-size:12px; }
+table.ledger th, table.ledger td, table.risk th, table.risk td { padding:4px 8px; border-bottom:1px solid #1f2740; text-align:left; }
+.progress-bar { height:6px; background:var(--panel2); border-radius:3px; overflow:hidden; margin-top:4px; }
+.progress-bar > div { height:100%; background: var(--good); }
+.small { font-size: 11px; color: var(--muted); }
+.assumption-row td { padding:3px 8px; }
+</style>
+</head>
+<body>
+
+<header id="topbar">
+  <h1>PI/PRI Solar Underperformance Explorer</h1>
+  <nav>
+    <button data-view="fleet" class="active">Fleet Overview</button>
+    <button data-view="triage">Triage List</button>
+    <button data-view="detail">Site Detail</button>
+  </nav>
+  <span class="pos-indicator" id="pos-indicator"></span>
+  <span style="margin-left:auto" class="small" id="progress-indicator"></span>
+</header>
+
+<main id="main"></main>
+
+<div id="footer-caveat">RANKING SIGNAL, NOT A QUOTE. See the Assumptions panel (Fleet Overview) for what's measured vs assumed. This run used the scope and weather track shown there — check it before quoting a dollar figure.</div>
+
+<script type="application/json" id="payload-data">__PAYLOAD_JSON__</script>
+<script>
+const DATA = JSON.parse(document.getElementById('payload-data').textContent);
+const SIGNATURES = ["OUTAGE_FULL","BLOCK_OUTAGE","SOILING","TRACKER","BOS_INTERMITTENT","DEGRADATION","UNATTRIBUTED","CURTAILMENT","SNOW","CLIPPING"];
+const SIG_LABEL = {OUTAGE_FULL:"Outage",BLOCK_OUTAGE:"Block outage",SOILING:"Soiling",TRACKER:"Tracker",
+  BOS_INTERMITTENT:"BOS intermittent",DEGRADATION:"Degradation",UNATTRIBUTED:"Unattributed",
+  CURTAILMENT:"Curtailment",SNOW:"Snow",CLIPPING:"Clipping"};
+
+// ---------------------------------------------------------------- state ----
+const state = {
+  view: 'fleet',
+  filters: { year:'', tracking:'', module:'', tier:'', signature:'', confidence:'',
+             search:'', peersLt4:false, gap2022:false, noAssetMatch:false },
+  sortCol: 'recoverable_usd_yr', sortDir: -1,
+  currentSite: null,
+};
+
+function loadTriage() {
+  try { return JSON.parse(localStorage.getItem('triage_state') || '{}'); } catch(e) { return {}; }
+}
+function saveTriage(t) { localStorage.setItem('triage_state', JSON.stringify(t)); }
+let triage = loadTriage();
+
+// ------------------------------------------------------------- filtering ----
+function siteMatches(s, f) {
+  if (f.tracking && s.tracking !== f.tracking) return false;
+  if (f.module && s.module !== f.module) return false;
+  if (f.tier && s.conviction_tier !== f.tier) return false;
+  if (f.confidence && !s.confidence.includes(f.confidence)) return false;
+  if (f.signature && s.top_signature !== f.signature) return false;
+  if (f.peersLt4 && !(s.peers_healthy.some(p => p !== null && p < 4))) return false;
+  if (f.gap2022 && !s.data_quality_flags.includes('2022_data_gap')) return false;
+  if (f.noAssetMatch && !s.data_quality_flags.includes('no_asset_match')) return false;
+  if (f.search) {
+    const q = f.search.toLowerCase();
+    if (!(s.site.toLowerCase().includes(q) || (s.operator||'').toLowerCase().includes(q))) return false;
+  }
+  return true;
+}
+function filteredSites() {
+  const f = state.filters;
+  let list = DATA.sites.filter(s => siteMatches(s, f));
+  const col = state.sortCol, dir = state.sortDir;
+  list.sort((a,b) => {
+    let av = a[col], bv = b[col];
+    if (av === null || av === undefined) av = -Infinity;
+    if (bv === null || bv === undefined) bv = -Infinity;
+    if (typeof av === 'string') return dir * av.localeCompare(bv);
+    return dir * (av - bv);
+  });
+  return list;
+}
+
+// -------------------------------------------------------------- helpers ----
+function fmtUsd(v) { if (v===null||v===undefined) return '—'; return '$' + Math.round(v).toLocaleString(); }
+function fmtNum(v, nd) { if (v===null||v===undefined) return '—'; return Number(v).toFixed(nd===undefined?2:nd); }
+function el(tag, attrs, children) {
+  const e = document.createElement(tag);
+  for (const k in (attrs||{})) {
+    if (k === 'class') e.className = attrs[k];
+    else if (k === 'html') e.innerHTML = attrs[k];
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), attrs[k]);
+    else e.setAttribute(k, attrs[k]);
+  }
+  (children||[]).forEach(c => e.appendChild(c instanceof Node ? c : document.createTextNode(String(c))));
+  return e;
+}
+function svg(tag, attrs) {
+  const e = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const k in (attrs||{})) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+// ---------------------------------------------------------- mini charts ----
+function histogram(values, w, h, threshold) {
+  const s = svg('svg', {width:w, height:h, viewBox:`0 0 ${w} ${h}`});
+  if (!values.length) return s;
+  const bins = 20, min = 0, max = Math.max(1.5, Math.max(...values));
+  const counts = new Array(bins).fill(0);
+  values.forEach(v => { let b = Math.floor((v-min)/(max-min)*bins); if (b>=bins) b=bins-1; if (b<0) b=0; counts[b]++; });
+  const maxC = Math.max(...counts);
+  const bw = w/bins;
+  counts.forEach((c,i) => {
+    const bh = maxC ? (c/maxC)*(h-16) : 0;
+    s.appendChild(svg('rect', {x:i*bw+1, y:h-14-bh, width:bw-2, height:bh, class:'bar'}));
+  });
+  if (threshold !== undefined) {
+    const tx = ((threshold-min)/(max-min))*w;
+    s.appendChild(svg('line', {x1:tx,y1:0,x2:tx,y2:h-14, stroke:'var(--warn)', 'stroke-dasharray':'3,2'}));
+  }
+  s.appendChild(svg('text', {x:2, y:h-2}, )).textContent = min.toFixed(1);
+  const t2 = svg('text', {x:w-24, y:h-2}); t2.textContent = max.toFixed(1); s.appendChild(t2);
+  return s;
+}
+function barChart(labels, values, w, h, colorFn) {
+  const s = svg('svg', {width:w, height:h, viewBox:`0 0 ${w} ${h}`});
+  const maxV = Math.max(1, ...values);
+  const bw = w/labels.length;
+  values.forEach((v,i) => {
+    const bh = (v/maxV)*(h-28);
+    s.appendChild(svg('rect', {x:i*bw+2, y:h-20-bh, width:bw-4, height:bh, fill: colorFn?colorFn(labels[i]):'var(--accent)'}));
+    const t = svg('text', {x:i*bw+bw/2, y:h-8, 'text-anchor':'middle'}); t.textContent = labels[i].length>10?labels[i].slice(0,9)+'…':labels[i];
+    s.appendChild(t);
+    const tv = svg('text', {x:i*bw+bw/2, y:h-22-bh, 'text-anchor':'middle'}); tv.textContent = v; s.appendChild(tv);
+  });
+  return s;
+}
+function sigColor(sig) {
+  const map = {OUTAGE_FULL:'#e05a5a',BLOCK_OUTAGE:'#ff7a45',SOILING:'#e6b422',TRACKER:'#c77dff',
+    BOS_INTERMITTENT:'#4f8cff',DEGRADATION:'#9a6a3a',UNATTRIBUTED:'#6b7690',CURTAILMENT:'#3a4a6b',
+    SNOW:'#dbe9ff',CLIPPING:'#5a5a7a'};
+  return map[sig] || '#888';
+}
+
+// ---------------------------------------------------------------- views ----
+function renderFleet() {
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+  const k = DATA.kpi;
+
+  const kpiPanel = el('div', {class:'panel'});
+  kpiPanel.appendChild(el('h2',{},['Fleet KPIs — validation subsample']));
+  const strip = el('div', {class:'kpi-strip'});
+  const kpis = [
+    ['Scoreable sites (subsample)', k.scoreable_sites_subsample],
+    ['Scoreable sites (full fleet)', k.scoreable_sites_fleet.toLocaleString()],
+    ['Fleet capacity', k.gw_ac_fleet + ' GWac'],
+    ['Site-months scored', k.site_months_scored.toLocaleString()],
+    ['Leads (Chronic+Event)', k.leads],
+    ['High conviction (Chronic)', k.high_conviction],
+    ['Recoverable MWh/yr (subsample)', fmtNum(k.recoverable_mwh_yr,0)],
+    ['Recoverable USD/yr (subsample)', fmtUsd(k.recoverable_usd_yr)],
+  ];
+  kpis.forEach(([l,v]) => strip.appendChild(el('div',{class:'kpi'},[el('div',{class:'v'},[String(v)]), el('div',{class:'l'},[l])])));
+  kpiPanel.appendChild(strip);
+  m.appendChild(kpiPanel);
+
+  // funnel
+  const funnelPanel = el('div', {class:'panel'});
+  funnelPanel.appendChild(el('h2',{},['Data quality funnel (Section 4, full fleet)']));
+  const fLabels = DATA.funnel.map(r => r.step);
+  const fValues = DATA.funnel.map(r => r.n_sites);
+  funnelPanel.appendChild(barChart(fLabels, fValues, 900, 160));
+  funnelPanel.appendChild(el('div',{class:'small'},[`GWac at each step: ${DATA.funnel.map(r=>r.gw_ac.toFixed(1)).join(' → ')}`]));
+  m.appendChild(funnelPanel);
+
+  // distributions
+  const distPanel = el('div', {class:'panel grid2'});
+  const allPi = DATA.sites.flatMap(s => s.pi.filter(v=>v!==null));
+  const allPri = DATA.sites.flatMap(s => s.pri.filter(v=>v!==null));
+  const piDiv = el('div', {}, [el('h2',{},['PI distribution (0.92 threshold marked)']), histogram(allPi, 420, 140, 0.92)]);
+  const priDiv = el('div', {}, [el('h2',{},['PRI distribution (0.92 threshold marked)']), histogram(allPri, 420, 140, 0.92)]);
+  distPanel.appendChild(piDiv); distPanel.appendChild(priDiv);
+  m.appendChild(distPanel);
+
+  // signature counts
+  const sigPanel = el('div', {class:'panel'});
+  sigPanel.appendChild(el('h2',{},['Fault counts by signature (subsample, all years)']));
+  const sigLabels = Object.keys(DATA.signature_counts);
+  const sigValues = sigLabels.map(l => DATA.signature_counts[l]);
+  sigPanel.appendChild(barChart(sigLabels.map(l=>SIG_LABEL[l]||l), sigValues, 900, 160, l => sigColor(sigLabels[sigLabels.map(x=>SIG_LABEL[x]||x).indexOf(l)])));
+  m.appendChild(sigPanel);
+
+  // by-year stacked (simplified: separate small bars per year per signature count)
+  const yearPanel = el('div', {class:'panel'});
+  yearPanel.appendChild(el('h2',{},['Fault site-months by year']));
+  const years = Object.keys(DATA.year_signature_counts).sort();
+  const yearTotals = years.map(y => Object.values(DATA.year_signature_counts[y]).reduce((a,b)=>a+b,0));
+  yearPanel.appendChild(barChart(years, yearTotals, 700, 140));
+  m.appendChild(yearPanel);
+
+  // simple lat/lon scatter "map"
+  const mapPanel = el('div', {class:'panel'});
+  mapPanel.appendChild(el('h2',{},['Site locations (approximate scatter, not a basemap) — colored by conviction tier']));
+  const w=900,h=380;
+  const lats = DATA.sites.map(s=>s.lat), lons = DATA.sites.map(s=>s.lon);
+  const minLat=24, maxLat=50, minLon=-125, maxLon=-66; // rough CONUS bbox
+  const s2 = svg('svg',{width:w,height:h,viewBox:`0 0 ${w} ${h}`});
+  s2.appendChild(svg('rect',{x:0,y:0,width:w,height:h,fill:'#141b2b',stroke:'var(--border)'}));
+  const tierColor = {Chronic:'#ff6a6a', Event:'#ff7a45', New:'#6b7690', Improving:'#33c17a', Healthy:'#3a4a6b', 'Warranty-urgent':'#ff2020'};
+  DATA.sites.forEach(s => {
+    if (s.lat===null||s.lon===null) return;
+    const x = ((s.lon-minLon)/(maxLon-minLon))*w;
+    const y = h - ((s.lat-minLat)/(maxLat-minLat))*h;
+    const c = svg('circle', {cx:x,cy:y,r:Math.max(2,Math.sqrt(s.mwac||10)/3), fill: tierColor[s.conviction_tier]||'#888', opacity:0.85, 'data-site': s.site});
+    c.style.cursor='pointer';
+    c.addEventListener('click', () => openSite(s.site));
+    s2.appendChild(c);
+  });
+  mapPanel.appendChild(s2);
+  const legend = el('div',{class:'legend'});
+  Object.entries(tierColor).forEach(([k,v]) => legend.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${v}`}),k])));
+  mapPanel.appendChild(legend);
+  m.appendChild(mapPanel);
+
+  // hazard curves
+  if (DATA.hazard.length) {
+    const hazPanel = el('div', {class:'panel'});
+    hazPanel.appendChild(el('h2',{},['Hazard rate by age band and signature (episodes / exposure-year) — subsample, not statistically meaningful yet']));
+    const bands = [...new Set(DATA.hazard.map(h=>h.age_band))];
+    const sigsPresent = [...new Set(DATA.hazard.map(h=>h.signature))];
+    const w3=900,h3=200, bw = w3/bands.length;
+    const maxRate = Math.max(0.1, ...DATA.hazard.map(h=>h.rate||0));
+    const s3 = svg('svg',{width:w3,height:h3,viewBox:`0 0 ${w3} ${h3}`});
+    sigsPresent.forEach(sig => {
+      let pts = [];
+      bands.forEach((b,i) => {
+        const rec = DATA.hazard.find(h=>h.signature===sig && h.age_band===b);
+        if (rec) pts.push([i*bw+bw/2, h3-20-((rec.rate/maxRate)*(h3-40))]);
+      });
+      if (pts.length>1) {
+        const path = pts.map((p,i)=> (i===0?'M':'L')+p[0]+','+p[1]).join(' ');
+        s3.appendChild(svg('path',{d:path, fill:'none', stroke:sigColor(sig), 'stroke-width':2}));
+      }
+    });
+    bands.forEach((b,i)=> s3.appendChild(svg('text',{x:i*bw+bw/2,y:h3-4,'text-anchor':'middle'})).textContent=b);
+    hazPanel.appendChild(s3);
+    const leg2 = el('div',{class:'legend'});
+    sigsPresent.forEach(sig => leg2.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${sigColor(sig)}`}),SIG_LABEL[sig]||sig])));
+    hazPanel.appendChild(leg2);
+    m.appendChild(hazPanel);
+  }
+
+  // assumptions panel
+  const aPanel = el('div', {class:'panel'});
+  aPanel.appendChild(el('h2',{},['Assumptions — every constant, its value, and whether it is measured, assumed or provisional']));
+  aPanel.appendChild(el('div',{class:'small'},[`Scope: ${DATA.meta.scope}. Weather track this run: ${JSON.stringify(DATA.meta.weather_track_summary)}. Decision-grade: ${DATA.meta.decision_grade} (${DATA.meta.decision_grade_reason}).`]));
+  const at = el('table', {class:'ledger'});
+  const thead = el('tr',{},[el('th',{},['Constant']),el('th',{},['Value']),el('th',{},['Status'])]);
+  at.appendChild(thead);
+  DATA.meta.assumptions.forEach(a => at.appendChild(el('tr',{class:'assumption-row'},[el('td',{},[a.name]),el('td',{},[a.value]),el('td',{},[a.status])])));
+  aPanel.appendChild(at);
+  m.appendChild(aPanel);
+}
+
+function renderFilterBar(container) {
+  const bar = el('div', {id:'filterbar'});
+  const trackingSel = el('select', {onchange:e=>{state.filters.tracking=e.target.value; rerenderCurrent();}});
+  trackingSel.appendChild(el('option',{value:''},['All tracking']));
+  [...new Set(DATA.sites.map(s=>s.tracking))].filter(Boolean).forEach(t=>trackingSel.appendChild(el('option',{value:t},[t])));
+  trackingSel.value = state.filters.tracking;
+
+  const tierSel = el('select', {onchange:e=>{state.filters.tier=e.target.value; rerenderCurrent();}});
+  tierSel.appendChild(el('option',{value:''},['All conviction tiers']));
+  ['Chronic','Event','New','Improving','Healthy','Warranty-urgent'].forEach(t=>tierSel.appendChild(el('option',{value:t},[t])));
+  tierSel.value = state.filters.tier;
+
+  const sigSel = el('select', {onchange:e=>{state.filters.signature=e.target.value; rerenderCurrent();}});
+  sigSel.appendChild(el('option',{value:''},['All top signatures']));
+  SIGNATURES.forEach(s=>sigSel.appendChild(el('option',{value:s},[SIG_LABEL[s]])));
+  sigSel.value = state.filters.signature;
+
+  const search = el('input', {type:'text', placeholder:'Search site / operator', value: state.filters.search,
+    oninput:e=>{state.filters.search=e.target.value; rerenderCurrent();}});
+
+  const peersChk = el('label',{},[el('input',{type:'checkbox', onchange:e=>{state.filters.peersLt4=e.target.checked; rerenderCurrent();}}), ' peers<4']);
+  const gapChk = el('label',{},[el('input',{type:'checkbox', onchange:e=>{state.filters.gap2022=e.target.checked; rerenderCurrent();}}), ' has 2022 gap']);
+  const noAssetChk = el('label',{},[el('input',{type:'checkbox', onchange:e=>{state.filters.noAssetMatch=e.target.checked; rerenderCurrent();}}), ' no asset match']);
+
+  const clearBtn = el('button', {onclick:()=>{state.filters={year:'',tracking:'',module:'',tier:'',signature:'',confidence:'',search:'',peersLt4:false,gap2022:false,noAssetMatch:false}; rerenderCurrent();}}, ['Clear filters']);
+  const exportBtn = el('button', {onclick: exportCsv}, ['Export filtered CSV']);
+
+  [trackingSel, tierSel, sigSel, search, peersChk, gapChk, noAssetChk, clearBtn, exportBtn].forEach(x=>bar.appendChild(x));
+  container.appendChild(bar);
+}
+
+function exportCsv() {
+  const list = filteredSites();
+  const cols = ['site','state','operator','mwac','mwdc','dcac','tracking','cod','years_present','latest_pi','latest_pri','latest_d',
+    'beta','beta_t','fault_months','episode_count','top_signature','conviction_tier','recoverable_mwh_yr','recoverable_usd_yr'];
+  const rows = [cols.join(',')].concat(list.map(s => cols.map(c => JSON.stringify(s[c]===undefined?'':s[c])).join(',')));
+  const blob = new Blob([rows.join('\n')], {type:'text/csv'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'triage_filtered.csv'; a.click();
+}
+
+const ROW_H = 28;
+function renderTriage() {
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+  const panel = el('div', {class:'panel'});
+  panel.appendChild(el('h2',{},['Triage list — click a row to open, or use j/k to move once a row is focused']));
+  renderFilterBar(panel);
+
+  const list = filteredSites();
+  updatePosIndicator(list, null);
+
+  const cols = [
+    ['site','Site'], ['state','State'], ['operator','Operator'], ['mwac','MWac'], ['mwdc','MWdc'],
+    ['dcac','DC/AC'], ['tracking','Tracking'], ['cod','COD'], ['years_present','Yrs'],
+    ['latest_pi','PI'], ['latest_pri','PRI'], ['latest_d','D'], ['beta','β'], ['beta_t','t'],
+    ['fault_months','Fault mo'], ['episode_count','Episodes'], ['top_signature','Top sig'],
+    ['confidence','Conf'], ['recoverable_mwh_yr','MWh/yr'], ['recoverable_usd_yr','USD/yr'],
+    ['conviction_tier','Tier'], ['warranty_urgent','Warranty'], ['peer_count','Peers'], ['peer_radius_km','Radius km'],
+    ['data_quality_flags','DQ flags'],
+  ];
+
+  const scrollDiv = el('div', {id:'triage-scroll'});
+  const table = el('table', {class:'triage'});
+  const thead = el('tr', {});
+  cols.forEach(([key,label]) => {
+    const th = el('th', {onclick:()=>{ if(state.sortCol===key) state.sortDir*=-1; else {state.sortCol=key; state.sortDir=-1;} renderTriage(); }},
+      [label + (state.sortCol===key ? (state.sortDir>0?' ▲':' ▼') : '')]);
+    thead.appendChild(th);
+  });
+  table.appendChild(thead);
+  scrollDiv.appendChild(table);
+
+  const spacerTop = el('tr', {}); spacerTop.appendChild(el('td', {colspan: cols.length})); table.appendChild(spacerTop);
+  const bodyStart = table.rows.length;
+
+  function renderRows() {
+    while (table.rows.length > bodyStart) table.deleteRow(bodyStart);
+    const scrollTop = scrollDiv.scrollTop;
+    const viewH = scrollDiv.clientHeight || 400;
+    const first = Math.max(0, Math.floor(scrollTop / ROW_H) - 5);
+    const visibleCount = Math.ceil(viewH / ROW_H) + 10;
+    const last = Math.min(list.length, first + visibleCount);
+    spacerTop.style.height = (first * ROW_H) + 'px';
+    spacerTop.querySelector('td').style.padding = '0';
+    for (let i=first;i<last;i++) {
+      const s = list[i];
+      const tr = el('tr', {onclick:()=>openSite(s.site)});
+      cols.forEach(([key]) => {
+        let v = s[key];
+        if (key==='recoverable_usd_yr') v = fmtUsd(v);
+        else if (['latest_pi','latest_pri','latest_d','dcac'].includes(key)) v = fmtNum(v,3);
+        else if (key==='beta') v = v!==null? (v*100).toFixed(2)+'%':'—';
+        else if (key==='beta_t') v = fmtNum(v,1);
+        else if (key==='top_signature') v = SIG_LABEL[v]||v;
+        else if (key==='warranty_urgent') v = v ? '⚠ urgent' : '';
+        else if (key==='data_quality_flags') v = (v||[]).join(', ');
+        else if (key==='conviction_tier') { const b=el('span',{class:'badge '+String(v).replace('-','')},[v]); tr.appendChild(el('td',{},[b])); return; }
+        else if (v===null||v===undefined) v='—';
+        tr.appendChild(el('td', {}, [String(v)]));
+      });
+      table.appendChild(tr);
+    }
+    const spacerBot = el('tr', {}); spacerBot.appendChild(el('td',{colspan:cols.length, style:`padding:0;height:${Math.max(0,(list.length-last)*ROW_H)}px`}));
+    table.appendChild(spacerBot);
+  }
+  scrollDiv.addEventListener('scroll', renderRows);
+  renderRows();
+  panel.appendChild(scrollDiv);
+  m.appendChild(panel);
+}
+
+function updatePosIndicator(list, site) {
+  const el2 = document.getElementById('pos-indicator');
+  if (!site) { el2.textContent = `${list.length} sites in this filter`; return; }
+  const idx = list.findIndex(s=>s.site===site);
+  el2.textContent = idx>=0 ? `site ${idx+1} of ${list.length} in this filter` : '';
+}
+
+function openSite(site) {
+  state.currentSite = site;
+  state.view = 'detail';
+  location.hash = 'site=' + encodeURIComponent(site);
+  render();
+}
+
+function triageStatusBtn(site, status, label) {
+  const cur = triage[site] || {};
+  return el('button', {class: cur.status===status?'on':'', onclick:()=>{
+    triage[site] = {...cur, status}; saveTriage(triage); render();
+  }}, [label]);
+}
+
+function renderDetail() {
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+  const list = filteredSites();
+  let site = state.currentSite;
+  if (!site && list.length) site = list[0].site;
+  const s = DATA.sites.find(x=>x.site===site);
+  if (!s) { m.appendChild(el('div',{class:'panel'},['No site selected. Go to Triage List and click a row.'])); return; }
+  state.currentSite = site;
+  updatePosIndicator(list, site);
+  const idx = list.findIndex(x=>x.site===site);
+
+  const header = el('div', {class:'panel'});
+  const hh = el('div', {class:'detail-header'});
+  const meta = el('div', {class:'meta'}, [
+    el('div',{},[el('b',{},[s.site]), '  ', el('span',{class:'badge '+String(s.conviction_tier).replace('-','')},[s.conviction_tier]),
+      s.warranty_urgent? el('span',{class:'badge WarrantyUrgent'},[' WARRANTY URGENT ']) : '']),
+    el('div',{},[`${s.operator||'—'} | ${s.utility||'—'} | ${s.state||'—'}, ${s.county||'—'} | BA ${s.ba||'—'} | plant_id ${s.plant_id||'—'}`]),
+    el('div',{},[`MWac ${fmtNum(s.mwac,1)} | MWdc ${fmtNum(s.mwdc,1)} | DC/AC ${fmtNum(s.dcac,2)} | ${s.tracking||'—'} | ${s.module||'—'} | tilt ${fmtNum(s.tilt,0)} | az ${fmtNum(s.azimuth,0)}`]),
+    el('div',{},[`COD ${s.cod||'—'} | ${s.years_present} yrs of data | β=${s.beta!==null?(s.beta*100).toFixed(2)+'%/yr':'—'} (SE ${fmtNum(s.beta_se,4)}, t=${fmtNum(s.beta_t,1)}) | β_excess=${s.beta_excess!==null?(s.beta_excess*100).toFixed(2)+'%/yr':'—'} (${s.excess_category})`]),
+    el('div',{},(s.data_quality_flags||[]).map(f=>el('span',{class:'badge LOW', style:'margin-right:4px'},[f]))),
+  ]);
+  const nav = el('div', {class:'navbtns'}, [
+    el('button', {onclick:()=>navStep(list,-1)}, ['◀ Prev (k)']),
+    el('button', {onclick:()=>navStep(list,1)}, ['Next (j) ▶']),
+  ]);
+  hh.appendChild(meta); hh.appendChild(nav);
+  header.appendChild(hh);
+
+  const statusRow = el('div', {class:'status-btns', style:'margin-top:10px'}, [
+    triageStatusBtn(site,'unreviewed','Unreviewed'), triageStatusBtn(site,'call','Call'),
+    triageStatusBtn(site,'dismissed','Dismissed'), triageStatusBtn(site,'needs-data','Needs data'),
+  ]);
+  header.appendChild(statusRow);
+  const note = el('textarea', {class:'note', placeholder:'Notes...', oninput:e=>{ triage[site]={...(triage[site]||{}),note:e.target.value}; saveTriage(triage);}});
+  note.value = (triage[site]||{}).note || '';
+  header.appendChild(note);
+  m.appendChild(header);
+
+  // monthly chart
+  const chartPanel = el('div', {class:'panel'});
+  chartPanel.appendChild(el('h2',{},['Monthly actual vs expected, PI/PRI on secondary axis (0.92 threshold marked). Gaps are missing months, never zero.']));
+  chartPanel.appendChild(monthlyChart(s));
+  m.appendChild(chartPanel);
+
+  // fault ribbon
+  const ribbonPanel = el('div', {class:'panel'});
+  ribbonPanel.appendChild(el('h2',{},['Fault ribbon — hover a cell for D, band, gate, confidence']));
+  const ribbon = el('div', {class:'ribbon'});
+  s.months.forEach((mo,i) => {
+    const sig = s.signature[i];
+    const cell = el('div', {class:'cell sig-'+sig,
+      title:`${mo}\nsignature: ${sig}\nD: ${s.d[i]}\nscore: ${s.score[i]}\ngate: ${s.gate[i]||'none'}\nconfidence: ${s.confidence[i]||'n/a'}\nbenchmark: ${s.benchmark_mode[i]}\nweather: ${s.weather_track[i]}`});
+    ribbon.appendChild(cell);
+  });
+  ribbonPanel.appendChild(ribbon);
+  const leg = el('div',{class:'legend'});
+  SIGNATURES.forEach(sig=>leg.appendChild(el('span',{},[el('span',{class:'sw sig-'+sig}),SIG_LABEL[sig]])));
+  leg.appendChild(el('span',{},[el('span',{class:'sw sig-NONE'}),'None / unscored']));
+  ribbonPanel.appendChild(leg);
+  m.appendChild(ribbonPanel);
+
+  // peer panel + risk (credibility as thin risk proxy)
+  const grid = el('div', {class:'grid2'});
+  const peerPanel = el('div', {class:'panel'});
+  const lastPeerIdx = [...s.peer_count.keys()].reverse().find(i=>s.peer_count[i]!==null);
+  peerPanel.appendChild(el('h2',{},['Peers (latest scored month)']));
+  if (lastPeerIdx!==undefined) {
+    peerPanel.appendChild(el('div',{},[`peer_count=${s.peer_count[lastPeerIdx]}, radius=${s.peer_radius_km[lastPeerIdx]} km, healthy=${s.peers_healthy[lastPeerIdx]}, benchmark_mode=${s.benchmark_mode[lastPeerIdx]}`]));
+  } else {
+    peerPanel.appendChild(el('div',{class:'small'},['No peer-benchmarked month for this site.']));
+  }
+  grid.appendChild(peerPanel);
+
+  const riskPanel = el('div', {class:'panel'});
+  riskPanel.appendChild(el('h2',{},['Risk / credibility (per-signature, from S8 — thin at subsample scale)']));
+  if (s.credibility.length) {
+    const rt = el('table',{class:'risk'});
+    rt.appendChild(el('tr',{},[el('th',{},['Signature']),el('th',{},['λ (shrunk)']),el('th',{},['Credibility Z']),el('th',{},['Pool level'])]));
+    s.credibility.forEach(c=>rt.appendChild(el('tr',{},[el('td',{},[SIG_LABEL[c.signature]||c.signature]),el('td',{},[fmtNum(c.lambda_shrunk,4)]),el('td',{},[fmtNum(c.Z,3)]),el('td',{},[c.pool])])));
+    riskPanel.appendChild(rt);
+  } else {
+    riskPanel.appendChild(el('div',{class:'small'},['No credibility rows for this site (too few fault episodes at subsample scale).']));
+  }
+  grid.appendChild(riskPanel);
+  m.appendChild(grid);
+
+  // revenue table
+  const revPanel = el('div', {class:'panel'});
+  revPanel.appendChild(el('h2',{},['Recoverable revenue by month (Part 8 authoritative $, tracker quick-estimate alongside)']));
+  const rt2 = el('table', {class:'ledger'});
+  rt2.appendChild(el('tr',{},[el('th',{},['Month']),el('th',{},['Signature']),el('th',{},['rho']),el('th',{},['$ (Part 8)']),el('th',{},['$ (quick est.)']),el('th',{},['Block fraction'])]));
+  s.months.forEach((mo,i) => {
+    if (!s.value_usd[i]) return;
+    let frac = s.block_fraction[i];
+    if (frac) frac += ` (n_candidates=${s.n_candidates[i]}, indicative sizing only)`;
+    rt2.appendChild(el('tr',{},[el('td',{},[mo]),el('td',{},[SIG_LABEL[s.signature[i]]||s.signature[i]]),
+      el('td',{},[fmtNum(s.rec_pct[i],2)]), el('td',{},[fmtUsd(s.value_usd[i])]), el('td',{},[fmtUsd(s.value_usd_quick[i])]),
+      el('td',{},[frac||'—'])]));
+  });
+  revPanel.appendChild(rt2);
+  m.appendChild(revPanel);
+
+  // event ledger for this site
+  const ledPanel = el('div', {class:'panel'});
+  ledPanel.appendChild(el('h2',{},['Event ledger for this site']));
+  const led = DATA.ledger.filter(l=>l.site===site);
+  const lt = el('table', {class:'ledger'});
+  lt.appendChild(el('tr',{},[el('th',{},['Year']),el('th',{},['Signature']),el('th',{},['Months']),el('th',{},['Episodes']),
+    el('th',{},['Exposure mo']),el('th',{},['MWh lost']),el('th',{},['USD lost']),el('th',{},['Max severity'])]));
+  led.forEach(l=>lt.appendChild(el('tr',{},[el('td',{},[l.year]),el('td',{},[SIG_LABEL[l.signature]||l.signature]),
+    el('td',{},[l.months]),el('td',{},[l.episodes===null?'—':l.episodes]),el('td',{},[l.exposure_months]),
+    el('td',{},[fmtNum(l.mwh_lost,1)]),el('td',{},[fmtUsd(l.usd_lost)]),el('td',{},[fmtNum(l.max_severity,3)])])));
+  ledPanel.appendChild(lt);
+  m.appendChild(ledPanel);
+}
+
+function monthlyChart(s) {
+  const w=1400,h=280, pad=30;
+  const svgEl = svg('svg',{width:'100%',height:h, viewBox:`0 0 ${w} ${h}`, preserveAspectRatio:'none'});
+  const n = s.months.length;
+  const cw = (w-2*pad)/n;
+  const maxMwh = Math.max(1, ...s.e_act.filter(v=>v!==null), ...s.e_exp.filter(v=>v!==null));
+  function xAt(i){ return pad + i*cw + cw/2; }
+  function yMwh(v){ return h-pad - (v/maxMwh)*(h-2*pad); }
+  function yIdx(v){ return h-pad - (Math.min(v,1.3)/1.3)*(h-2*pad); } // PI/PRI axis 0-1.3
+
+  // expected bars (light)
+  s.e_exp.forEach((v,i) => { if (v!==null) svgEl.appendChild(svg('rect',{x:xAt(i)-cw*0.35,y:yMwh(v),width:cw*0.7,height:h-pad-yMwh(v), fill:'#2e3852'})); });
+  // actual bars
+  s.e_act.forEach((v,i) => { if (v!==null) svgEl.appendChild(svg('rect',{x:xAt(i)-cw*0.2,y:yMwh(v),width:cw*0.4,height:h-pad-yMwh(v), fill:'#4f8cff'})); });
+  // 0.92 threshold line on secondary axis
+  svgEl.appendChild(svg('line',{x1:pad,y1:yIdx(0.92),x2:w-pad,y2:yIdx(0.92), stroke:'var(--warn)','stroke-dasharray':'4,3'}));
+  // PI line
+  let piPath=[]; s.pi.forEach((v,i)=>{ if(v!==null) piPath.push([xAt(i), yIdx(v)]); });
+  if (piPath.length>1) svgEl.appendChild(svg('path',{d: piPath.map((p,i)=>(i===0?'M':'L')+p[0]+','+p[1]).join(' '), fill:'none', stroke:'var(--good)','stroke-width':1.5}));
+  // PRI dots
+  s.pri.forEach((v,i)=>{ if(v!==null) svgEl.appendChild(svg('circle',{cx:xAt(i),cy:yIdx(v),r:2.5, fill:'var(--lead)'})); });
+  // x labels (yearly ticks)
+  s.months.forEach((mo,i)=>{ if (mo.endsWith('-01')) svgEl.appendChild(svg('text',{x:xAt(i),y:h-6,'text-anchor':'middle'})).textContent = mo.slice(0,4); });
+  return svgEl;
+}
+
+function navStep(list, delta) {
+  const idx = list.findIndex(s=>s.site===state.currentSite);
+  let next = idx + delta;
+  if (next<0) next=0; if (next>=list.length) next=list.length-1;
+  openSite(list[next].site);
+}
+
+function rerenderCurrent() { render(); }
+
+function render() {
+  document.querySelectorAll('#topbar nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===state.view));
+  if (state.view==='fleet') renderFleet();
+  else if (state.view==='triage') renderTriage();
+  else renderDetail();
+  const reviewed = Object.values(triage).filter(t=>t.status && t.status!=='unreviewed').length;
+  document.getElementById('progress-indicator').textContent = `reviewed ${reviewed} of ${DATA.sites.length}`;
+}
+
+document.querySelectorAll('#topbar nav button').forEach(b => b.addEventListener('click', () => {
+  state.view = b.dataset.view; location.hash = state.view==='detail' && state.currentSite ? 'site='+state.currentSite : '';
+  render();
+}));
+
+window.addEventListener('keydown', (e) => {
+  if (document.activeElement && ['TEXTAREA','INPUT'].includes(document.activeElement.tagName)) return;
+  const list = filteredSites();
+  if (state.view==='detail') {
+    if (e.key==='j' || e.key==='ArrowDown' || e.key==='ArrowRight') { navStep(list,1); e.preventDefault(); }
+    else if (e.key==='k' || e.key==='ArrowUp' || e.key==='ArrowLeft') { navStep(list,-1); e.preventDefault(); }
+    else if (e.key==='Escape') { state.view='triage'; render(); }
+  } else if (state.view==='triage') {
+    if (e.key==='Enter' && state.currentSite) openSite(state.currentSite);
+  }
+});
+
+function parseHash() {
+  const h = location.hash.replace('#','');
+  const m = h.match(/site=([^&]+)/);
+  if (m) { state.currentSite = decodeURIComponent(m[1]); state.view = 'detail'; }
+}
+
+parseHash();
+render();
+</script>
+</body>
+</html>
