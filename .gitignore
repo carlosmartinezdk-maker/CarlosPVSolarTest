@@ -6,3 +6,4 @@ output/*.parquet
 .ipynb_checkpoints/
 data/raw/*.csv
 data/raw/*.xlsx
+logs/

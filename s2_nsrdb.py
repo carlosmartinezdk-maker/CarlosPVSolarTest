@@ -124,7 +124,7 @@ def redact_key(text: str, api_key: str) -> str:
     return text.replace(api_key, "***REDACTED***")
 
 
-def preflight(host: str = NSRDB_HOST) -> tuple[str, str]:
+def preflight(host: str = NSRDB_HOST, email: str = "carlos.martinez.dk@gmail.com") -> tuple[str, str]:
     """One cheap request against a single known cell (Denver, a NLR-relevant
     point). Returns (classification, human-readable detail). Never loops or
     retries - a policy denial or a dead domain should fail fast, not burn
@@ -139,7 +139,7 @@ def preflight(host: str = NSRDB_HOST) -> tuple[str, str]:
         "attributes": "ghi",
         "utc": "false",
         "leap_day": "true",
-        "email": "carlos.martinez.dk@gmail.com",
+        "email": email,
     }
     try:
         resp = requests.get(url, params=params, timeout=10)
@@ -306,7 +306,7 @@ def main():
     args = ap.parse_args()
 
     if args.preflight_only:
-        classification, detail = preflight()
+        classification, detail = preflight(email=args.email)
         log(f"preflight: {classification} - {detail}")
         sys.exit(0 if classification == PREFLIGHT_SUCCESS else 1)
 
@@ -314,7 +314,7 @@ def main():
         # Dry-run needs no connectivity at all - it's for planning/costing
         # the pull before network access is even sorted out. A real pull
         # gates on preflight so a dead host or bad key fails in seconds.
-        classification, detail = preflight()
+        classification, detail = preflight(email=args.email)
         log(f"preflight: {classification} - {detail}")
         if classification != PREFLIGHT_SUCCESS:
             log("ABORTING: preflight did not succeed. Fix the cause above before pulling. "
