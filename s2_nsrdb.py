@@ -113,6 +113,17 @@ PREFLIGHT_RATE_LIMITED = "rate_limited"
 PREFLIGHT_UNKNOWN = "unknown_error"
 
 
+def redact_key(text: str, api_key: str) -> str:
+    """requests/urllib3 exception messages and response bodies can embed the
+    full request URL, including api_key=... in the query string. Every
+    string that might reach a log line or an exception message MUST go
+    through this first (test 32: no secrets in outputs, and outputs
+    includes this process's own stdout/stderr)."""
+    if not api_key:
+        return text
+    return text.replace(api_key, "***REDACTED***")
+
+
 def preflight(host: str = NSRDB_HOST) -> tuple[str, str]:
     """One cheap request against a single known cell (Denver, a NLR-relevant
     point). Returns (classification, human-readable detail). Never loops or
@@ -133,7 +144,7 @@ def preflight(host: str = NSRDB_HOST) -> tuple[str, str]:
     try:
         resp = requests.get(url, params=params, timeout=10)
     except requests.exceptions.ConnectionError as e:
-        msg = str(e)
+        msg = redact_key(str(e), api_key)
         if "Tunnel connection failed: 403" in msg or "ProxyError" in msg:
             return PREFLIGHT_PROXY_DENIAL, (
                 f"local egress proxy rejected the CONNECT tunnel to {host} - "
@@ -145,17 +156,20 @@ def preflight(host: str = NSRDB_HOST) -> tuple[str, str]:
             return PREFLIGHT_DNS_FAILURE, f"DNS lookup for {host} failed - domain does not resolve. {msg}"
         return PREFLIGHT_UNKNOWN, msg
     except requests.exceptions.RequestException as e:
-        return PREFLIGHT_UNKNOWN, str(e)
+        return PREFLIGHT_UNKNOWN, redact_key(str(e), api_key)
 
     if resp.status_code == 403 and "x-deny-reason" in resp.headers:
         return PREFLIGHT_PROXY_DENIAL, f"proxy denial header x-deny-reason={resp.headers['x-deny-reason']}"
     if resp.status_code == 429:
         return PREFLIGHT_RATE_LIMITED, "429 rate limited on the preflight request itself - back off and retry later"
     if resp.status_code in (401, 403):
-        return PREFLIGHT_AUTH_FAILURE, f"HTTP {resp.status_code} with a real TLS/HTTP response from {host} - bad or missing API key, not a network block. Body: {resp.text[:300]}"
+        return PREFLIGHT_AUTH_FAILURE, (
+            f"HTTP {resp.status_code} with a real TLS/HTTP response from {host} - bad or "
+            f"missing API key, not a network block. Body: {redact_key(resp.text[:300], api_key)}"
+        )
     if resp.status_code == 200:
         return PREFLIGHT_SUCCESS, "OK"
-    return PREFLIGHT_UNKNOWN, f"HTTP {resp.status_code}: {resp.text[:300]}"
+    return PREFLIGHT_UNKNOWN, f"HTTP {resp.status_code}: {redact_key(resp.text[:300], api_key)}"
 
 
 # --------------------------------------------------------------------------
@@ -191,7 +205,10 @@ def pull_cell_year(lat: float, lon: float, year: int, api_key: str, email: str) 
         "reason": "PI_PRI_underperformance_analysis",
     }
     resp = requests.get(url, params=params, timeout=60)
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        raise requests.exceptions.HTTPError(redact_key(str(e), api_key), response=resp) from None
     df = pd.read_csv(io.StringIO(resp.text), skiprows=2)
     df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
     df = df.rename(columns={"temperature": "air_temperature"})
@@ -265,7 +282,7 @@ def run(cells: list[tuple[float, float]], years: list[int], cache_dir: str,
                 }
                 done += 1
             except Exception as e:
-                log(f"FAILED {key}: {e}")
+                log(f"FAILED {key}: {redact_key(str(e), api_key)}")
                 failed += 1
         if (i + 1) % 20 == 0 or i == len(cells) - 1:
             save_manifest(cache_dir, manifest)
