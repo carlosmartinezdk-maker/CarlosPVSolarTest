@@ -5,3 +5,5 @@ nsrdb_cache/
 output/*.parquet
 output/*.xlsx
 .ipynb_checkpoints/
+data/raw/*.csv
+data/raw/*.xlsx
