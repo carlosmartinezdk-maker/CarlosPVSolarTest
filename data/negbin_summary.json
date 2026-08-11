@@ -1,0 +1,21 @@
+{
+  "BLOCK_OUTAGE": {
+    "n_site_years": 3,
+    "var_over_mean": 0.0,
+    "converged": false,
+    "fit_error": "too sparse at subsample scale (n=3 site-years, 3.0 episodes)"
+  },
+  "BOS_INTERMITTENT": {
+    "n_site_years": 13,
+    "var_over_mean": 0.07142857142857144,
+    "converged": false,
+    "fit_error": "too sparse at subsample scale (n=13 site-years, 14.0 episodes)"
+  },
+  "UNATTRIBUTED": {
+    "n_site_years": 158,
+    "var_over_mean": 0.21782265402565382,
+    "converged": true,
+    "alpha_intercept": 0.4014472149167263,
+    "aic": 534.7045881713359
+  }
+}

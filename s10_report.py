@@ -53,17 +53,22 @@ def main():
                  "not yet run.**\n")
 
     lines.append("\n## NSRDB access status (READ FIRST)\n")
-    lines.append("Track A (NSRDB) is unreachable from this session's network egress policy - "
-                 "confirmed via the proxy's own diagnostics (`connect_rejected`, 403 on CONNECT) "
-                 "for both `developer.nlr.gov` and `developer.nrel.gov`, and independently "
-                 "confirmed as a general block (not domain-specific) by testing two unrelated "
-                 "legitimate hosts (`www.nrel.gov`, `api.eia.gov`), which also 403.\n\n")
+    lines.append("Track A (NSRDB, PSM v4 GOES Aggregated at developer.nlr.gov) is unreachable "
+                 "from this session's network egress policy - confirmed via the proxy's own "
+                 "diagnostics (`connect_rejected`, 403 on CONNECT), and independently confirmed "
+                 "as a general block (not specific to this host) by testing two unrelated "
+                 "legitimate hosts, which also 403.\n\n")
     track_counts = nsrdb_summary["track"].value_counts().to_dict()
     lines.append(f"Weather source used this run: `{track_counts}` - i.e. **100% Track B "
                  "(pvlib Ineichen clear-sky) stopgap**, not measured NSRDB weather. "
                  "Every PI/PRI/fault/dollar number below inherits this and is NOT decision-grade. "
-                 "Track A code is fully wired (S2) and will be used automatically once the "
-                 "environment's network policy allows the NSRDB host.\n")
+                 "Track A code is fully wired (S2, hand-rolled request per the brief's exact "
+                 "parameter spec) and will be used automatically once the environment's network "
+                 "policy allows the NSRDB host.\n\n"
+                 "**API key security note:** the key pasted in chat on 11 August 2026 is treated "
+                 "as compromised per the brief's own Section 11 item 3 and is NOT used anywhere in "
+                 "this codebase - it must be rotated and the replacement set as `NLR_API_KEY` in "
+                 "the environment, never pasted again.\n")
 
     lines.append("\n## S1 - Data quality funnel (full fleet, matches Section 4 exactly)\n")
     lines.append(funnel.to_markdown(index=False) + "\n")
@@ -87,6 +92,16 @@ def main():
                  "~100-site sample where few sites clear the 4-year decision-grade bar. Re-run "
                  "at full scale (4,396 sites with 4+ years) against real NSRDB data before "
                  "trusting this number.\n")
+    lines.append("- Second caveat, more important than the first: this result should NOT be read "
+                 "as strong validation on its own. S3's E_exp already bakes in the same fixed `d` "
+                 "used to compute beta_excess = beta - d, so beta_excess lands near -d for ANY "
+                 "site whose fitted beta happens to average near zero - which is somewhat "
+                 "construction-driven, not purely an independent recovery of an unknown constant. "
+                 "The genuinely informative part is that beta (not beta_excess) is fit against "
+                 "REAL EIA production data, so it isn't pure tautology - but the exactness of the "
+                 "match here (-0.0050 vs a c-Si-majority fleet's d=0.005) is more consistent with "
+                 "median fleet composition dominating than with a precise physical recovery. "
+                 "Re-validate at full scale before citing this test as proof the pipeline is sound.\n")
 
     lines.append("\n## TEST 12 - Over-dispersion (Var/mean by signature)\n")
     for s, r in negbin.items():
@@ -103,6 +118,25 @@ def main():
     lines.append("\nAt n~100 sites and Track B weather, large deviation from the reference is "
                  "EXPECTED and not yet diagnostic of a misconfigured classifier - re-check at "
                  "full scale against real NSRDB data per the brief's own instruction.\n")
+
+    peer_pri = dollars.loc[dollars["benchmark_mode"] == "peer", "PRI"].dropna()
+    pri_p75 = peer_pri.quantile(0.75) if len(peer_pri) else float("nan")
+    both = dollars[(dollars["value_usd"] > 0) & (dollars["value_usd_quick"] > 0)]
+    lines.append("\n## S9 - Dollars (Section 0.2)\n")
+    lines.append(f"- PRI_P75 (this fleet, {len(peer_pri)} peer-benchmarked PRI values): "
+                 f"**{pri_p75:.4f}**\n")
+    if len(both):
+        ratio = both["value_usd"] / both["value_usd_quick"]
+        within_tol = ((ratio - 1).abs() <= config.FLAG_0_2_CROSS_CHECK_TOLERANCE).mean()
+        lines.append(f"- Part 8 vs tracker quick-estimate cross-check: {100*within_tol:.0f}% of "
+                     f"{len(both)} dollar-bearing site-months within "
+                     f"{100*config.FLAG_0_2_CROSS_CHECK_TOLERANCE:.0f}% of each other. Per the "
+                     "brief, a wide gap points at a peer-set problem, not a rounding difference - "
+                     "and with only 2% peer coverage at subsample scale, that is exactly what this "
+                     "low agreement rate reflects. Expect much tighter agreement at full scale.\n")
+    else:
+        lines.append("- Part 8 vs tracker quick-estimate cross-check: no overlapping dollar-bearing "
+                     "site-months this run.\n")
 
     lines.append("\n## Known limitations this run (encoded as flags, not silently absorbed)\n")
     lines.append("- Track B clear-sky stopgap (see above) - the single biggest caveat on every number.\n")
