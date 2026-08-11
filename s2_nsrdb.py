@@ -139,7 +139,7 @@ def preflight(host: str = NSRDB_HOST) -> tuple[str, str]:
         "attributes": "ghi",
         "utc": "false",
         "leap_day": "true",
-        "email": "preflight@example.com",
+        "email": "carlos.martinez.dk@gmail.com",
     }
     try:
         resp = requests.get(url, params=params, timeout=10)
