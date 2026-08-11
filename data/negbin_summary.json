@@ -1,21 +1,39 @@
 {
   "BLOCK_OUTAGE": {
-    "n_site_years": 3,
-    "var_over_mean": 0.0,
+    "n_site_years": 9,
+    "var_over_mean": 0.1,
     "converged": false,
-    "fit_error": "too sparse at subsample scale (n=3 site-years, 3.0 episodes)"
+    "fit_error": "too sparse at subsample scale (n=9 site-years, 10.0 episodes)"
   },
   "BOS_INTERMITTENT": {
-    "n_site_years": 13,
-    "var_over_mean": 0.07142857142857144,
+    "n_site_years": 24,
+    "var_over_mean": 0.10144927536231883,
     "converged": false,
-    "fit_error": "too sparse at subsample scale (n=13 site-years, 14.0 episodes)"
+    "fit_error": "too sparse at subsample scale (n=24 site-years, 27.0 episodes)"
+  },
+  "OUTAGE_FULL": {
+    "n_site_years": 3,
+    "var_over_mean": 0.25,
+    "converged": false,
+    "fit_error": "too sparse at subsample scale (n=3 site-years, 4.0 episodes)"
+  },
+  "SOILING": {
+    "n_site_years": 5,
+    "var_over_mean": 0.0,
+    "converged": false,
+    "fit_error": "too sparse at subsample scale (n=5 site-years, 5.0 episodes)"
+  },
+  "TRACKER": {
+    "n_site_years": 7,
+    "var_over_mean": 0.12500000000000006,
+    "converged": false,
+    "fit_error": "too sparse at subsample scale (n=7 site-years, 8.0 episodes)"
   },
   "UNATTRIBUTED": {
-    "n_site_years": 158,
-    "var_over_mean": 0.21782265402565382,
+    "n_site_years": 153,
+    "var_over_mean": 0.20657246564687584,
     "converged": true,
-    "alpha_intercept": 0.4014472149167263,
-    "aic": 534.7045881713359
+    "alpha_intercept": 0.4240198121036666,
+    "aic": 508.0546701956016
   }
 }

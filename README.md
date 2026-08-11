@@ -36,23 +36,37 @@ python3 s2_nsrdb.py --sites-csv <lat,lon CSV> --years 2019-2025 \
     --cache-dir nsrdb_cache
 ```
 
-**This sandbox cannot reach `developer.nlr.gov` at all** - confirmed via
-`--preflight-only`, which classifies it precisely as a `proxy_denial`
-(the local egress proxy rejects the CONNECT tunnel before any TLS
-handshake - not an API-key problem). That's an environment-level network
-egress allowlist setting, not something fixable from inside a session -
-see https://code.claude.com/docs/en/claude-code-on-the-web. Even once
-that's fixed somewhere, the full pull is 33,586 cell-years at 1 req/sec
-with a 10,000/day cap - a four-day job that should run outside any agent
-session regardless.
+**As of 11 August 2026, this environment CAN reach `developer.nlr.gov`** -
+confirmed via `--preflight-only` (`success`), after network egress was
+enabled for this session and the NLR API key was rotated (the key pasted
+in chat earlier that day was treated as compromised and retired; the
+replacement is set as `NLR_API_KEY`, never pasted in chat again). The
+100-site validation subsample's real Track A pull (707 cell-years) has
+been run from here - see `run_report.md` for the exact track mix each run
+used. Note: NSRDB's `utc=false` response is local **standard** time with
+no tz metadata; `s2_nsrdb.py` localizes it to the site's fixed
+(non-DST) UTC offset via `timezonefinder`, matching the convention
+`dev_clearsky_cache.py` already used for the stopgap.
 
-For development/testing in this sandbox, `dev_clearsky_cache.py` fills the
-same cache directory with a pvlib clear-sky (Ineichen) stopgap instead
-(`weather_B.parquet`, never mistaken for real data - `s3_model.py` always
-prefers `weather_A.parquet` where both exist, and tags every row computed
-from the stopgap `weather_track="B_clearsky_stopgap"`). **No PI/PRI/fault/
-dollar number produced this way is decision-grade.** See `run_report.md`
-for exactly which track each run used.
+The full-fleet pull (4,798 cells x 7 years = 33,586 cell-years) has
+**not** been run - it's still a four-day job at the NLR rate limit
+(1 req/sec, 10,000/day cap) that needs a fundamentally different execution
+approach (background/routine-based with periodic check-ins across days,
+not a single session) and requires explicit go-ahead before starting.
+
+Prior to network access being enabled, this sandbox could not reach
+`developer.nlr.gov` at all - `--preflight-only` classified it precisely as
+a `proxy_denial` (the local egress proxy rejecting the CONNECT tunnel
+before any TLS handshake). For development/testing without network access,
+`dev_clearsky_cache.py` fills the same cache directory with a pvlib
+clear-sky (Ineichen) stopgap instead (`weather_B.parquet`, never mistaken
+for real data - `s3_model.py` always prefers `weather_A.parquet` where
+both exist, and tags every row computed from the stopgap
+`weather_track="B_clearsky_stopgap"`). **No PI/PRI/fault/dollar number
+produced against Track B is decision-grade.** See `run_report.md` for
+exactly which track each run used - `s11_explorer.py`'s
+`meta.decision_grade` is computed from the actual
+`data/nsrdb_pull_summary.parquet` track mix, not hardcoded.
 
 ## Input data (not checked into git)
 
@@ -117,14 +131,24 @@ row click and j/k/Enter/Esc navigation work, filters and CSV export work,
 triage state (call/dismiss/notes) persists across a reload via
 localStorage, and deep links (`#site=...`) load directly into Site Detail.
 
+The 100-site subsample now runs against real Track A NSRDB weather (see
+"NSRDB access" above) - `run_report.md`'s TEST 11 (degradation sanity)
+median beta_excess at 4+ years lands at essentially the -0.5%/yr target
+against real weather, not just the clear-sky stopgap.
+
 Full 6,204-site scale-up (real NSRDB pull, then re-running S3 onward) is a
-tracked follow-up, blocked on the network egress item below.
+tracked follow-up. Network access and raw input data are no longer the
+blocker - it's purely the 4-day pull time at the NLR rate limit, deferred
+pending explicit go-ahead and a background/routine-based execution
+approach spanning multiple days.
 
 ## Known limitations this run
 
-- Track B clear-sky stopgap in effect (see "NSRDB access status" above) -
-  the single biggest caveat on every number, and the explorer's Assumptions
-  panel says so explicitly (`decision_grade: false`).
+- 100-site subsample scale, not the full 6,204-site fleet - the single
+  biggest caveat on every number now that Track A is in use (see "NSRDB
+  access" above). `s11_explorer.py`'s Assumptions panel reports
+  `decision_grade` computed from the real weather-track mix each run, not
+  a hardcoded `false`.
 - S8 (ledger/hazard/credibility) and S9 (dollars) are built and smoke-tested
   on the subsample but are not statistically meaningful at n~100 sites -
   the brief's own build order defers them to after full-scale NSRDB pull.

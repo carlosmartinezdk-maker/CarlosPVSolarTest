@@ -251,7 +251,30 @@ def main(sites_path="data/subsample_sites.parquet"):
     out.to_parquet("data/expected_generation.parquet", index=False)
     log.info("S3 complete: %d site-months of expected generation (%s)",
               len(out), out["weather_track"].value_counts().to_dict())
+
+    write_pull_summary(out, sites)
     return out
+
+
+def write_pull_summary(monthly: pd.DataFrame, sites: pd.DataFrame) -> None:
+    """One row per (grid_lat, grid_lon, year) cell-year S3 actually loaded
+    weather for, tagged with which track ('A' real NSRDB or
+    'B_clearsky_stopgap') it came from. This is the source of truth S10/S11
+    read to report the run's real-vs-stopgap data honestly instead of
+    assuming Track B (test 28 in test_s2_contract.py checks it's complete:
+    exactly one row per cell x year, no silent partial cache)."""
+    cell_years = monthly[monthly["weather_track"] != "no_irradiance_2026"][
+        ["site", "year", "weather_track"]].copy()
+    latlon = sites.set_index("site")[["lat", "lon"]]
+    cell_years["lat"] = cell_years["site"].map(latlon["lat"])
+    cell_years["lon"] = cell_years["site"].map(latlon["lon"])
+    cell_years["grid_lat"], cell_years["grid_lon"] = zip(
+        *cell_years.apply(lambda r: grid_cell(r["lat"], r["lon"]), axis=1))
+    summary = (cell_years.groupby(["grid_lat", "grid_lon", "year"])["weather_track"]
+               .first().reset_index().rename(columns={"weather_track": "track"}))
+    summary.to_parquet("data/nsrdb_pull_summary.parquet", index=False)
+    log.info("S3 wrote data/nsrdb_pull_summary.parquet: %d cell-years (%s)",
+              len(summary), summary["track"].value_counts().to_dict())
 
 
 if __name__ == "__main__":

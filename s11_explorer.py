@@ -6,11 +6,11 @@ and embeds it directly in the HTML (no fetch(), no server - file:// must
 work by double-click). Monthly series are parallel arrays of rounded
 numbers, not arrays of objects, per the brief's payload-budget guidance.
 
-SCOPE: built against the 100-site validation subsample, Track B clear-sky
-stopgap weather (see run_report.md). Every number in this explorer is
-explicitly non-decision-grade until re-run against real NSRDB data at full
-fleet scale - the Assumptions panel says so, and so does every dollar
-figure's footer, per the brief's "standing caveats" requirement.
+SCOPE: built against the 100-site validation subsample (see run_report.md
+for which weather track - real Track A NSRDB or Track B clear-sky stopgap -
+this run actually used). `meta.decision_grade` reflects the real
+`data/nsrdb_pull_summary.parquet` track mix rather than assuming Track B,
+per the brief's "standing caveats" requirement.
 """
 import json
 import logging
@@ -35,6 +35,26 @@ def ri(x):
     if x is None or (isinstance(x, float) and (math.isnan(x) or math.isinf(x))):
         return None
     return int(round(float(x)))
+
+
+def track_mix_decision_grade(track_counts: dict) -> tuple[bool, str]:
+    """Single source of truth for 'is this run's weather decision-grade',
+    read from the actual data/nsrdb_pull_summary.parquet track mix instead
+    of assuming Track B. Used by S10 (run_report.md, xlsx Notes) and S11
+    (explorer meta) so both honestly reflect real vs. stopgap per run."""
+    n_cell_years = sum(track_counts.values())
+    pct_real = track_counts.get("A", 0) / n_cell_years if n_cell_years else 0.0
+    if pct_real == 1.0:
+        return True, (
+            f"100% Track A (real NSRDB PSM v4 GOES Aggregated weather, {n_cell_years} "
+            "cell-years) this run - the weather-track caveat is cleared. Still a 100-site "
+            "stratified validation subsample, not the full 6,204-site fleet."
+        )
+    return False, (
+        f"Weather track mix this run: {track_counts} - {pct_real:.0%} real Track A NSRDB "
+        "weather, remainder Track B clear-sky (pvlib Ineichen) stopgap. Not decision-grade "
+        "until 100% Track A."
+    )
 
 
 def compute_conviction_tier(site_years: pd.DataFrame, traj_row: pd.Series | None) -> str:
@@ -212,14 +232,22 @@ def build_payload() -> dict:
                        rate=r(row["rate_per_exposure_year"], 3))
                   for _, row in hazard.iterrows() if pd.notna(row["rate_per_exposure_year"])]
 
+    track_counts = nsrdb_summary["track"].value_counts().to_dict()
+    decision_grade, decision_grade_reason = track_mix_decision_grade(track_counts)
+    if decision_grade:
+        weather_source_assumption = f"real NSRDB PSM v4 GOES Aggregated ({track_counts})"
+        weather_source_status = "measured (Track A, developer.nlr.gov)"
+    else:
+        weather_source_assumption = f"mixed: {track_counts}"
+        weather_source_status = "PARTIAL/NOT measured NSRDB - not decision-grade"
+
     payload = dict(
         meta=dict(
             generated_at=pd.Timestamp.now().isoformat(),
             scope="100-site stratified VALIDATION SUBSAMPLE, not the full 6,204-site fleet",
-            weather_track_summary=nsrdb_summary["track"].value_counts().to_dict(),
-            decision_grade=False,
-            decision_grade_reason="Track B clear-sky stopgap weather (NSRDB unreachable from the "
-                                  "build environment) and subsample scale, not full fleet",
+            weather_track_summary=track_counts,
+            decision_grade=decision_grade,
+            decision_grade_reason=decision_grade_reason,
             ppa_usd_per_mwh=config.PPA_USD_PER_MWH,
             pi_pri_threshold=config.PI_PRI_DECISION_THRESHOLD,
             assumptions=[
@@ -232,7 +260,7 @@ def build_payload() -> dict:
                 dict(name="inverter efficiency", value="0.985", status="assumed"),
                 dict(name="rho_s (all signatures)", value="see Action Map", status="PLACEHOLDER, no ground truth yet"),
                 dict(name="warranty terms", value="2y EPC / 5-10y inverter / 10-12y module / 25y perf.", status="assumed default, not contractual"),
-                dict(name="weather source this run", value="pvlib clear-sky (Ineichen) stopgap", status="NOT measured NSRDB - not decision-grade"),
+                dict(name="weather source this run", value=weather_source_assumption, status=weather_source_status),
             ],
         ),
         funnel=funnel.to_dict(orient="records"),

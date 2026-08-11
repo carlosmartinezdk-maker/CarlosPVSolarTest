@@ -187,8 +187,22 @@ def _rate_limit() -> None:
     _last_request_ts = time.monotonic()
 
 
+def local_standard_utc_offset_hours(lat: float, lon: float) -> float:
+    """NSRDB's utc=false returns local STANDARD time (no DST) - a fixed
+    year-round offset, not the site's DST-observing zone. Same approach as
+    dev_clearsky_cache.py's stopgap, duplicated here (not imported) to keep
+    this script standalone per the module docstring."""
+    import pandas as pd
+    from timezonefinder import TimezoneFinder
+    from zoneinfo import ZoneInfo
+    tzname = TimezoneFinder().timezone_at(lat=lat, lng=lon) or "Etc/UTC"
+    jan15 = pd.Timestamp("2025-01-15 12:00", tz=ZoneInfo(tzname))
+    return jan15.utcoffset().total_seconds() / 3600.0
+
+
 def pull_cell_year(lat: float, lon: float, year: int, api_key: str, email: str) -> "pd.DataFrame":
     import pandas as pd
+    from zoneinfo import ZoneInfo
     _rate_limit()
     url = f"https://{NSRDB_HOST}{NSRDB_ENDPOINT_PATH}"
     params = {
@@ -215,6 +229,8 @@ def pull_cell_year(lat: float, lon: float, year: int, api_key: str, email: str) 
     time_cols = [c for c in ("year", "month", "day", "hour", "minute") if c in df.columns]
     if time_cols:
         idx = pd.to_datetime(df[time_cols])
+        offset_hr = int(round(local_standard_utc_offset_hours(lat, lon)))
+        idx = idx.dt.tz_localize(ZoneInfo(f"Etc/GMT{-offset_hr:+d}"))
         df = df.drop(columns=time_cols).set_index(idx)
         df.index.name = "time"
     return df

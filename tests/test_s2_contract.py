@@ -33,9 +33,9 @@ def test_28_cache_completeness_count():
 
 
 def test_29_preflight_classification():
-    """With a host that is definitely not allowlisted, S2 must exit
-    non-zero within a few seconds and name the cause as a network/proxy
-    issue, not an auth failure."""
+    """Preflight must classify its outcome fast and unambiguously, whether
+    that outcome is a real success (network + key now work, as of Aug 2026)
+    or a network/proxy/auth failure - never an ambiguous or slow result."""
     import time
     script = os.path.join(REPO_ROOT, "s2_nsrdb.py")
     start = time.monotonic()
@@ -44,14 +44,17 @@ def test_29_preflight_classification():
         capture_output=True, text=True, timeout=30,
     )
     elapsed = time.monotonic() - start
-    assert elapsed < 20, f"preflight took {elapsed:.1f}s, expected a fast fail"
-    assert result.returncode != 0, "preflight succeeded - either network is now open, or the check is broken"
-    stderr = result.stderr.lower()
-    assert "proxy_denial" in stderr or "dns_failure" in stderr or "auth_failure" in stderr, (
-        f"preflight did not classify the failure clearly: {result.stderr[-500:]}"
-    )
-    assert "auth_failure" not in stderr or "x-deny-reason" not in stderr, "misclassified proxy denial as auth failure"
-    print(f"test 29 (preflight classification): passed in {elapsed:.1f}s - {result.stderr.strip().splitlines()[-1] if result.stderr.strip() else ''}")
+    assert elapsed < 20, f"preflight took {elapsed:.1f}s, expected a fast result"
+    output = (result.stdout + result.stderr).lower()
+    if result.returncode == 0:
+        assert "success" in output, f"preflight exited 0 without an explicit success classification: {output[-500:]}"
+    else:
+        assert "proxy_denial" in output or "dns_failure" in output or "auth_failure" in output, (
+            f"preflight did not classify the failure clearly: {output[-500:]}"
+        )
+        assert "auth_failure" not in output or "x-deny-reason" not in output, "misclassified proxy denial as auth failure"
+    print(f"test 29 (preflight classification): passed in {elapsed:.1f}s - "
+          f"{output.strip().splitlines()[-1] if output.strip() else ''}")
 
 
 def test_29b_dry_run_needs_no_network():
