@@ -54,10 +54,18 @@ def main():
 
     lines.append("\n## NSRDB access status (READ FIRST)\n")
     lines.append("Track A (NSRDB, PSM v4 GOES Aggregated at developer.nlr.gov) is unreachable "
-                 "from this session's network egress policy - confirmed via the proxy's own "
-                 "diagnostics (`connect_rejected`, 403 on CONNECT), and independently confirmed "
-                 "as a general block (not specific to this host) by testing two unrelated "
-                 "legitimate hosts, which also 403.\n\n")
+                 "from this session's network egress policy - confirmed via `s2_nsrdb.py "
+                 "--preflight-only`, which classifies this precisely as `proxy_denial` "
+                 "(the local egress proxy rejects the CONNECT tunnel before any TLS handshake, "
+                 "not an authentication failure) in under a second. Per the brief's own updated "
+                 "architecture, `s2_nsrdb.py` is now a fully standalone script with no import "
+                 "from the rest of this repo - it is meant to run on a machine with plain "
+                 "internet access (a laptop, a VM, a cron job), not inside this agent sandbox. "
+                 "The full pull is 4,798 cells x 7 years = 33,586 cell-years, a four-day job at "
+                 "the NLR rate limit (1 req/sec, 10,000/day) even once network access exists "
+                 "somewhere. `--dry-run` (no network needed) confirms the exact request list "
+                 "the pull would make. Fixing the sandbox's egress policy would let ad-hoc checks "
+                 "run from here, but the real pull should happen elsewhere regardless.\n\n")
     track_counts = nsrdb_summary["track"].value_counts().to_dict()
     lines.append(f"Weather source used this run: `{track_counts}` - i.e. **100% Track B "
                  "(pvlib Ineichen clear-sky) stopgap**, not measured NSRDB weather. "

@@ -26,15 +26,55 @@ def grid_cell(lat: float, lon: float) -> tuple[float, float]:
     return (round(lat / g) * g, round(lon / g) * g)
 
 
+def _weather_cache_paths(grid_lat: float, grid_lon: float, year: int) -> dict:
+    base = os.path.join(config.NSRDB_CACHE_DIR, f"grid_lat={grid_lat}",
+                        f"grid_lon={grid_lon}", f"year={year}")
+    return {"A": os.path.join(base, "weather_A.parquet"),
+            "B": os.path.join(base, "weather_B.parquet")}
+
+
 def load_weather(grid_lat: float, grid_lon: float, year: int) -> tuple[pd.DataFrame, str]:
-    from s2_nsrdb import cache_path
-    for track in ("A", "B"):
-        path = cache_path(grid_lat, grid_lon, year,
-                           track if track == "A" else "B")
-        if os.path.exists(path):
-            df = pd.read_parquet(path)
-            return df, ("A" if track == "A" else "B_clearsky_stopgap")
-    raise FileNotFoundError(f"no cached weather for grid cell ({grid_lat},{grid_lon}) year {year}")
+    """S2's real Track A pull is preferred; weather_B.parquet is the
+    dev/test-only clear-sky stopgap (dev_clearsky_cache.py), used only when
+    Track A is absent. Never silently invents data - raises if neither
+    exists (test 31: name the missing partition, don't guess)."""
+    paths = _weather_cache_paths(grid_lat, grid_lon, year)
+    if os.path.exists(paths["A"]):
+        return pd.read_parquet(paths["A"]), "A"
+    if os.path.exists(paths["B"]):
+        return pd.read_parquet(paths["B"]), "B_clearsky_stopgap"
+    raise FileNotFoundError(
+        f"no cached weather for grid cell (grid_lat={grid_lat}, grid_lon={grid_lon}, "
+        f"year={year}) - neither weather_A.parquet (S2 real pull) nor weather_B.parquet "
+        f"(dev_clearsky_cache.py stopgap) exists. Run one of them for this cell-year "
+        f"before S3."
+    )
+
+
+def check_cache_complete(sites: "pd.DataFrame", years: list[int]) -> None:
+    """Test 31: refuse to start and name every missing partition, rather
+    than silently modelling whatever subset happens to be cached."""
+    missing = []
+    seen_cells = set()
+    for _, row in sites.iterrows():
+        cell = grid_cell(row["lat"], row["lon"])
+        for year in years:
+            key = (cell, year)
+            if key in seen_cells:
+                continue
+            seen_cells.add(key)
+            paths = _weather_cache_paths(cell[0], cell[1], year)
+            if not (os.path.exists(paths["A"]) or os.path.exists(paths["B"])):
+                missing.append((cell[0], cell[1], year))
+    if missing:
+        preview = "\n  ".join(f"grid_lat={m[0]}, grid_lon={m[1]}, year={m[2]}" for m in missing[:20])
+        more = f"\n  ... and {len(missing) - 20} more" if len(missing) > 20 else ""
+        raise RuntimeError(
+            f"S3 cache incomplete: {len(missing)} of {len(seen_cells)} required cell-years "
+            f"are missing from {config.NSRDB_CACHE_DIR}. Run s2_nsrdb.py (real pull) or "
+            f"dev_clearsky_cache.py (dev stopgap) for these first:\n  {preview}{more}"
+        )
+    log.info("cache complete: all %d required cell-years present", len(seen_cells))
 
 
 def poa_irradiance(weather: pd.DataFrame, loc: location.Location, tracking_type: str,
@@ -188,6 +228,9 @@ def main(sites_path="data/subsample_sites.parquet"):
     month_starts_all = pd.date_range("2019-01-01", "2026-05-01", freq="MS")
 
     all_scored_years = config.NSRDB_YEARS + [2026]  # 2026 scored PRI-only, no irradiance (Section 0.7)
+
+    # Test 31: refuse to start rather than silently model a partial fleet.
+    check_cache_complete(sites, config.NSRDB_YEARS)
 
     results = []
     n = len(sites)

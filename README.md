@@ -13,21 +13,46 @@ set the new one as the `NLR_API_KEY` environment variable (never as a
 literal in code, a commit, or a chat message again), and `NREL_API_KEY`
 is accepted as a compatibility fallback. `.gitignore` excludes `.env`.
 
-## NSRDB access status
+## NSRDB access: S2 is now a standalone batch job, run OUTSIDE this repo's pipeline
 
-This session's network egress policy blocks outbound access to
-`developer.nlr.gov` entirely (confirmed via the proxy's own diagnostics,
-and independently confirmed as a general block - not domain-specific - by
-testing two unrelated legitimate hosts that also 403). Track A cannot run
-end-to-end from here. `s2_nsrdb.py` falls back to a pvlib clear-sky
-(Ineichen) stopgap when Track A is unreachable, tagging every affected row
-`weather_track="B_clearsky_stopgap"`. **No PI/PRI/fault/dollar number in
-this run is decision-grade until this is fixed and S2 is re-run.** See
-`run_report.md` for exactly which run used which track.
+`s2_nsrdb.py` has **no import from the rest of this repo**. It takes a CSV
+of sites (or already-deduplicated grid cells) and a cache directory, and
+does nothing else - copy it to any machine with plain internet access (a
+laptop, a VM, a cron job) and run it there. The rest of the pipeline (S3
+onward) only ever reads the resulting cache; nothing past S2 makes a
+network call.
 
-To fix: add the NSRDB host to this environment's network egress allowlist
-(an environment setting, not something changeable from inside a session) -
-see https://code.claude.com/docs/en/claude-code-on-the-web
+```
+# Fails fast (~1s) and names the exact cause - proxy denial, DNS failure,
+# or a real auth error - without needing a sites list.
+python3 s2_nsrdb.py --preflight-only
+
+# Print the exact (grid_lat, grid_lon, year) list a real pull would fetch,
+# with no network access needed at all - useful for costing/handoff.
+python3 s2_nsrdb.py --sites-csv data/subsample_sites_latlon.csv --dry-run
+
+# The real pull (needs NLR_API_KEY set and developer.nlr.gov reachable):
+python3 s2_nsrdb.py --sites-csv <lat,lon CSV> --years 2019-2025 \
+    --cache-dir nsrdb_cache
+```
+
+**This sandbox cannot reach `developer.nlr.gov` at all** - confirmed via
+`--preflight-only`, which classifies it precisely as a `proxy_denial`
+(the local egress proxy rejects the CONNECT tunnel before any TLS
+handshake - not an API-key problem). That's an environment-level network
+egress allowlist setting, not something fixable from inside a session -
+see https://code.claude.com/docs/en/claude-code-on-the-web. Even once
+that's fixed somewhere, the full pull is 33,586 cell-years at 1 req/sec
+with a 10,000/day cap - a four-day job that should run outside any agent
+session regardless.
+
+For development/testing in this sandbox, `dev_clearsky_cache.py` fills the
+same cache directory with a pvlib clear-sky (Ineichen) stopgap instead
+(`weather_B.parquet`, never mistaken for real data - `s3_model.py` always
+prefers `weather_A.parquet` where both exist, and tags every row computed
+from the stopgap `weather_track="B_clearsky_stopgap"`). **No PI/PRI/fault/
+dollar number produced this way is decision-grade.** See `run_report.md`
+for exactly which track each run used.
 
 ## Input data (not checked into git)
 
@@ -64,8 +89,10 @@ NSRDB PSM v4 covers 1998-2025 only - there is no 2026 irradiance. 2026
 python3 s0_load.py        # CSVs -> parquet, COD construction, null/zero integrity
 python3 s1_gates.py       # data quality funnel (reproduces Section 4 exactly)
 python3 subsample.py      # stratified 100-site validation subsample
-python3 s2_nsrdb.py       # NSRDB pull (Track A) / clear-sky stopgap (Track B)
-python3 s3_model.py       # hourly pvlib chain -> monthly expected generation
+# S2 is standalone and out of band - see "NSRDB access" above. Either:
+python3 s2_nsrdb.py --sites-csv <csv> --years 2019-2025          # real pull, needs egress + key
+python3 dev_clearsky_cache.py --sites-csv <csv> --years 2019-2025  # dev-only stopgap, this sandbox
+python3 s3_model.py       # hourly pvlib chain -> monthly expected generation (reads the cache only)
 python3 s4_indices.py     # PI, PR_T, SY, peers, PRI
 python3 s5_decision.py    # lead matrix
 python3 s7_trajectory.py  # degradation slopes, envelope/gap, warranty clock
