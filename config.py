@@ -117,6 +117,7 @@ SOILING_RESET_DROP_MIN = 0.05
 TRACKER_DAYLIGHT_CORR_FLOOR = 0.50
 
 # Degradation discriminator
+DEGRADATION_PERSISTENCE_D_FLOOR = 0.05  # NOT the same as D_WATCH_BAND_HIGH (0.08)
 DEGRADATION_PERSISTENCE_MONTHS = 8
 DEGRADATION_PERSISTENCE_CV_CEILING = 0.35
 DEGRADATION_YOY_DECLINE_PCT = 0.015  # > 1.5%/yr
@@ -202,15 +203,33 @@ DCAC_VALID_RANGE = (1.05, 1.65)
 CAPACITY_NAME_MATCH_TOLERANCE = 0.10  # reported AC vs site_master.mwac
 
 # --------------------------------------------------------------------------
-# NSRDB pull (Section 5)
+# NSRDB pull (Section 5). Host is developer.nlr.gov ONLY - NREL was renamed
+# the National Laboratory of the Rockies; developer.nrel.gov stopped
+# resolving 29 May 2026 with no redirect. Acceptance test 24 asserts zero
+# "nrel.gov" references in code outside comments - do not reintroduce the
+# old host as a fallback.
 # --------------------------------------------------------------------------
 NSRDB_GRID_DEG = 0.04  # ~4km grid, used to bucket sites onto shared cells
-NSRDB_YEARS = list(range(2019, 2027))
+NSRDB_YEARS = list(range(2019, 2026))  # 2019-2025 ONLY; PSM v4 has no 2026 (Section 0.7)
 NSRDB_ATTRIBUTES = ["ghi", "dni", "dhi", "air_temperature", "wind_speed", "surface_albedo"]
 NSRDB_INTERVAL_MIN = 60
 NSRDB_LEAP_DAY = True
+NSRDB_UTC = False  # local standard time - the API defaults to true, which is wrong here
 NSRDB_TIME_CONVENTION = "LOCAL_STANDARD_TIME"  # no DST
 NSRDB_CACHE_DIR = "nsrdb_cache"
+
+NSRDB_HOST = "developer.nlr.gov"
+NSRDB_ENDPOINT_PATH = "/api/nsrdb/v2/solar/nsrdb-GOES-aggregated-v4-0-0-download.csv"
+NSRDB_API_KEY_ENV_PRIMARY = "NLR_API_KEY"
+NSRDB_API_KEY_ENV_FALLBACK = "NREL_API_KEY"
+NSRDB_RATE_LIMIT_SECONDS_PER_REQUEST = 1.0  # 1/sec ceiling on the .csv endpoint
+NSRDB_MAX_REQUESTS_PER_DAY = 10_000
+NSRDB_MAX_CONCURRENT = 20
+
+# Section 0.7: NSRDB has no 2026 data. 2026 gets PRI (no irradiance needed)
+# but PI and PR_T are always null - no substituting a clear-sky estimate.
+YEAR_2026_HAS_NO_IRRADIANCE = True
+PEER_HEALTH_2026_CARRY_FORWARD_YEAR = 2025
 
 # --------------------------------------------------------------------------
 # Reconciliation targets (Section 4) - used by tests
