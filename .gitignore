@@ -1,0 +1,19 @@
+.env
+*.env
+__pycache__/
+*.pyc
+.pytest_cache/
+nsrdb_cache/*
+!nsrdb_cache/.gitkeep
+
+# Source data -- large, provided separately, never committed
+*.xlsx
+production_long.csv
+site_master.csv
+solar_assets_data.csv
+
+# Generated outputs
+*.parquet
+run_report.md
+explorer.html
+PI_PRI_Results.xlsx
