@@ -68,18 +68,12 @@ def load_sites() -> pd.DataFrame:
     df["tech_class_is_tagged_default"] = ~df["module"].fillna("").str.lower().str.contains("cdte") & \
         df["module"].fillna("").str.lower().str.contains("cigs|thin film|mixed|a-si")
 
-    # solar_assets_data.csv (generator grain) was not provided in this run.
-    # KNOWN GAP - flagged per Section 0 discussion with Carlos. Fall back to
-    # constant capacity (site_master.mwdc) for all sites; flag phased builds
-    # (generators > 1) so downstream trajectory/PRI results carry the flag.
-    df["is_phased_build_unadjusted"] = df["generators"].fillna(1) > 1
-    n_phased = df["is_phased_build_unadjusted"].sum()
-    log.warning(
-        "solar_assets_data.csv not provided this run - %d sites flagged "
-        "generators>1 will use CONSTANT capacity (site_master.mwdc) instead "
-        "of time-varying P_dc(m). Their trajectory/PRI outputs carry "
-        "data_quality_flag='phased_build_no_asset_data'.", n_phased
-    )
+    # Phased-build sites (generators > 1) get time-varying P_dc(m) from
+    # solar_assets_data.csv in S4a; flagged here for downstream tagging.
+    df["is_phased_build"] = df["generators"].fillna(1) > 1
+    n_phased = df["is_phased_build"].sum()
+    log.info("%d sites flagged generators>1 (phased build) - time-varying "
+              "P_dc(m) built from solar_assets_data.csv in S4a.", n_phased)
 
     log.info("site_master: %d sites, %d with lat/lon+op_year, %d flagged phased-unadjusted",
               len(df), has_cod.sum(), n_phased)
@@ -87,14 +81,38 @@ def load_sites() -> pd.DataFrame:
 
 
 def load_generators() -> pd.DataFrame:
-    """Placeholder generator-grain table. solar_assets_data.csv was not
-    provided; emit an empty frame with the documented schema so downstream
-    code has a stable join target and degrades gracefully."""
-    cols = ["plant_id", "generator_id", "nameplate_capacity_mw",
-            "dc_net_capacity_mw", "operating_year", "operating_month",
-            "tilt_angle", "azimuth_angle", "tracking_type",
-            "crystalline_silicon", "thin_film_cdte", "latitude", "longitude"]
-    return pd.DataFrame(columns=cols)
+    """Generator-grain table (solar_assets_data.csv), used by S4a for
+    time-varying DC capacity on phased builds. Join key is plant_id."""
+    path = os.path.join(RAW_DIR, "solar_assets_data.csv")
+    if not os.path.exists(path):
+        log.warning("solar_assets_data.csv not found - falling back to empty "
+                    "generator table (constant capacity everywhere).")
+        cols = ["plant_id", "generator_id", "nameplate_capacity_mw",
+                "dc_net_capacity_mw", "operating_year", "operating_month",
+                "tilt_angle", "azimuth_angle", "tracking_type",
+                "crystalline_silicon", "thin_film_cdte", "latitude", "longitude"]
+        return pd.DataFrame(columns=cols)
+
+    df = pd.read_csv(path)
+    has_cod = df["operating_year"].notna() & df["operating_month"].notna()
+    df["generator_cod"] = pd.NaT
+    df.loc[has_cod, "generator_cod"] = pd.to_datetime(
+        dict(year=df.loc[has_cod, "operating_year"].astype(int),
+             month=df.loc[has_cod, "operating_month"].astype(int),
+             day=1)
+    )
+    n_missing_cod = (~has_cod).sum()
+    if n_missing_cod:
+        log.warning("%d generator rows missing operating_year/month - their "
+                    "capacity cannot be phased in at a specific month; "
+                    "treated as present from the plant's earliest known COD.",
+                    n_missing_cod)
+
+    multi = df.groupby("plant_id").size()
+    n_phased_plants = (multi > 1).sum()
+    log.info("solar_assets_data: %d generator rows, %d plants, %d phased "
+              "(>1 generator)", len(df), df["plant_id"].nunique(), n_phased_plants)
+    return df
 
 
 def assert_workbook_p_equals_z(xlsx_path: str, sample_years=None) -> None:
@@ -139,7 +157,7 @@ def main():
         assert_workbook_p_equals_z(xlsx, sample_years=["2019", "2023", "2025"])
 
     log.info("S0 complete: production.parquet (%d rows), sites.parquet (%d rows), "
-              "generators.parquet (%d rows, empty placeholder)",
+              "generators.parquet (%d rows)",
               len(production), len(sites), len(generators))
 
 

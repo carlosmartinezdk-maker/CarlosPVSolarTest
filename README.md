@@ -13,18 +13,12 @@ are supplied per-run rather than committed. Place them at:
 data/raw/production_long.csv
 data/raw/site_master.csv
 data/raw/Solar_Production_and_Asset_Data_FY19_FY26.xlsx
-data/raw/solar_assets_data.csv   # NOT YET PROVIDED, see Open Items
+data/raw/solar_assets_data.csv
 ```
 
-## Known gap: solar_assets_data.csv
-
-The generator-grain asset file (required for Part 6 Step C1, time-varying DC
-capacity on the 257 phased-build sites) was not included in the input set for
-this run. `s0_load.py` emits an empty `generators.parquet` placeholder and
-falls back to constant capacity (`site_master.mwdc`) fleet-wide. Sites with
-`generators > 1` in site_master (294 pre-gate, tracked exactly at the
-scoreable-funnel stage) are flagged `is_phased_build_unadjusted` and should
-carry a downstream data-quality flag until the real file is supplied.
+All four are present as of the current run. `solar_assets_data.csv` (7,773
+generator rows, 7,102 plants, 296 with >1 generator) feeds S4a's
+time-varying DC capacity for phased builds.
 
 ## Run order
 
