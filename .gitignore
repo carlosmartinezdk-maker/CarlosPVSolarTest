@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+data/*.parquet
+nsrdb_cache/
+output/*.parquet
+output/*.xlsx
+.ipynb_checkpoints/

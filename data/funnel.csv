@@ -1,0 +1,7 @@
+step,n_sites,gw_ac
+start,7359,152.2887
+drop_hybrid,7204,144.217
+require_latlon,6974,144.217
+require_mwdc_gt0,6419,117.68450000000001
+require_op_year,6419,117.68450000000001
+require_dcac_range,6204,113.7761
