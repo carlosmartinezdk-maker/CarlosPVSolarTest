@@ -286,6 +286,13 @@ function assumptionMark(title) {
 }
 
 // ---------------------------------------------------------- mini charts ----
+const AXIS_COLOR = 'rgba(43,43,43,0.55)'; // light black - marks a chart as a plot, not decoration
+
+function drawAxes(s, w, h, baseline) {
+  s.appendChild(svg('line', {x1:0, y1:baseline, x2:w, y2:baseline, stroke:AXIS_COLOR, 'stroke-width':1}));
+  s.appendChild(svg('line', {x1:1, y1:0, x2:1, y2:baseline, stroke:AXIS_COLOR, 'stroke-width':1}));
+}
+
 function histogram(values, w, h, threshold) {
   const s = svg('svg', {width:w, height:h, viewBox:`0 0 ${w} ${h}`});
   if (!values.length) return s;
@@ -294,6 +301,7 @@ function histogram(values, w, h, threshold) {
   values.forEach(v => { let b = Math.floor((v-min)/(max-min)*bins); if (b>=bins) b=bins-1; if (b<0) b=0; counts[b]++; });
   const maxC = Math.max(...counts);
   const bw = w/bins;
+  drawAxes(s, w, h, h-14);
   counts.forEach((c,i) => {
     const bh = maxC ? (c/maxC)*(h-16) : 0;
     s.appendChild(svg('rect', {x:i*bw+1, y:h-14-bh, width:bw-2, height:bh, class:'bar'}));
@@ -310,6 +318,7 @@ function barChart(labels, values, w, h) {
   const s = svg('svg', {width:w, height:h, viewBox:`0 0 ${w} ${h}`});
   const maxV = Math.max(1, ...values);
   const bw = w/labels.length;
+  drawAxes(s, w, h, h-20);
   values.forEach((v,i) => {
     const bh = (v/maxV)*(h-28);
     s.appendChild(svg('rect', {x:i*bw+2, y:h-20-bh, width:bw-4, height:bh, fill:'var(--accent)'}));
@@ -422,16 +431,30 @@ function renderFleet() {
   panelHeader(mapPanel, 'GEOGRAPHY', 'Fleet map');
   const mapInterp = el('div',{class:'interp'});
   mapPanel.appendChild(mapInterp);
+  const TIERS = ['Chronic','Event','New','Improving','Healthy','Warranty-urgent'];
   const mapModeSeg = el('div', {class:'seg', style:'margin-bottom:8px'});
-  const mapMode = {v: 'choropleth'};
+  const mapMode = {v: 'choropleth', tier: 'Chronic', tierMetric: 'pct'};
   function setMapMode(mode) { mapMode.v = mode; renderMap(); }
-  ['choropleth','markers'].forEach(mode => {
+  [['choropleth','Choropleth: recoverable $/yr'], ['tiermix','Choropleth: tier mix'], ['markers','Site markers']].forEach(([mode,label]) => {
     mapModeSeg.appendChild(el('button', {class: mapMode.v===mode?'active':'', onclick:()=>{
       [...mapModeSeg.children].forEach(b=>b.classList.remove('active'));
       setMapMode(mode);
-    }}, [mode==='choropleth' ? 'Choropleth: recoverable $/yr' : 'Site markers']));
+    }}, [label]));
   });
   mapPanel.appendChild(mapModeSeg);
+  const tierControls = el('div', {style:'display:flex; gap:10px; align-items:center; margin-bottom:8px'});
+  const tierSelEl = el('select', {class:'sel', onchange:(e)=>{ mapMode.tier = e.target.value; renderMap(); }});
+  TIERS.forEach(t => tierSelEl.appendChild(el('option', {value:t, selected: t===mapMode.tier}, [t])));
+  const tierMetricSeg = el('div', {class:'seg'});
+  [['pct','% of sites'], ['mwdc','MWdc share']].forEach(([v,label]) => {
+    tierMetricSeg.appendChild(el('button', {class: mapMode.tierMetric===v?'active':'', onclick:()=>{
+      mapMode.tierMetric = v; [...tierMetricSeg.children].forEach(b=>b.classList.remove('active'));
+      renderMap();
+    }}, [label]));
+  });
+  tierControls.appendChild(tierSelEl); tierControls.appendChild(tierMetricSeg);
+  mapPanel.appendChild(tierControls);
+  function syncTierControls() { tierControls.style.display = mapMode.v === 'tiermix' ? 'flex' : 'none'; }
   if (state.filters.state) {
     mapPanel.appendChild(el('div', {class:'small', style:'margin-bottom:6px'}, [
       `Filtered to ${state.filters.state}. `,
@@ -445,6 +468,7 @@ function renderFleet() {
   m.appendChild(mapPanel);
 
   function renderMap() {
+    syncTierControls();
     mapSvgHolder.innerHTML = '';
     legend.innerHTML = '';
     const W=975, H=610;
@@ -457,15 +481,55 @@ function renderFleet() {
     });
     const maxRec = Math.max(1, ...Object.values(recByState));
 
+    // Tier mix per state: count and MWdc per tier, for the tooltip
+    // breakdown and for colouring by the selected tier/metric.
+    const tierMixByState = {};
+    Object.entries(byState).forEach(([st, ss]) => {
+      const mix = {};
+      TIERS.forEach(t => mix[t] = {count: 0, mwdc: 0});
+      let totalMwdc = 0;
+      ss.forEach(s => {
+        const t = TIERS.includes(s.conviction_tier) ? s.conviction_tier : null;
+        if (t) { mix[t].count++; mix[t].mwdc += (s.mwdc || 0); }
+        totalMwdc += (s.mwdc || 0);
+      });
+      tierMixByState[st] = {mix, nSites: ss.length, totalMwdc};
+    });
+    let maxTierShare = 0.0001;
+    if (mapMode.v === 'tiermix') {
+      Object.values(tierMixByState).forEach(({mix, nSites, totalMwdc}) => {
+        const cell = mix[mapMode.tier];
+        const share = mapMode.tierMetric === 'pct' ? (nSites ? cell.count / nSites : 0) : (totalMwdc ? cell.mwdc / totalMwdc : 0);
+        maxTierShare = Math.max(maxTierShare, share);
+      });
+    }
+
     STATE_FEATURES.forEach(f => {
       const abbr = STATE_ABBR[f.properties.name];
       const rec = recByState[abbr] || 0;
-      const t = mapMode.v === 'choropleth' ? Math.min(1, rec / maxRec) : 0;
-      const fill = mapMode.v === 'choropleth' ? choroplethColor(t) : 'var(--land)';
+      const tm = tierMixByState[abbr];
+      let t = 0, fill = 'var(--land)';
+      if (mapMode.v === 'choropleth') { t = Math.min(1, rec / maxRec); fill = choroplethColor(t); }
+      else if (mapMode.v === 'tiermix' && tm) {
+        const cell = tm.mix[mapMode.tier];
+        const share = mapMode.tierMetric === 'pct' ? (tm.nSites ? cell.count / tm.nSites : 0) : (tm.totalMwdc ? cell.mwdc / tm.totalMwdc : 0);
+        t = Math.min(1, share / maxTierShare);
+        fill = choroplethColor(t);
+      }
       const path = svg('path', {d: GEO_PATH(f), class:'geo', fill, stroke:'var(--stroke)', 'stroke-width':1});
       path.style.cursor = 'pointer';
       path.addEventListener('click', () => { state.filters.state = state.filters.state===abbr ? '' : abbr; rerenderCurrent(); });
-      path.addEventListener('mousemove', (e) => showTip(e, `<b>${f.properties.name}</b><br>${(byState[abbr]||[]).length} sites<br>Recoverable: ${fmtUsd(rec)}/yr`));
+      path.addEventListener('mousemove', (e) => {
+        let html = `<b>${f.properties.name}</b><br>${(byState[abbr]||[]).length} sites<br>Recoverable: ${fmtUsd(rec)}/yr`;
+        if (mapMode.v === 'tiermix' && tm) {
+          html += '<br><br>' + TIERS.map(t2 => {
+            const cell = tm.mix[t2];
+            const pct = tm.nSites ? (100*cell.count/tm.nSites).toFixed(0) : '0';
+            return `${t2}: ${cell.count} sites (${pct}%), ${fmtNum(cell.mwdc,1)} MWdc`;
+          }).join('<br>');
+        }
+        showTip(e, html);
+      });
       path.addEventListener('mouseleave', hideTip);
       s2.appendChild(path);
     });
@@ -497,10 +561,15 @@ function renderFleet() {
       });
       Object.entries(tierColor).forEach(([k,v]) => legend.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${v}`}),k])));
       mapInterp.textContent = `${DATA.sites.filter(s=>s.lat!==null).length} sites projected with the same Albers USA transform as the state polygons above, sized by MWac and coloured by conviction tier. Click a marker to open its Site Detail, or a state to filter every view to it.`;
+    } else if (mapMode.v === 'tiermix') {
+      legend.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${choroplethColor(0.15)}`}),'Low']));
+      legend.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${choroplethColor(1)}`}),`High (${mapMode.tier} share)`]));
+      const metricLabel = mapMode.tierMetric === 'pct' ? '% of sites' : 'share of MWdc';
+      mapInterp.textContent = `Shaded by each state's ${metricLabel} in the "${mapMode.tier}" tier. Hover a state for the full tier breakdown; click to filter every other view to it.`;
     } else {
       legend.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${choroplethColor(0.15)}`}),'Low']));
       legend.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${choroplethColor(1)}`}),'High (recoverable $/yr)']));
-      mapInterp.textContent = `Shaded by total recoverable $/yr per state, this subsample's 103 sites spread across 28 states — read it for where the dollars concentrate, not statistical fleet coverage per state. Click a state to filter every other view to it.`;
+      mapInterp.textContent = `Shaded by total recoverable $/yr per state, across ${DATA.sites.length} sites in ${new Set(DATA.sites.map(s=>s.state)).size} states — read it for where the dollars concentrate, not statistical fleet coverage per state. Click a state to filter every other view to it.`;
     }
     mapSvgHolder.appendChild(s2);
   }
@@ -511,13 +580,14 @@ function renderFleet() {
     const hazPanel = el('div', {class:'card-panel'});
     panelHeader(hazPanel, 'FORECAST', 'Hazard rate by age band and signature (episodes / exposure-year)');
     hazPanel.appendChild(el('div',{class:'interp'},[
-      `Subsample scale (n~100) means these curves are not yet statistically meaningful on their own — read shape (rising vs. falling with age), not the exact rate.`
+      `At n=${DATA.sites.length} sites, read shape (rising vs. falling with age) rather than the exact rate — still not the full 6,204-site fleet.`
     ]));
     const bands = [...new Set(DATA.hazard.map(h=>h.age_band))];
     const sigsPresent = [...new Set(DATA.hazard.map(h=>h.signature))];
     const w3=900,h3=200, bw = w3/bands.length;
     const maxRate = Math.max(0.1, ...DATA.hazard.map(h=>h.rate||0));
     const s3 = svg('svg',{width:w3,height:h3,viewBox:`0 0 ${w3} ${h3}`});
+    drawAxes(s3, w3, h3, h3-20);
     sigsPresent.forEach(sig => {
       let pts = [];
       bands.forEach((b,i) => {
@@ -635,8 +705,14 @@ function renderTriage() {
   const bodyStart = table.rows.length;
 
   function renderRows() {
-    while (table.rows.length > bodyStart) table.deleteRow(bodyStart);
+    // Capture scroll position BEFORE touching the DOM - deleting rows
+    // shrinks the table's height/width mid-render, which makes the
+    // browser clamp scrollTop/scrollLeft on its own; reading them after
+    // the delete (the old bug) reads that already-clamped value and the
+    // list visibly snaps back to the top/left on every scroll event.
     const scrollTop = scrollDiv.scrollTop;
+    const scrollLeft = scrollDiv.scrollLeft;
+    while (table.rows.length > bodyStart) table.deleteRow(bodyStart);
     const viewH = scrollDiv.clientHeight || 400;
     const first = Math.max(0, Math.floor(scrollTop / ROW_H) - 5);
     const visibleCount = Math.ceil(viewH / ROW_H) + 10;
@@ -668,6 +744,9 @@ function renderTriage() {
     }
     const spacerBot = el('tr', {}); spacerBot.appendChild(el('td',{colspan:cols.length, style:`padding:0;height:${Math.max(0,(list.length-last)*ROW_H)}px`}));
     table.appendChild(spacerBot);
+    // Restore explicitly in case the delete step above caused a transient clamp.
+    scrollDiv.scrollTop = scrollTop;
+    scrollDiv.scrollLeft = scrollLeft;
   }
   scrollDiv.addEventListener('scroll', renderRows);
   renderRows();
@@ -702,8 +781,35 @@ function renderDetail() {
   const list = filteredSites();
   let site = state.currentSite;
   if (!site && list.length) site = list[0].site;
+
+  // Customer-first picker: choose the owner, then a site under them, before
+  // showing any data - the entry point into Site Detail rather than an
+  // afterthought.
+  const pickerPanel = el('div', {class:'card-panel'});
+  panelHeader(pickerPanel, 'NAVIGATE', 'Choose a customer, then a site');
+  const pickerRow = el('div', {style:'display:flex; gap:12px; align-items:center; flex-wrap:wrap'});
+  const owners = [...new Set(DATA.sites.map(s2=>s2.utility).filter(Boolean))].sort();
+  const ownerSel = el('select', {class:'sel', onchange:(e)=>{
+    state.filters.utility = e.target.value;
+    state.currentSite = null;
+    render();
+  }});
+  ownerSel.appendChild(el('option', {value:''}, ['All customers']));
+  owners.forEach(o => ownerSel.appendChild(el('option', {value:o, selected: o===state.filters.utility ? true : undefined}, [o])));
+  const siteSel = el('select', {class:'sel', onchange:(e)=>{ openSite(e.target.value); }});
+  if (!list.length) siteSel.appendChild(el('option', {value:''}, ['(no sites for this customer under current filters)']));
+  list.forEach(x => siteSel.appendChild(el('option', {value:x.site, selected: x.site===site ? true : undefined}, [x.site])));
+  pickerRow.appendChild(el('span',{class:'small'},['Customer']));
+  pickerRow.appendChild(ownerSel);
+  pickerRow.appendChild(el('span',{class:'small'},['Site']));
+  pickerRow.appendChild(siteSel);
+  pickerPanel.appendChild(pickerRow);
+  pickerPanel.appendChild(el('div',{class:'small', style:'margin-top:6px'},
+    [`${list.length} site(s) match${state.filters.utility ? ' for ' + state.filters.utility : ''}.`]));
+  m.appendChild(pickerPanel);
+
   const s = DATA.sites.find(x=>x.site===site);
-  if (!s) { m.appendChild(el('div',{class:'card-panel'},['No site selected. Go to Triage List and click a row.'])); return; }
+  if (!s) { m.appendChild(el('div',{class:'card-panel'},['No site selected. Pick a customer/site above, or go to Triage List and click a row.'])); return; }
   state.currentSite = site;
   updatePosIndicator(list, site);
 
@@ -897,8 +1003,6 @@ function renderOwners() {
   let owners = Object.entries(byOwner).map(([owner, ss]) => {
     const pris = ss.map(s=>s.latest_pri).filter(v=>v!==null).sort((a,b)=>a-b);
     const medianPri = pris.length ? pris[Math.floor(pris.length/2)] : null;
-    const quadCounts = {};
-    ss.forEach(s => { const q = s.quadrant_trailing12 || 'insufficient_data'; quadCounts[q] = (quadCounts[q]||0)+1; });
     const recoverable = ss.reduce((a,s)=>a+(s.recoverable_usd_yr||0), 0);
     const coi = ss.reduce((a,s)=>a+(s.cost_of_inaction_usd||0), 0);
     const fee = ss.reduce((a,s)=>a+(s.annual_fee_usd||0), 0);
@@ -907,7 +1011,7 @@ function renderOwners() {
     const bundle = Object.entries(offeringCounts).sort((a,b)=>b[1]-a[1]).map(([o2])=>o2);
     const warrantyUrgent = ss.filter(s=>s.warranty_urgent).length;
     const mwdc = ss.reduce((a,s)=>a+(s.mwdc||0), 0);
-    return { owner, n: ss.length, mwdc, medianPri, quadCounts, recoverable, coi, fee, bundle, warrantyUrgent,
+    return { owner, n: ss.length, mwdc, medianPri, recoverable, coi, fee, bundle, warrantyUrgent,
              roiMultiple: (coi && fee*3>0 && coi/(fee*3)<=20) ? coi/(fee*3) : null,
              payback: fee>0 ? 12*fee/Math.max(1,recoverable*0.85) : null };
   });
@@ -917,14 +1021,13 @@ function renderOwners() {
   panel.appendChild(el('div',{class:'small', style:'margin-bottom:8px'},
     [`${owners.length} owners shown (${Object.keys(byOwner).length} total, ${Object.values(byOwner).filter(s=>s.length>1).length} multi-site).`]));
 
-  const cols = ['Owner','Sites','MWdc','Median PRI','Quadrant mix','Recoverable $/yr','3yr cost of inaction',
+  const cols = ['Owner','Sites','MWdc','Median PRI','Recoverable $/yr','3yr cost of inaction',
     'Recommended bundle','Annual fee','ROI multiple','Payback (mo)','Warranty-urgent'];
   const table = el('table', {class:'grid'});
   table.appendChild(el('tr',{}, cols.map((c,i)=>el('th',{class:i===0?'kcol':''},[c]))));
   owners.forEach(o => {
     const tr = el('tr', {onclick:()=>{ state.filters.utility = o.owner; state.view='fleet'; location.hash=''; render(); }});
-    const quadStr = Object.entries(o.quadCounts).map(([k,v])=>`${k.slice(0,4)}:${v}`).join(' ');
-    [o.owner, o.n, fmtNum(o.mwdc,1), fmtNum(o.medianPri,3), quadStr, fmtUsd(o.recoverable), fmtUsd(o.coi),
+    [o.owner, o.n, fmtNum(o.mwdc,1), fmtNum(o.medianPri,3), fmtUsd(o.recoverable), fmtUsd(o.coi),
      o.bundle.slice(0,2).join(', ')||'—', fmtUsd(o.fee),
      o.roiMultiple ? fmtNum(o.roiMultiple,1)+'x' : (o.fee>0?'net/payback only':'—'),
      o.payback!==null ? fmtNum(o.payback,1) : '—', o.warrantyUrgent||''
