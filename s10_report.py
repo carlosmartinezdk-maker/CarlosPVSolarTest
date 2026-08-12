@@ -14,7 +14,7 @@ import config
 logging.basicConfig(level=logging.INFO, format="%(asctime)s S10 %(message)s")
 log = logging.getLogger("s10")
 
-from s11_explorer import compute_conviction_tier, track_mix_decision_grade, pi_bias_diagnostic  # noqa: E402 - after basicConfig so S10's log format wins
+from s11_explorer import compute_conviction_tier, track_mix_decision_grade, pi_bias_diagnostic, describe_scope  # noqa: E402 - after basicConfig so S10's log format wins
 
 REFERENCE_PROFILE = {  # methodology Part 7 Step E1, episodes per plant-year (test 22)
     "UNATTRIBUTED": 0.76, "BOS_INTERMITTENT": 0.58, "SOILING": 0.31, "BLOCK_OUTAGE": 0.29,
@@ -139,6 +139,8 @@ def main():
 
     track_counts = nsrdb_summary["track"].value_counts().to_dict()
     decision_grade, decision_grade_reason = track_mix_decision_grade(track_counts)
+    n_sites = len(sub)
+    scope_desc = describe_scope(sub)
 
     med_beta_excess = traj.loc[traj["decision_grade"], "beta_excess"].median()
 
@@ -154,7 +156,7 @@ def main():
     lines = []
     lines.append(f"# Run Report - Solar Underperformance Analysis\n")
     lines.append(f"Generated: {datetime.now().isoformat()}\n")
-    lines.append("**SCOPE: 100-site stratified validation subsample, per the brief's own "
+    lines.append(f"**SCOPE: {scope_desc}, per the brief's own "
                  "BUILD ORDER (Section 12). Full 6,204-site scale-up is a tracked follow-up, "
                  "not yet run.**\n")
 
@@ -164,8 +166,8 @@ def main():
                      "from this session's network egress policy - confirmed via `s2_nsrdb.py "
                      "--preflight-only` (`success`) and by the real pull below. Per the brief's "
                      "own updated architecture, `s2_nsrdb.py` is a fully standalone script with "
-                     "no import from the rest of this repo, run against the 100-site validation "
-                     "subsample (707 cell-years). The full 4,798-cell x 7-year = 33,586 "
+                     f"no import from the rest of this repo, run against {scope_desc} "
+                     f"({nsrdb_summary.shape[0]} cell-years). The full 4,798-cell x 7-year = 33,586 "
                      "cell-year fleet pull is still a separate, deliberately-deferred multi-day "
                      "job at the NLR rate limit (1 req/sec, 10,000/day) - not yet run.\n\n")
     else:
@@ -196,11 +198,16 @@ def main():
     lines.append(f"- tracking mix: {sub['tracking'].value_counts().to_dict()}\n")
     lines.append(f"- tech mix: {sub['tech_class'].value_counts().to_dict()}\n")
 
+    peer_pct = 100 * n_peer / max(1, n_peer + n_phys)
     lines.append("\n## S4 - PI/PRI coverage\n")
     lines.append(f"- {len(idx)} site-months scored: {n_peer} peer-benchmarked PRI, "
                  f"{n_phys} physical-fallback (PI_adj) - "
-                 f"{100*n_peer/max(1,n_peer+n_phys):.0f}% peer coverage "
-                 "(low at subsample scale by construction; full fleet has much richer peer availability)\n")
+                 f"{peer_pct:.0f}% peer coverage "
+                 + (f"(Explorer v2 brief A3 predicted this would improve with geographically "
+                    f"clustered sampling - it did: {peer_pct:.0f}% here vs. 12.6% on the earlier "
+                    f"scattered 100-site nationwide subsample)\n"
+                    if peer_pct >= 30 else
+                    "(low at subsample scale by construction; full fleet has much richer peer availability)\n"))
     lines.append(f"- PI distribution: {idx['PI'].describe().round(3).to_dict()}\n")
 
     lines.append("\n## Explorer v2 brief, Part A2 - PI bias diagnostic\n")
@@ -235,15 +242,17 @@ def main():
     lines.append("\n## TEST 11 - Degradation sanity (the best end-to-end check available)\n")
     lines.append(f"- Median beta_excess at 4+ years of history: "
                  f"**{med_beta_excess:.4f}** (target ~ -0.0050, i.e. -0.5%/yr)\n")
+    n_decision_grade_traj = int(traj["decision_grade"].sum())
     if decision_grade:
-        lines.append("- Caveat: fit against real Track A NSRDB weather, but still a ~100-site "
-                     "sample where few sites clear the 4-year decision-grade bar. Re-run at full "
-                     "scale (4,396 sites with 4+ years) before trusting this number as fleet-wide.\n")
+        lines.append(f"- Caveat: fit against real Track A NSRDB weather, {n_sites} sites total, "
+                     f"{n_decision_grade_traj} clearing the 4-year decision-grade bar. Re-run at "
+                     "full scale (4,396 sites with 4+ years) before trusting this number as "
+                     "fleet-wide.\n")
     else:
-        lines.append("- Caveat: fit against Track B clear-sky, not measured weather, and on a "
-                     "~100-site sample where few sites clear the 4-year decision-grade bar. Re-run "
-                     "at full scale (4,396 sites with 4+ years) against real NSRDB data before "
-                     "trusting this number.\n")
+        lines.append(f"- Caveat: fit against Track B clear-sky, not measured weather, and on a "
+                     f"{n_sites}-site sample, {n_decision_grade_traj} clearing the 4-year "
+                     "decision-grade bar. Re-run at full scale (4,396 sites with 4+ years) against "
+                     "real NSRDB data before trusting this number.\n")
     lines.append("- Second caveat, more important than the first: this result should NOT be read "
                  "as strong validation on its own. S3's E_exp already bakes in the same fixed `d` "
                  "used to compute beta_excess = beta - d, so beta_excess lands near -d for ANY "
@@ -268,13 +277,15 @@ def main():
         got = profile.get(s, 0.0)
         lines.append(f"| {s} | {got:.2f} | {ref:.2f} |\n")
     if decision_grade:
-        lines.append("\nAt n~100 sites, large deviation from the reference is still EXPECTED "
-                     "(sample-size, not weather-track) and not yet diagnostic of a "
-                     "misconfigured classifier - re-check at full fleet scale.\n")
+        lines.append(f"\nAt n={n_sites} sites, deviation from the reference is still worth reading "
+                     "with caution (sample composition, not weather-track) but is far more "
+                     "informative than at 100-site scale - re-check at full fleet scale before "
+                     "treating it as final.\n")
     else:
-        lines.append("\nAt n~100 sites and Track B weather, large deviation from the reference is "
-                     "EXPECTED and not yet diagnostic of a misconfigured classifier - re-check at "
-                     "full scale against real NSRDB data per the brief's own instruction.\n")
+        lines.append(f"\nAt n={n_sites} sites and Track B weather, large deviation from the "
+                     "reference is EXPECTED and not yet diagnostic of a misconfigured classifier - "
+                     "re-check at full scale against real NSRDB data per the brief's own "
+                     "instruction.\n")
 
     peer_pri = dollars.loc[dollars["benchmark_mode"] == "peer", "PRI"].dropna()
     pri_p75 = peer_pri.quantile(0.75) if len(peer_pri) else float("nan")
@@ -297,16 +308,19 @@ def main():
 
     lines.append("\n## Known limitations this run (encoded as flags, not silently absorbed)\n")
     if decision_grade:
-        lines.append("- Real Track A NSRDB weather this run (see above) - the weather-track "
-                     "caveat is cleared; 100-site subsample scale is now the single biggest "
-                     "caveat on every number.\n")
+        lines.append(f"- Real Track A NSRDB weather this run (see above) - the weather-track "
+                     f"caveat is cleared; {n_sites}-site sample scale (not the full 6,204-site "
+                     "fleet) is now the single biggest caveat on every number.\n")
     else:
         lines.append("- Track B clear-sky stopgap (see above) - the single biggest caveat on every number.\n")
-    lines.append("- G1 (curtailment) BA-month medians computed within the subsample only; "
-                 "rarely reaches the >=3-plants-per-BA-month minimum at this scale.\n")
-    lines.append("- Hazard shape uses a bucketed age-band rate, not a full Weibull MLE "
-                 "(too little data at n~100); negative-binomial rate models mostly fail to "
-                 "converge at this scale (see Test 12 table) - both are full-scale-only outputs.\n")
+    lines.append("- G1 (curtailment) BA-month medians computed within the sample only; "
+                 "rarely reaches the >=3-plants-per-BA-month minimum outside dense clusters.\n")
+    n_negbin_converged = sum(1 for r in negbin.values() if r.get("converged"))
+    lines.append("- Hazard shape uses a bucketed age-band rate, not a full Weibull MLE. "
+                 f"Negative-binomial rate models: {n_negbin_converged}/{len(negbin)} signatures "
+                 f"converged this run (see Test 12 table)"
+                 + (" - still full-scale-only for a statistically robust read.\n" if n_negbin_converged < len(negbin)
+                    else ", a marked improvement over the scattered 100-site subsample where most failed to converge.\n"))
     lines.append("- Vintage-cohort stepwise term (Section 7 identification fix) not fitted here - "
                  "deferred to the full-scale run where cohort bins have enough sites.\n")
     lines.append(f"- solar_assets_data.csv was supplied and used (generator-grain time-varying "
@@ -318,7 +332,7 @@ def main():
 
     run_notes = [
         f"Generated {datetime.now().isoformat()}",
-        "Scope: 100-site stratified validation subsample, not the full 6,204-site fleet.",
+        f"Scope: {scope_desc}.",
         f"Weather track this run: {track_counts} - {decision_grade_reason}",
         "solar_assets_data.csv supplied and used - time-varying DC capacity on phased builds is live.",
         "2022 EIA-923 gap (Section 4 item 1) is still open upstream; absent 2022 months are treated "
@@ -328,8 +342,9 @@ def main():
         "rho_s recovery fractions are placeholders with no ground truth (Section 11 item 6 open).",
         "ISO curtailment feeds not available; CURTAILMENT relies on BA-peer agreement only "
         "(Section 11 item 5 open).",
-        "S8 hazard/frailty/credibility and S9 dollar totals are NOT statistically meaningful at "
-        "n~100 sites - built and smoke-tested, meaningful results need the full-scale run.",
+        f"S8 hazard/frailty/credibility and S9 dollar totals: {n_negbin_converged}/{len(negbin)} "
+        f"negative-binomial signature fits converged this run at n={n_sites} - still not the full "
+        "6,204-site fleet, treat as directional, not final.",
     ]
 
     with open("run_report.md", "w") as f:

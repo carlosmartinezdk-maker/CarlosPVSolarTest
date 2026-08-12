@@ -6,9 +6,10 @@ and embeds it directly in the HTML (no fetch(), no server - file:// must
 work by double-click). Monthly series are parallel arrays of rounded
 numbers, not arrays of objects, per the brief's payload-budget guidance.
 
-SCOPE: built against the 100-site validation subsample (see run_report.md
-for which weather track - real Track A NSRDB or Track B clear-sky stopgap -
-this run actually used). `meta.decision_grade` reflects the real
+SCOPE: built against whatever site set data/subsample_sites.parquet holds
+this run - a fixed 100-site stratified subsample, a geographic expansion
+batch, or their union (see run_report.md and meta.scope for the real
+count/composition each run). `meta.decision_grade` reflects the real
 `data/nsrdb_pull_summary.parquet` track mix rather than assuming Track B,
 per the brief's "standing caveats" requirement.
 """
@@ -39,6 +40,20 @@ def ri(x):
     return int(round(float(x)))
 
 
+def describe_scope(sub: pd.DataFrame) -> str:
+    """Dynamic scope description - the analysis set has grown past a fixed
+    100-site subsample (now includes geographically-clustered expansion
+    batches like CA/NC/SC), so scope text must reflect the real site count
+    and composition each run, not a hardcoded number (test: no stale
+    "100-site" strings survive a scale-up)."""
+    n = len(sub)
+    top_states = sub["state"].value_counts().head(3)
+    top_str = ", ".join(f"{st} ({ct})" for st, ct in top_states.items())
+    n_other_states = sub["state"].nunique() - len(top_states)
+    other_str = f", {n_other_states} other states" if n_other_states > 0 else ""
+    return f"{n}-site sample ({top_str}{other_str}), not the full 6,204-site fleet"
+
+
 def track_mix_decision_grade(track_counts: dict) -> tuple[bool, str]:
     """Single source of truth for 'is this run's weather decision-grade',
     read from the actual data/nsrdb_pull_summary.parquet track mix instead
@@ -49,8 +64,8 @@ def track_mix_decision_grade(track_counts: dict) -> tuple[bool, str]:
     if pct_real == 1.0:
         return True, (
             f"100% Track A (real NSRDB PSM v4 GOES Aggregated weather, {n_cell_years} "
-            "cell-years) this run - the weather-track caveat is cleared. Still a 100-site "
-            "stratified validation subsample, not the full 6,204-site fleet."
+            "cell-years) this run - the weather-track caveat is cleared. Still a "
+            "validation-scale sample, not the full 6,204-site fleet."
         )
     return False, (
         f"Weather track mix this run: {track_counts} - {pct_real:.0%} real Track A NSRDB "
@@ -537,7 +552,7 @@ def build_payload() -> dict:
     payload = dict(
         meta=dict(
             generated_at=pd.Timestamp.now().isoformat(),
-            scope="100-site stratified VALIDATION SUBSAMPLE, not the full 6,204-site fleet",
+            scope=describe_scope(sites),
             weather_track_summary=track_counts,
             decision_grade=decision_grade,
             decision_grade_reason=decision_grade_reason,
