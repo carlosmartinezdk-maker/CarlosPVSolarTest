@@ -57,27 +57,72 @@ def track_mix_decision_grade(track_counts: dict) -> tuple[bool, str]:
     )
 
 
-def compute_conviction_tier(site_years: pd.DataFrame, traj_row: pd.Series | None) -> str:
+def pi_bias_diagnostic(idx: pd.DataFrame, sites: pd.DataFrame) -> dict:
+    """Explorer v2 Part A2: regress monthly PI on month-of-year and latitude.
+    An unbiased physical model should show no systematic seasonal or
+    latitudinal pattern - if PI dips every winter or moves with latitude,
+    that's model bias (most likely the static loss stack L, see config.py),
+    not real fleet behaviour. Report the finding, don't guess a new L
+    without evidence of the right value."""
+    import statsmodels.api as sm
+    d = idx.merge(sites[["site", "lat"]], on="site", how="left").dropna(subset=["PI", "lat"])
+    d = d.copy()
+    d["month"] = pd.to_datetime(d["month_start"]).dt.month
+    month_dummies = pd.get_dummies(d["month"], prefix="m", drop_first=True).astype(float)
+    X = sm.add_constant(pd.concat([d[["lat"]], month_dummies], axis=1))
+    model = sm.OLS(d["PI"], X, missing="drop").fit()
+    by_month = d.groupby("month")["PI"].mean().round(3).to_dict()
+    return dict(
+        n=len(d),
+        lat_coef=r(model.params["lat"], 5), lat_pvalue=r(model.pvalues["lat"], 4),
+        pi_by_month=by_month,
+        winter_summer_gap=r(max(by_month.get(m, 0) for m in (10, 11)) -
+                             min(by_month.get(m, 1) for m in (1, 12)), 3),
+        biased=bool(model.pvalues["lat"] < 0.05),
+    )
+
+
+def compute_conviction_tier(site_years: pd.DataFrame, traj_row: pd.Series | None,
+                             recoverable_usd_yr: float = 0.0, excess_category: str | None = None) -> str:
+    """Explorer v2 Part A5/A6: tier must consume trajectory AND dollars, and
+    a beta with |t| < BETA_T_SIGNIFICANCE_THRESHOLD is noise, not a slope -
+    it may never drive "Improving" (test 37). No site may end up "Healthy"
+    while carrying recoverable value or an accelerating-loss trajectory
+    (test 36) - that combination gets reclassified to "Event" below."""
     site_years = site_years.sort_values("year")
     if len(site_years) <= 1:
-        return "New"
-    if traj_row is not None and pd.notna(traj_row.get("beta_excess")) and traj_row["beta_excess"] > 0.03:
-        return "Improving"
-    # 2026 can never carry a qualified LEAD (no PI - Section 0.7), so it can
-    # never be the "latest year" for Chronic/Event purposes. Use the latest
-    # year that actually had a PI-based lead determination.
-    pi_capable = site_years[site_years["mean_PI"].notna()] if "mean_PI" in site_years else site_years
-    if len(pi_capable) == 0:
-        return "Healthy"
-    latest = pi_capable.iloc[-1]
-    prior = pi_capable.iloc[:-1]
-    latest_flagged = bool(latest.get("is_lead", False))
-    prior_mean_pi = prior["mean_PI"].mean() if len(prior) else np.nan
-    if latest_flagged and pd.notna(prior_mean_pi) and prior_mean_pi < config.PI_PRI_DECISION_THRESHOLD:
-        return "Chronic"
-    if latest_flagged:
-        return "Event"
-    return "Healthy"
+        tier = "New"
+    else:
+        beta_significant = (traj_row is not None and pd.notna(traj_row.get("beta_excess"))
+                             and pd.notna(traj_row.get("beta_t"))
+                             and abs(traj_row["beta_t"]) >= config.BETA_T_SIGNIFICANCE_THRESHOLD)
+        if beta_significant and traj_row["beta_excess"] > 0.03:
+            tier = "Improving"
+        else:
+            # 2026 can never carry a qualified LEAD (no PI - Section 0.7), so
+            # it can never be the "latest year" for Chronic/Event purposes.
+            # Use the latest year that actually had a PI-based lead
+            # determination.
+            pi_capable = site_years[site_years["mean_PI"].notna()] if "mean_PI" in site_years else site_years
+            if len(pi_capable) == 0:
+                tier = "Healthy"
+            else:
+                latest = pi_capable.iloc[-1]
+                prior = pi_capable.iloc[:-1]
+                latest_flagged = bool(latest.get("is_lead", False))
+                prior_mean_pi = prior["mean_PI"].mean() if len(prior) else np.nan
+                if latest_flagged and pd.notna(prior_mean_pi) and prior_mean_pi < config.PI_PRI_DECISION_THRESHOLD:
+                    tier = "Chronic"
+                elif latest_flagged:
+                    tier = "Event"
+                else:
+                    tier = "Healthy"
+
+    if tier == "Healthy" and (
+        (recoverable_usd_yr or 0) > 0 or excess_category == "accelerating_loss"
+    ):
+        tier = "Event"
+    return tier
 
 
 def build_payload() -> dict:
@@ -89,6 +134,8 @@ def build_payload() -> dict:
     funnel = pd.read_csv("data/funnel.csv")
     credibility = pd.read_parquet("data/credibility.parquet")
     nsrdb_summary = pd.read_parquet("data/nsrdb_pull_summary.parquet")
+    idx = pd.read_parquet("data/site_month_indices.parquet")
+    pi_bias = pi_bias_diagnostic(idx, sites)
 
     dollars = dollars.sort_values(["site", "month_start"])
 
@@ -125,6 +172,24 @@ def build_payload() -> dict:
         n_candidates = [ri(x) if pd.notna(x) else 0 for x in g["n_candidates"]] if "n_candidates" in g else [0] * len(g)
 
         latest = g.iloc[-1]
+        # Explorer v2 Part A1: "latest" PI/PRI must mean the latest SCORED
+        # month, not the last array slot - 2026 has no irradiance (Section
+        # 0.7) so its months are never PI-scored, and reading g.iloc[-1]
+        # silently nulled latest_pi/latest_pri for every site (test 34).
+        scored = g[g["PI"].notna()]
+        if len(scored):
+            latest_scored = scored.iloc[-1]
+            latest_scored_month = latest_scored["month_start"].strftime("%Y-%m")
+            months_since_last_scored = (
+                (latest["month_start"].year - latest_scored["month_start"].year) * 12
+                + (latest["month_start"].month - latest_scored["month_start"].month)
+            )
+        else:
+            latest_scored = None
+            latest_scored_month = None
+            months_since_last_scored = None
+        stale = bool(months_since_last_scored is not None
+                     and months_since_last_scored >= config.STALE_MONTHS_THRESHOLD)
         fault_months = int(g["fault_flag"].sum())
         episode_count = len(ledger[(ledger["site"] == site) & ledger["signature"].isin(config.FAULT_LEDGER_SIGNATURES)]) \
             if len(ledger) else 0
@@ -137,7 +202,8 @@ def build_payload() -> dict:
 
         t = traj.loc[site] if site in traj.index else None
         sy = site_year_stats[site_year_stats["site"] == site]
-        tier = compute_conviction_tier(sy, t)
+        excess_category = t["excess_category"] if t is not None else None
+        tier = compute_conviction_tier(sy, t, recoverable_usd_yr, excess_category)
 
         # Current status, not "was ever urgent at some point in 8 years of
         # history" - a site whose 2-year EPC warranty lapsed years ago isn't
@@ -181,7 +247,12 @@ def build_payload() -> dict:
             weather_track=weather_track, benchmark_mode=benchmark_mode,
             peer_count=peer_count, peer_radius_km=peer_radius, peers_healthy=peers_healthy,
             block_fraction=block_fraction, n_candidates=n_candidates,
-            latest_pi=r(latest.get("PI"), 3), latest_pri=r(latest.get("PRI"), 3), latest_d=r(latest.get("D"), 3),
+            latest_pi=r(latest_scored.get("PI"), 3) if latest_scored is not None else None,
+            latest_pri=r(latest_scored.get("PRI"), 3) if latest_scored is not None else None,
+            latest_d=r(latest_scored.get("D"), 3) if latest_scored is not None else None,
+            latest_scored_month=latest_scored_month,
+            months_since_last_scored=months_since_last_scored,
+            stale=stale,
             beta=r(t["beta"], 4) if t is not None else None,
             beta_se=r(t["beta_se"], 4) if t is not None else None,
             beta_t=r(t["beta_t"], 2) if t is not None else None,
@@ -248,6 +319,16 @@ def build_payload() -> dict:
             weather_track_summary=track_counts,
             decision_grade=decision_grade,
             decision_grade_reason=decision_grade_reason,
+            pi_provisional=pi_bias["biased"],
+            pi_bias_note=(
+                f"PI regressed on month-of-year and latitude (n={pi_bias['n']}): latitude "
+                f"coefficient {pi_bias['lat_coef']} (p={pi_bias['lat_pvalue']}), "
+                f"winter-vs-autumn gap {pi_bias['winter_summer_gap']}. This is model bias "
+                "(likely the static loss stack L, see config.py), not fleet behaviour. "
+                "Treat PI as provisional and lead with PRI until recalibrated."
+                if pi_bias["biased"] else
+                "No significant seasonal/latitudinal PI bias detected this run."
+            ),
             ppa_usd_per_mwh=config.PPA_USD_PER_MWH,
             pi_pri_threshold=config.PI_PRI_DECISION_THRESHOLD,
             assumptions=[
@@ -256,7 +337,7 @@ def build_payload() -> dict:
                 dict(name="gamma (CdTe)", value="-0.0028 /degC", status="measured (IEC/lab)"),
                 dict(name="d (c-Si)", value="0.005 /yr", status="assumed structural prior, fixed by design"),
                 dict(name="d (CdTe)", value="0.004 /yr", status="assumed structural prior, fixed by design"),
-                dict(name="static loss stack L", value="0.86", status="assumed"),
+                dict(name="static loss stack L", value="0.86", status="assumed - PI provisional pending A2 recalibration" if pi_bias["biased"] else "assumed"),
                 dict(name="inverter efficiency", value="0.985", status="assumed"),
                 dict(name="rho_s (all signatures)", value="see Action Map", status="PLACEHOLDER, no ground truth yet"),
                 dict(name="warranty terms", value="2y EPC / 5-10y inverter / 10-12y module / 25y perf.", status="assumed default, not contractual"),

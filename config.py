@@ -46,6 +46,14 @@ PEER_HEALTH_FLOOR_PI = 0.85
 PEER_SET_TARGET = 15
 PEER_MINIMUM = 4
 ADAPTIVE_RADIUS_LADDER_KM = [150, 250, 400, 600]
+
+# Explorer v2 Part A: no conviction tier, call-list position or ROI
+# projection may consume a beta whose |t| is below this - a slope this
+# noisy is statistically indistinguishable from zero (brief A5, test 37).
+BETA_T_SIGNIFICANCE_THRESHOLD = 2.0
+# Explorer v2 Part A1: a site whose latest SCORED month is this many
+# months behind the fleet's latest reported month gets a staleness badge.
+STALE_MONTHS_THRESHOLD = 6
 PEER_AGE_WINDOW_YEARS = 4
 PEER_DCAC_WINDOW = 0.20
 

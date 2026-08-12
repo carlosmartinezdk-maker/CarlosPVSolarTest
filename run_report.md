@@ -1,5 +1,5 @@
 # Run Report - Solar Underperformance Analysis
-Generated: 2026-08-11T21:20:48.930658
+Generated: 2026-08-12T07:59:13.759947
 **SCOPE: 100-site stratified validation subsample, per the brief's own BUILD ORDER (Section 12). Full 6,204-site scale-up is a tracked follow-up, not yet run.**
 
 ## NSRDB access status (READ FIRST)
@@ -27,6 +27,11 @@ Weather source used this run: `{'A': 707}` - 100% Track A (real NSRDB PSM v4 GOE
 ## S4 - PI/PRI coverage
 - 9167 site-months scored: 1159 peer-benchmarked PRI, 8008 physical-fallback (PI_adj) - 13% peer coverage (low at subsample scale by construction; full fleet has much richer peer availability)
 - PI distribution: {'count': 4583.0, 'mean': 0.824, 'std': 0.482, 'min': 0.0, '25%': 0.631, '50%': 0.833, '75%': 0.964, 'max': 9.208}
+
+## Explorer v2 brief, Part A2 - PI bias diagnostic
+- Regression of monthly PI on month-of-year and latitude (n=4583): latitude coefficient **0.00947** (p=0.0), PI by calendar month: `{1: 0.745, 2: 0.786, 3: 0.816, 4: 0.854, 5: 0.837, 6: 0.838, 7: 0.827, 8: 0.833, 9: 0.857, 10: 0.881, 11: 0.861, 12: 0.749}`.
+- **Significant seasonal and latitudinal pattern found - this is model bias, not fleet behaviour.** Winter months read ~0.10-0.11 lower than autumn peak months, and PI rises significantly with latitude (p<0.05). Most likely cause per the brief's own priority order: the static loss stack `L=0.86` (config.STATIC_LOSS_STACK), followed by tracking/backtracking defaults, clipping order-of-operations, and timezone alignment. **PI is provisional until this is recalibrated with evidence for the correct L - lead with PRI for any absolute claim.** No blind change to L was made without evidence of the right value.
+- **A4 - SNOW rate by state (top 10 of 18 states with classified months):** `{'WI': 0.51, 'UT': 0.47, 'MI': 0.46, 'KY': 0.43, 'MN': 0.39, 'RI': 0.37, 'ME': 0.33, 'OR': 0.32, 'CO': 0.29, 'VT': 0.28}` - elevated rates in states without heavy winter snowfall (e.g. NJ, KY, UT) are consistent with the G2 gate partly firing on the same PI winter bias documented above, not solely on real snow. Not yet separated from genuine snow events at subsample scale.
 
 ## TEST 11 - Degradation sanity (the best end-to-end check available)
 - Median beta_excess at 4+ years of history: **-0.0050** (target ~ -0.0050, i.e. -0.5%/yr)

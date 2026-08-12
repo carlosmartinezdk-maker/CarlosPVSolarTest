@@ -14,7 +14,7 @@ import config
 logging.basicConfig(level=logging.INFO, format="%(asctime)s S10 %(message)s")
 log = logging.getLogger("s10")
 
-from s11_explorer import compute_conviction_tier, track_mix_decision_grade  # noqa: E402 - after basicConfig so S10's log format wins
+from s11_explorer import compute_conviction_tier, track_mix_decision_grade, pi_bias_diagnostic  # noqa: E402 - after basicConfig so S10's log format wins
 
 REFERENCE_PROFILE = {  # methodology Part 7 Step E1, episodes per plant-year (test 22)
     "UNATTRIBUTED": 0.76, "BOS_INTERMITTENT": 0.58, "SOILING": 0.31, "BLOCK_OUTAGE": 0.29,
@@ -48,9 +48,23 @@ def build_site_detail_sheet(sub, dollars, traj, ledger):
         if len(g) == 0:
             continue
         latest = g.iloc[-1]
+        # Part A1: latest_PI/PRI/D must be the latest SCORED month, not the
+        # last array slot (2026 is never PI-scored - Section 0.7).
+        scored = g[g["PI"].notna()]
+        latest_scored = scored.iloc[-1] if len(scored) else None
+        latest_scored_month = latest_scored["month_start"].strftime("%Y-%m") if latest_scored is not None else None
+        months_since_last_scored = (
+            (latest["month_start"].year - latest_scored["month_start"].year) * 12
+            + (latest["month_start"].month - latest_scored["month_start"].month)
+        ) if latest_scored is not None else None
+        stale = bool(months_since_last_scored is not None
+                     and months_since_last_scored >= config.STALE_MONTHS_THRESHOLD)
+
         t = traj_idx.loc[site] if site in traj_idx.index else None
         sy = site_year_stats[site_year_stats["site"] == site]
-        tier = compute_conviction_tier(sy, t)
+        recoverable_usd_yr = sum(v for v in g["value_usd"] if v) / max(g["year"].nunique(), 1)
+        excess_category = t["excess_category"] if t is not None else None
+        tier = compute_conviction_tier(sy, t, recoverable_usd_yr, excess_category)
         warranty_urgent = bool(latest.get("warranty_urgent", False)) if "warranty_urgent" in g else False
         if warranty_urgent and tier != "Improving":
             tier = "Warranty-urgent"
@@ -61,7 +75,11 @@ def build_site_detail_sheet(sub, dollars, traj, ledger):
             tracking=srow.get("tracking"), module=srow.get("module"),
             cod=str(srow.get("cod"))[:10] if pd.notna(srow.get("cod")) else None,
             years_present=srow.get("years_present"),
-            latest_PI=latest.get("PI"), latest_PRI=latest.get("PRI"), latest_D=latest.get("D"),
+            latest_PI=latest_scored.get("PI") if latest_scored is not None else None,
+            latest_PRI=latest_scored.get("PRI") if latest_scored is not None else None,
+            latest_D=latest_scored.get("D") if latest_scored is not None else None,
+            latest_scored_month=latest_scored_month,
+            months_since_last_scored=months_since_last_scored, stale=stale,
             beta=t["beta"] if t is not None else None,
             beta_se=t["beta_se"] if t is not None else None,
             beta_t=t["beta_t"] if t is not None else None,
@@ -72,7 +90,7 @@ def build_site_detail_sheet(sub, dollars, traj, ledger):
             top_signature=(g.loc[g["fault_flag"], "signature_final"].value_counts().index[0]
                           if g["fault_flag"].any() else "NONE"),
             conviction_tier=tier, warranty_urgent=warranty_urgent,
-            recoverable_usd_yr=sum(v for v in g["value_usd"] if v) / max(g["year"].nunique(), 1),
+            recoverable_usd_yr=recoverable_usd_yr,
         ))
     return pd.DataFrame(rows)
 
@@ -184,6 +202,35 @@ def main():
                  f"{100*n_peer/max(1,n_peer+n_phys):.0f}% peer coverage "
                  "(low at subsample scale by construction; full fleet has much richer peer availability)\n")
     lines.append(f"- PI distribution: {idx['PI'].describe().round(3).to_dict()}\n")
+
+    lines.append("\n## Explorer v2 brief, Part A2 - PI bias diagnostic\n")
+    pi_bias = pi_bias_diagnostic(idx, sub)
+    lines.append(f"- Regression of monthly PI on month-of-year and latitude (n={pi_bias['n']}): "
+                 f"latitude coefficient **{pi_bias['lat_coef']}** (p={pi_bias['lat_pvalue']}), "
+                 f"PI by calendar month: `{pi_bias['pi_by_month']}`.\n")
+    if pi_bias["biased"]:
+        lines.append("- **Significant seasonal and latitudinal pattern found - this is model bias, "
+                     "not fleet behaviour.** Winter months read ~0.10-0.11 lower than autumn peak "
+                     "months, and PI rises significantly with latitude (p<0.05). Most likely cause "
+                     "per the brief's own priority order: the static loss stack `L=0.86` "
+                     "(config.STATIC_LOSS_STACK), followed by tracking/backtracking defaults, "
+                     "clipping order-of-operations, and timezone alignment. **PI is provisional "
+                     "until this is recalibrated with evidence for the correct L - lead with PRI "
+                     "for any absolute claim.** No blind change to L was made without evidence of "
+                     "the right value.\n")
+    else:
+        lines.append("- No significant seasonal/latitudinal bias detected this run.\n")
+
+    sig_state = sig.merge(sub[["site", "state"]], on="site", how="left") if "site" in sig.columns else None
+    if sig_state is not None:
+        classified = sig_state[sig_state["signature_final"].notna() & (sig_state["signature_final"] != "UNSCORED")]
+        snow_rate = (classified[classified["signature_final"] == "SNOW"].groupby("state").size()
+                     / classified.groupby("state").size()).dropna().sort_values(ascending=False)
+        lines.append(f"- **A4 - SNOW rate by state (top 10 of {len(snow_rate)} states with classified "
+                     f"months):** `{snow_rate.head(10).round(2).to_dict()}` - elevated rates in states "
+                     "without heavy winter snowfall (e.g. NJ, KY, UT) are consistent with the G2 gate "
+                     "partly firing on the same PI winter bias documented above, not solely on real "
+                     "snow. Not yet separated from genuine snow events at subsample scale.\n")
 
     lines.append("\n## TEST 11 - Degradation sanity (the best end-to-end check available)\n")
     lines.append(f"- Median beta_excess at 4+ years of history: "

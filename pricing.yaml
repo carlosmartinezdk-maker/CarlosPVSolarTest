@@ -1,0 +1,98 @@
+# SkySpecs commercial rates. Rates confirmed by Carlos 11 Aug 2026
+# (PRICING_AND_ROI_ADDENDUM.md, J1/J3/J6). Repair cost anchors in
+# section `repair_costs` are ESTIMATES pending vendor quotes - see
+# repair_cost_source below and the addendum section 3.
+#
+# basis: MWdc, NOT MWac - assert this everywhere a fee or repair cost is
+# computed (test 43). The fleet's average DC:AC is 1.31, so mixing the two
+# produces a silent ~24% error.
+version: "2026-08-11"
+currency: USD
+basis: MWdc
+
+offerings:
+  solar_saas:
+    usd_per_mwdc_year: 10.0
+    pricing_source: confirmed
+  scada_monitoring:
+    usd_per_mwdc_year: 4.0
+    pricing_source: confirmed
+  solar_inspection:
+    usd_per_mwdc_inspected: 150.0
+    inspections_per_year: 1
+    pricing_source: confirmed
+  rvm:
+    markup_pct_of_repair_spend: 0.20
+    pricing_source: confirmed
+    # RVM has no standalone fee - its price is 20% of the repair spend it
+    # coordinates (gross framing). The incremental framing (what SkySpecs
+    # actually costs beyond doing it yourself) is that 20% alone - default
+    # the UI headline to incremental per the addendum section 4.
+  warranty_support:
+    usd_per_claim: 0.0
+    pricing_source: PLACEHOLDER
+    # Not answered in J1-J6 - no rate given for warranty claim support.
+
+# Repair cost model (addendum section 3): repair_cost(i,m) = mobilisation +
+# unit_rate x affected_mwdc, where affected_mwdc = mwdc x severity, and
+# severity = block_fraction for BLOCK_OUTAGE (when fitted) else D.
+# ESTIMATE, not a vendor quote - see addendum section 3 for sourcing.
+repair_costs:
+  repair_cost_source: ESTIMATE
+  by_signature:
+    OUTAGE_FULL:       {usd_per_mwdc_affected: 10000, mobilisation_usd: 8000}
+    BLOCK_OUTAGE:      {usd_per_mwdc_affected: 10000, mobilisation_usd: 5000}
+    TRACKER:           {usd_per_mwdc_affected: 5000,  mobilisation_usd: 5000}
+    BOS_INTERMITTENT:  {usd_per_mwdc_affected: 4000,  mobilisation_usd: 4000}
+    SOILING:           {usd_per_mwdc_affected: 1200,  mobilisation_usd: 2000}
+    DEGRADATION:       {usd_per_mwdc_affected: 120000, mobilisation_usd: 6000}
+    UNATTRIBUTED:      {usd_per_mwdc_affected: 6000,  mobilisation_usd: 6000}
+    # Not repairable - commercial/weather/design, not a fault. RVM never
+    # fires for these (test 44).
+    CURTAILMENT:       {usd_per_mwdc_affected: 0, mobilisation_usd: 0}
+    SNOW:               {usd_per_mwdc_affected: 0, mobilisation_usd: 0}
+    CLIPPING:          {usd_per_mwdc_affected: 0, mobilisation_usd: 0}
+  # Beyond this fraction of implied site capex, it's a repowering decision,
+  # not a repair - flag repair_uneconomic and route to the capex/degradation
+  # conversation instead of RVM (test 45).
+  capex_usd_per_mwdc: 1200000
+  uneconomic_repair_fraction_of_capex: 0.35
+
+# Remediation timelines (addendum section 5). data_lag_months + half the
+# review cadence = detection lag; add per-signature remediation months for
+# total months before value is realized. Year-1 value is prorated by
+# max(0, 1 - t_total/12); steady-state value is full (test 46).
+timelines:
+  data_lag_months: 3
+  review_cadence_months: 1  # monthly review -> t_detect = 3 + 1/2 = 3.5mo
+  remediation_months:
+    SOILING:           1.25
+    OUTAGE_FULL:       2.5
+    TRACKER:           2.0
+    BLOCK_OUTAGE:      3.0
+    BOS_INTERMITTENT:  4.0
+    UNATTRIBUTED:      5.0
+    DEGRADATION:       6.0
+
+conversion:
+  detection_to_remediation: 0.85   # J6 - confirmed
+  prevention_effectiveness: 0.50   # PLACEHOLDER - no evidence yet
+horizon_years: 3
+discount_rate: 0.08
+
+# RVM eligibility overlay (addendum section 7). All four constants config
+# per the brief - do not hardcode elsewhere.
+rvm_eligibility:
+  beta_excess_threshold: -0.01     # /yr
+  min_age_years: 5
+  beta_t_threshold: -2.0           # |t| significance floor (test 40)
+
+# Above this multiple, suppress the ratio and show only net value + payback
+# (addendum section 6, test 48) - a 179x ROI reads as a typo, not a pitch.
+ratio_suppression_threshold: 20.0
+
+# Owner grouping key (J4): utility_name / `utility` column in
+# site_master.csv - zero nulls across all 6,204 scoreable sites, verified
+# 11 Aug 2026. Default the Owner view to multi-site owners (282 of 2,147
+# hold 60% of scoreable MWdc) with a toggle for the long tail.
+owner_grouping_key: utility
