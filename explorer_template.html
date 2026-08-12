@@ -4,99 +4,135 @@
 <meta charset="utf-8">
 <title>PI/PRI Solar Underperformance Explorer</title>
 <style>
-:root {
-  --bg: #0f1420; --panel: #1a2132; --panel2: #222b40; --border: #2e3852;
-  --text: #e6ebf5; --muted: #93a0bd; --accent: #4f8cff; --good: #33c17a;
-  --warn: #e6b422; --bad: #e05a5a; --lead: #ff7a45;
+:root{
+  --ink:#2b2b2b;      /* body text            */
+  --muted:#6b6b6b;    /* secondary text       */
+  --land:#e6e4e1;     /* map land fill        */
+  --stroke:#ffffff;   /* map borders          */
+  --bg:#fbfafa;       /* page background      */
+  --accent:#1d4e6f;   /* the only brand blue  */
+  --card:#f1efec;     /* card fill            */
+  --panel-border:#e2ded8;
+  --thead:#faf9f8;
+  --row-hover:#eef4f8;
+  --tip-border:#d8d4d0;
+  --good:#2e7d4f; --warn:#b5791a; --bad:#b0392f; --lead:#c96a2e;
 }
 * { box-sizing: border-box; }
-body { margin:0; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-  background: var(--bg); color: var(--text); font-size: 13px; }
+body { margin:0; font-family: Georgia,"Times New Roman",serif; background:var(--bg); color:var(--ink); font-size:14px; }
+.arial, button, select, input, table, .eyebrow, .badge, .kcol, th, .tip, .footer, nav, .seg {
+  font-family: Arial, Helvetica, sans-serif;
+}
 a { color: var(--accent); }
-header#topbar { position: sticky; top:0; z-index: 50; background: var(--panel);
-  border-bottom: 1px solid var(--border); padding: 8px 14px; display:flex; align-items:center; gap:14px; }
-header#topbar h1 { font-size: 15px; margin:0; font-weight:600; }
-header#topbar nav button { background:none; border:1px solid var(--border); color: var(--muted);
-  padding: 5px 12px; border-radius: 6px; cursor:pointer; font-size:12px; }
-header#topbar nav button.active { background: var(--accent); color:#fff; border-color: var(--accent); }
-#footer-caveat { position: sticky; bottom:0; background: var(--panel); border-top: 1px solid var(--border);
-  padding: 6px 14px; font-size: 11px; color: var(--warn); z-index: 50; }
-main { padding: 14px; max-width: 1500px; margin: 0 auto; }
-.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
-.panel h2 { font-size: 13px; margin: 0 0 10px 0; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-.kpi-strip { display:flex; flex-wrap:wrap; gap:10px; }
-.kpi { background: var(--panel2); border-radius: 6px; padding: 10px 14px; min-width: 130px; }
-.kpi .v { font-size: 20px; font-weight:700; }
-.kpi .l { font-size: 11px; color: var(--muted); }
-.grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-.grid3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; }
-svg text { fill: var(--muted); font-size: 10px; }
+.eyebrow { font-size:11px; font-family:Arial,Helvetica,sans-serif; text-transform:uppercase;
+  letter-spacing:.14em; color:var(--accent); font-weight:bold; margin-bottom:4px; }
+header#topbar { position: sticky; top:0; z-index: 50; background: var(--bg);
+  border-bottom: 1px solid var(--panel-border); padding: 10px 20px; display:flex; align-items:center; gap:14px; }
+header#topbar h1 { font-size: 17px; margin:0; font-weight:normal; font-family:Georgia,serif; }
+.seg { display:flex; gap:0; border:1px solid var(--panel-border); border-radius:6px; overflow:hidden; }
+.seg button { background:var(--bg); border:none; border-right:1px solid var(--panel-border); color: var(--muted);
+  padding: 6px 12px; cursor:pointer; font-size:12px; }
+.seg button:last-child { border-right:none; }
+.seg button.active { background: var(--accent); color:#fff; }
+#footer-scope { position: sticky; bottom:0; background:#fff8e6; border-top: 2px solid var(--warn);
+  padding: 8px 20px; font-size: 11px; font-family:Arial,Helvetica,sans-serif; color: #6b4d10; z-index: 50; }
+#footer-scope b { color:#4a3608; }
+main { padding: 20px; max-width: 1180px; margin: 0 auto 60px; }
+.card-panel { background: #fff; border: 1px solid var(--panel-border); border-radius: 8px; padding: 16px 18px; margin-bottom: 16px; }
+.card-panel h2 { font-size: 17px; margin: 0 0 4px 0; font-weight:normal; font-family:Georgia,serif; color:var(--ink); }
+.interp { font-family:Georgia,serif; font-size:13px; color:var(--ink); margin: 6px 0 10px 0; padding: 8px 10px;
+  background: var(--card); border-radius:6px; border-left:3px solid var(--accent); }
+.cards { display:flex; flex-wrap:wrap; gap:10px; }
+.card { background: var(--card); border-radius: 8px; padding: 10px 14px; min-width: 140px; }
+.card .v { font-size: 22px; font-weight:bold; font-family:Arial,Helvetica,sans-serif; }
+.card .l { font-size: 12px; color: var(--muted); font-family:Arial,Helvetica,sans-serif; margin-top:2px; }
+.grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+svg text { fill: var(--muted); font-size: 10px; font-family:Arial,Helvetica,sans-serif; }
 .bar { fill: var(--accent); }
-.badge { display:inline-block; padding: 1px 7px; border-radius:10px; font-size:10px; font-weight:600; }
-.badge.Chronic { background:#5a1e1e; color:#ff9a9a; }
-.badge.Event { background:#5a3a1e; color:var(--lead); }
-.badge.New { background:#2e3852; color:var(--muted); }
-.badge.Improving { background:#1e4a30; color: var(--good); }
-.badge.Healthy { background:#1e4a30; color: var(--good); }
-.badge.WarrantyUrgent { background:#5a1e1e; color:#ff6a6a; }
-.badge.HIGH { background:#1e4a30; color:var(--good); }
-.badge.MEDIUM { background:#5a3a1e; color:var(--warn); }
-.badge.LOW { background:#3a2020; color:var(--muted); }
-#filterbar { display:flex; flex-wrap: wrap; gap:8px; align-items:center; margin-bottom:10px; }
-#filterbar select, #filterbar input { background: var(--panel2); color: var(--text); border:1px solid var(--border);
-  border-radius: 5px; padding: 4px 8px; font-size:12px; }
-#filterbar button { background: var(--panel2); color: var(--text); border:1px solid var(--border);
-  border-radius: 5px; padding: 4px 10px; font-size:12px; cursor:pointer; }
-table.triage { width:100%; border-collapse: collapse; font-size:12px; }
-table.triage th { position: sticky; top:0; background: var(--panel2); text-align:left; padding:6px 8px;
-  cursor:pointer; white-space:nowrap; border-bottom: 1px solid var(--border); }
-table.triage td { padding: 5px 8px; border-bottom: 1px solid #1f2740; white-space:nowrap; }
-table.triage tr:hover { background: var(--panel2); cursor:pointer; }
-#triage-scroll { height: 60vh; overflow-y:auto; border:1px solid var(--border); border-radius:6px; }
-.pos-indicator { color: var(--muted); font-size:12px; }
+.assump-mark { font-size:10px; color:var(--accent); cursor:help; vertical-align:super; }
+.badge { display:inline-block; padding: 2px 8px; border-radius:10px; font-size:10px; font-weight:bold;
+  font-family:Arial,Helvetica,sans-serif; }
+.badge.Chronic { background:#f4dcd9; color:#8a2e23; }
+.badge.Event { background:#f6e6d3; color:var(--lead); }
+.badge.New { background:#e6e4e1; color:var(--muted); }
+.badge.Improving { background:#dcecdf; color: var(--good); }
+.badge.Healthy { background:#dcecdf; color: var(--good); }
+.badge.WarrantyUrgent { background:#f4dcd9; color:#8a2e23; }
+.badge.stale { background:#f6e6d3; color:#8a5a10; }
+.badge.HIGH { background:#dcecdf; color:var(--good); }
+.badge.MEDIUM { background:#f6e6d3; color:var(--warn); }
+.badge.LOW { background:#eee; color:var(--muted); }
+#filterbar { display:flex; flex-wrap: wrap; gap:8px; align-items:center; margin-bottom:14px;
+  font-family:Arial,Helvetica,sans-serif; }
+#filterbar select.sel, #filterbar input { background: #fff; color: var(--ink); border:1px solid var(--panel-border);
+  border-radius: 5px; padding: 5px 8px; font-size:12px; }
+#filterbar button { background: #fff; color: var(--ink); border:1px solid var(--panel-border);
+  border-radius: 5px; padding: 5px 10px; font-size:12px; cursor:pointer; }
+.tblscroll { border:1px solid var(--panel-border); border-radius:10px; overflow:auto; }
+table.grid { width:100%; border-collapse: collapse; font-size:12px; font-family:Arial,Helvetica,sans-serif; }
+table.grid th { position: sticky; top:0; background: var(--thead); text-align:right; padding:7px 10px;
+  cursor:pointer; white-space:nowrap; border-bottom: 1px solid var(--panel-border); }
+table.grid th.kcol, table.grid td.kcol { text-align:left; position:sticky; left:0; background:var(--thead); z-index:1; }
+table.grid td { padding: 6px 10px; border-bottom: 1px solid #f0eeeb; white-space:nowrap; text-align:right; }
+table.grid td.kcol { background:#fff; }
+table.grid tr:hover td { background: var(--row-hover); cursor:pointer; }
+#triage-scroll { height: 60vh; }
+.pos-indicator { color: var(--muted); font-size:12px; font-family:Arial,Helvetica,sans-serif; }
 .ribbon { display:flex; gap:1px; overflow-x:auto; padding: 4px 0; }
 .ribbon .cell { min-width: 7px; height: 22px; flex: 1 0 7px; cursor: default; }
-.sig-OUTAGE_FULL { background:#e05a5a; } .sig-BLOCK_OUTAGE { background:#ff7a45; }
-.sig-SOILING { background:#e6b422; } .sig-TRACKER { background:#c77dff; }
-.sig-BOS_INTERMITTENT { background:#4f8cff; } .sig-DEGRADATION { background:#9a6a3a; }
-.sig-UNATTRIBUTED { background:#6b7690; } .sig-CURTAILMENT { background:#3a4a6b; }
-.sig-SNOW { background:#dbe9ff; } .sig-CLIPPING { background:#5a5a7a; }
-.sig-NONE, .sig-UNSCORED, .sig-WATCH_NOT_A_FAULT { background: #232b3f; }
-.legend { display:flex; flex-wrap:wrap; gap:10px; font-size:11px; color:var(--muted); margin-top:6px; }
+.sig-OUTAGE_FULL { background:#b0392f; } .sig-BLOCK_OUTAGE { background:#c96a2e; }
+.sig-SOILING { background:#b5791a; } .sig-TRACKER { background:#7a5ea8; }
+.sig-BOS_INTERMITTENT { background:#1d4e6f; } .sig-DEGRADATION { background:#7a5230; }
+.sig-UNATTRIBUTED { background:#8a8a8a; } .sig-CURTAILMENT { background:#4a5a70; }
+.sig-SNOW { background:#b8d4ea; } .sig-CLIPPING { background:#5a5a6a; }
+.sig-NONE, .sig-UNSCORED, .sig-WATCH_NOT_A_FAULT { background: #e6e4e1; }
+.legend { display:flex; flex-wrap:wrap; gap:10px; font-size:11px; color:var(--muted); margin-top:6px;
+  font-family:Arial,Helvetica,sans-serif; }
 .legend span.sw { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:middle; }
 .detail-header { display:flex; justify-content:space-between; align-items:flex-start; }
-.detail-header .meta { color: var(--muted); font-size:12px; line-height:1.6; }
+.detail-header .meta { color: var(--muted); font-size:12px; line-height:1.7; font-family:Arial,Helvetica,sans-serif; }
 .navbtns { display:flex; gap:8px; align-items:center; }
-.navbtns button { background: var(--panel2); border:1px solid var(--border); color:var(--text);
-  border-radius:6px; padding:6px 12px; cursor:pointer; }
-textarea.note { width:100%; background: var(--panel2); color:var(--text); border:1px solid var(--border);
-  border-radius:6px; padding:6px; font-family:inherit; font-size:12px; min-height:50px; }
+.navbtns button { background: #fff; border:1px solid var(--panel-border); color:var(--ink);
+  border-radius:6px; padding:6px 12px; cursor:pointer; font-family:Arial,Helvetica,sans-serif; }
+textarea.note { width:100%; background: #fff; color:var(--ink); border:1px solid var(--panel-border);
+  border-radius:6px; padding:6px; font-family:Arial,Helvetica,sans-serif; font-size:12px; min-height:50px; }
 .status-btns button { margin-right:6px; }
 .status-btns button.on { outline: 2px solid var(--accent); }
-table.ledger, table.risk { width:100%; border-collapse:collapse; font-size:12px; }
-table.ledger th, table.ledger td, table.risk th, table.risk td { padding:4px 8px; border-bottom:1px solid #1f2740; text-align:left; }
-.progress-bar { height:6px; background:var(--panel2); border-radius:3px; overflow:hidden; margin-top:4px; }
-.progress-bar > div { height:100%; background: var(--good); }
-.small { font-size: 11px; color: var(--muted); }
-.assumption-row td { padding:3px 8px; }
+.small { font-size: 11px; color: var(--muted); font-family:Arial,Helvetica,sans-serif; }
+.assumption-row td { padding:4px 10px; }
+.tip { display:none; position:absolute; background:#fff; border:1px solid var(--tip-border); border-radius:6px;
+  padding:8px 10px; font-size:11px; font-family:Arial,Helvetica,sans-serif; box-shadow:0 2px 8px rgba(0,0,0,.08);
+  max-width:280px; z-index:100; pointer-events:none; }
+.modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:200; display:flex;
+  align-items:center; justify-content:center; }
+.modal { background:#fff; border-radius:10px; padding:24px 28px; max-width:560px; max-height:80vh; overflow:auto;
+  box-shadow:0 8px 30px rgba(0,0,0,.2); }
+.modal h2 { font-family:Georgia,serif; font-weight:normal; margin-top:0; }
+.modal p { line-height:1.6; }
+.modal button.close { background:var(--accent); color:#fff; border:none; border-radius:6px; padding:8px 16px;
+  cursor:pointer; font-family:Arial,Helvetica,sans-serif; margin-top:10px; }
+.methlink { font-size:11px; color:var(--accent); cursor:pointer; text-decoration:underline; font-family:Arial,Helvetica,sans-serif; }
+.footer { font-size:11px; color:#a8a4a0; font-family:Arial,Helvetica,sans-serif; border-top:1px solid var(--panel-border);
+  margin-top:20px; padding-top:10px; }
 </style>
 </head>
 <body>
 
 <header id="topbar">
   <h1>PI/PRI Solar Underperformance Explorer</h1>
-  <nav>
+  <nav class="seg" id="view-nav">
     <button data-view="fleet" class="active">Fleet Overview</button>
     <button data-view="triage">Triage List</button>
     <button data-view="detail">Site Detail</button>
   </nav>
   <span class="pos-indicator" id="pos-indicator"></span>
-  <span style="margin-left:auto" class="small" id="progress-indicator"></span>
+  <span class="methlink" id="meth-link" style="margin-left:auto">How to read this</span>
+  <span class="small" id="progress-indicator"></span>
 </header>
 
 <main id="main"></main>
 
-<div id="footer-caveat">RANKING SIGNAL, NOT A QUOTE. See the Assumptions panel (Fleet Overview) for what's measured vs assumed. This run used the scope and weather track shown there — check it before quoting a dollar figure.</div>
+<div id="footer-scope"></div>
 
 <script type="application/json" id="payload-data">__PAYLOAD_JSON__</script>
 <script>
@@ -170,6 +206,19 @@ function svg(tag, attrs) {
   for (const k in (attrs||{})) e.setAttribute(k, attrs[k]);
   return e;
 }
+// Part H: every chart panel gets a title + eyebrow + a one-sentence
+// reading of what the reader should conclude, not a restatement of what
+// the chart is.
+function panelHeader(container, eyebrow, title, interpretation) {
+  container.appendChild(el('div', {class:'eyebrow'}, [eyebrow]));
+  container.appendChild(el('h2', {}, [title]));
+  if (interpretation) container.appendChild(el('div', {class:'interp'}, [interpretation]));
+}
+// Part H: a small superscript marker on any number that is an assumption,
+// not a measurement - present at the point of use, not only in a footer.
+function assumptionMark(title) {
+  return el('span', {class:'assump-mark', title:title}, [' †']);
+}
 
 // ---------------------------------------------------------- mini charts ----
 function histogram(values, w, h, threshold) {
@@ -192,13 +241,13 @@ function histogram(values, w, h, threshold) {
   const t2 = svg('text', {x:w-24, y:h-2}); t2.textContent = max.toFixed(1); s.appendChild(t2);
   return s;
 }
-function barChart(labels, values, w, h, colorFn) {
+function barChart(labels, values, w, h) {
   const s = svg('svg', {width:w, height:h, viewBox:`0 0 ${w} ${h}`});
   const maxV = Math.max(1, ...values);
   const bw = w/labels.length;
   values.forEach((v,i) => {
     const bh = (v/maxV)*(h-28);
-    s.appendChild(svg('rect', {x:i*bw+2, y:h-20-bh, width:bw-4, height:bh, fill: colorFn?colorFn(labels[i]):'var(--accent)'}));
+    s.appendChild(svg('rect', {x:i*bw+2, y:h-20-bh, width:bw-4, height:bh, fill:'var(--accent)'}));
     const t = svg('text', {x:i*bw+bw/2, y:h-8, 'text-anchor':'middle'}); t.textContent = labels[i].length>10?labels[i].slice(0,9)+'…':labels[i];
     s.appendChild(t);
     const tv = svg('text', {x:i*bw+bw/2, y:h-22-bh, 'text-anchor':'middle'}); tv.textContent = v; s.appendChild(tv);
@@ -206,9 +255,9 @@ function barChart(labels, values, w, h, colorFn) {
   return s;
 }
 function sigColor(sig) {
-  const map = {OUTAGE_FULL:'#e05a5a',BLOCK_OUTAGE:'#ff7a45',SOILING:'#e6b422',TRACKER:'#c77dff',
-    BOS_INTERMITTENT:'#4f8cff',DEGRADATION:'#9a6a3a',UNATTRIBUTED:'#6b7690',CURTAILMENT:'#3a4a6b',
-    SNOW:'#dbe9ff',CLIPPING:'#5a5a7a'};
+  const map = {OUTAGE_FULL:'#b0392f',BLOCK_OUTAGE:'#c96a2e',SOILING:'#b5791a',TRACKER:'#7a5ea8',
+    BOS_INTERMITTENT:'#1d4e6f',DEGRADATION:'#7a5230',UNATTRIBUTED:'#8a8a8a',CURTAILMENT:'#4a5a70',
+    SNOW:'#b8d4ea',CLIPPING:'#5a5a6a'};
   return map[sig] || '#888';
 }
 
@@ -218,9 +267,9 @@ function renderFleet() {
   m.innerHTML = '';
   const k = DATA.kpi;
 
-  const kpiPanel = el('div', {class:'panel'});
-  kpiPanel.appendChild(el('h2',{},['Fleet KPIs — validation subsample']));
-  const strip = el('div', {class:'kpi-strip'});
+  const kpiPanel = el('div', {class:'card-panel'});
+  panelHeader(kpiPanel, 'PORTFOLIO', 'Fleet KPIs — validation subsample');
+  const strip = el('div', {class:'cards'});
   const kpis = [
     ['Scoreable sites (subsample)', k.scoreable_sites_subsample],
     ['Scoreable sites (full fleet)', k.scoreable_sites_fleet.toLocaleString()],
@@ -231,13 +280,15 @@ function renderFleet() {
     ['Recoverable MWh/yr (subsample)', fmtNum(k.recoverable_mwh_yr,0)],
     ['Recoverable USD/yr (subsample)', fmtUsd(k.recoverable_usd_yr)],
   ];
-  kpis.forEach(([l,v]) => strip.appendChild(el('div',{class:'kpi'},[el('div',{class:'v'},[String(v)]), el('div',{class:'l'},[l])])));
+  kpis.forEach(([l,v]) => strip.appendChild(el('div',{class:'card'},[el('div',{class:'v'},[String(v)]), el('div',{class:'l'},[l])])));
   kpiPanel.appendChild(strip);
   m.appendChild(kpiPanel);
 
   // funnel
-  const funnelPanel = el('div', {class:'panel'});
-  funnelPanel.appendChild(el('h2',{},['Data quality funnel (Section 4, full fleet)']));
+  const funnelPanel = el('div', {class:'card-panel'});
+  panelHeader(funnelPanel, 'DATA QUALITY', 'Funnel from full fleet to scoreable sites (Section 4)',
+    `${DATA.funnel[0].n_sites.toLocaleString()} raw sites narrow to ${DATA.funnel[DATA.funnel.length-1].n_sites.toLocaleString()} `+
+    `scoreable sites after hybrid/lat-lon/capacity/DC:AC gates - everything downstream is scored against this smaller, cleaner set.`);
   const fLabels = DATA.funnel.map(r => r.step);
   const fValues = DATA.funnel.map(r => r.n_sites);
   funnelPanel.appendChild(barChart(fLabels, fValues, 900, 160));
@@ -245,39 +296,71 @@ function renderFleet() {
   m.appendChild(funnelPanel);
 
   // distributions
-  const distPanel = el('div', {class:'panel grid2'});
+  const distPanel = el('div', {class:'card-panel grid2'});
   const allPi = DATA.sites.flatMap(s => s.pi.filter(v=>v!==null));
   const allPri = DATA.sites.flatMap(s => s.pri.filter(v=>v!==null));
-  const piDiv = el('div', {}, [el('h2',{},['PI distribution (0.92 threshold marked)']), histogram(allPi, 420, 140, 0.92)]);
-  const priDiv = el('div', {}, [el('h2',{},['PRI distribution (0.92 threshold marked)']), histogram(allPri, 420, 140, 0.92)]);
+  const piMedian = allPi.slice().sort((a,b)=>a-b)[Math.floor(allPi.length/2)];
+  const priMedian = allPri.slice().sort((a,b)=>a-b)[Math.floor(allPri.length/2)];
+  const piDiv = el('div', {});
+  panelHeader(piDiv, 'PI', 'PI distribution' + (DATA.meta.pi_provisional ? ' (provisional)' : ''));
+  piDiv.appendChild(el('div',{class:'interp'},[
+    DATA.meta.pi_provisional
+      ? `Half the fleet reads below ${fmtNum(piMedian,2)} against the physical model, while the peer-relative PRI median sits at ${fmtNum(priMedian,2)}. `+
+        `That gap is model bias, not fleet underperformance — see the methodology note below. Treat PI as provisional and lead with PRI.`
+      : `Median PI is ${fmtNum(piMedian,2)} against the 0.92 decision threshold (dashed line).`
+  ]));
+  piDiv.appendChild(histogram(allPi, 420, 140, 0.92));
+  const priDiv = el('div', {});
+  panelHeader(priDiv, 'PRI', 'PRI distribution');
+  priDiv.appendChild(el('div',{class:'interp'},[
+    `Median PRI is ${fmtNum(priMedian,2)}, peer-relative so it divides out most of the PI model bias — the more trustworthy absolute read at subsample scale.`
+  ]));
+  priDiv.appendChild(histogram(allPri, 420, 140, 0.92));
   distPanel.appendChild(piDiv); distPanel.appendChild(priDiv);
   m.appendChild(distPanel);
+  if (DATA.meta.pi_bias_note) {
+    const biasPanel = el('div', {class:'card-panel'});
+    panelHeader(biasPanel, 'METHODOLOGY NOTE', 'PI bias diagnostic (Part A2)');
+    biasPanel.appendChild(el('div', {class:'interp'}, [DATA.meta.pi_bias_note]));
+    m.appendChild(biasPanel);
+  }
 
   // signature counts
-  const sigPanel = el('div', {class:'panel'});
-  sigPanel.appendChild(el('h2',{},['Fault counts by signature (subsample, all years)']));
+  const sigPanel = el('div', {class:'card-panel'});
+  panelHeader(sigPanel, 'FAULTS', 'Fault counts by signature (subsample, all years)');
   const sigLabels = Object.keys(DATA.signature_counts);
   const sigValues = sigLabels.map(l => DATA.signature_counts[l]);
-  sigPanel.appendChild(barChart(sigLabels.map(l=>SIG_LABEL[l]||l), sigValues, 900, 160, l => sigColor(sigLabels[sigLabels.map(x=>SIG_LABEL[x]||x).indexOf(l)])));
+  const topSig = sigLabels[sigValues.indexOf(Math.max(...sigValues))];
+  sigPanel.appendChild(el('div',{class:'interp'},[
+    `${SIG_LABEL[topSig]||topSig} is the largest classified category (${DATA.signature_counts[topSig]} site-months). `+
+    (topSig==='SNOW' ? 'See the SNOW-by-state diagnostic in run_report.md before treating this as pure weather.' :
+     'Cross-check against the reference episode-per-plant-year profile (run_report.md TEST 22) before treating counts alone as diagnostic.')
+  ]));
+  sigPanel.appendChild(barChart(sigLabels.map(l=>SIG_LABEL[l]||l), sigValues, 900, 160));
   m.appendChild(sigPanel);
 
   // by-year stacked (simplified: separate small bars per year per signature count)
-  const yearPanel = el('div', {class:'panel'});
-  yearPanel.appendChild(el('h2',{},['Fault site-months by year']));
+  const yearPanel = el('div', {class:'card-panel'});
+  panelHeader(yearPanel, 'TREND', 'Fault site-months by year');
   const years = Object.keys(DATA.year_signature_counts).sort();
   const yearTotals = years.map(y => Object.values(DATA.year_signature_counts[y]).reduce((a,b)=>a+b,0));
+  yearPanel.appendChild(el('div',{class:'interp'},[
+    `Read year-over-year counts alongside site count per year (subsample composition shifts over history) rather than as a fleet-wide trend at this scale.`
+  ]));
   yearPanel.appendChild(barChart(years, yearTotals, 700, 140));
   m.appendChild(yearPanel);
 
   // simple lat/lon scatter "map"
-  const mapPanel = el('div', {class:'panel'});
-  mapPanel.appendChild(el('h2',{},['Site locations (approximate scatter, not a basemap) — colored by conviction tier']));
+  const mapPanel = el('div', {class:'card-panel'});
+  panelHeader(mapPanel, 'GEOGRAPHY — APPROXIMATE', 'Site locations, coloured by conviction tier');
+  mapPanel.appendChild(el('div',{class:'interp'},[
+    `This is a raw lat/lon scatter, not a projected basemap — read it for rough regional clustering only. A proper US-projected map (Explorer v2 Part C) is a queued follow-up.`
+  ]));
   const w=900,h=380;
-  const lats = DATA.sites.map(s=>s.lat), lons = DATA.sites.map(s=>s.lon);
   const minLat=24, maxLat=50, minLon=-125, maxLon=-66; // rough CONUS bbox
   const s2 = svg('svg',{width:w,height:h,viewBox:`0 0 ${w} ${h}`});
-  s2.appendChild(svg('rect',{x:0,y:0,width:w,height:h,fill:'#141b2b',stroke:'var(--border)'}));
-  const tierColor = {Chronic:'#ff6a6a', Event:'#ff7a45', New:'#6b7690', Improving:'#33c17a', Healthy:'#3a4a6b', 'Warranty-urgent':'#ff2020'};
+  s2.appendChild(svg('rect',{x:0,y:0,width:w,height:h,fill:'var(--land)',stroke:'var(--panel-border)'}));
+  const tierColor = {Chronic:'#8a2e23', Event:'#c96a2e', New:'#8a8a8a', Improving:'#2e7d4f', Healthy:'#4a5a70', 'Warranty-urgent':'#b0392f'};
   DATA.sites.forEach(s => {
     if (s.lat===null||s.lon===null) return;
     const x = ((s.lon-minLon)/(maxLon-minLon))*w;
@@ -295,8 +378,11 @@ function renderFleet() {
 
   // hazard curves
   if (DATA.hazard.length) {
-    const hazPanel = el('div', {class:'panel'});
-    hazPanel.appendChild(el('h2',{},['Hazard rate by age band and signature (episodes / exposure-year) — subsample, not statistically meaningful yet']));
+    const hazPanel = el('div', {class:'card-panel'});
+    panelHeader(hazPanel, 'FORECAST', 'Hazard rate by age band and signature (episodes / exposure-year)');
+    hazPanel.appendChild(el('div',{class:'interp'},[
+      `Subsample scale (n~100) means these curves are not yet statistically meaningful on their own — read shape (rising vs. falling with age), not the exact rate.`
+    ]));
     const bands = [...new Set(DATA.hazard.map(h=>h.age_band))];
     const sigsPresent = [...new Set(DATA.hazard.map(h=>h.signature))];
     const w3=900,h3=200, bw = w3/bands.length;
@@ -322,33 +408,39 @@ function renderFleet() {
   }
 
   // assumptions panel
-  const aPanel = el('div', {class:'panel'});
-  aPanel.appendChild(el('h2',{},['Assumptions — every constant, its value, and whether it is measured, assumed or provisional']));
-  aPanel.appendChild(el('div',{class:'small'},[`Scope: ${DATA.meta.scope}. Weather track this run: ${JSON.stringify(DATA.meta.weather_track_summary)}. Decision-grade: ${DATA.meta.decision_grade} (${DATA.meta.decision_grade_reason}).`]));
-  const at = el('table', {class:'ledger'});
-  const thead = el('tr',{},[el('th',{},['Constant']),el('th',{},['Value']),el('th',{},['Status'])]);
+  const aPanel = el('div', {class:'card-panel'});
+  panelHeader(aPanel, 'ASSUMPTIONS', 'Every constant, its value, and whether it is measured, assumed or provisional');
+  aPanel.appendChild(el('div',{class:'small'},[`Scope: ${DATA.meta.scope}. Weather track this run: ${JSON.stringify(DATA.meta.weather_track_summary)}. Decision-grade: ${DATA.meta.decision_grade} (${DATA.meta.decision_grade_reason})`]));
+  const at = el('table', {class:'grid'});
+  const thead = el('tr',{},[el('th',{class:'kcol'},['Constant']),el('th',{},['Value']),el('th',{},['Status'])]);
   at.appendChild(thead);
-  DATA.meta.assumptions.forEach(a => at.appendChild(el('tr',{class:'assumption-row'},[el('td',{},[a.name]),el('td',{},[a.value]),el('td',{},[a.status])])));
-  aPanel.appendChild(at);
+  DATA.meta.assumptions.forEach(a => at.appendChild(el('tr',{class:'assumption-row'},[el('td',{class:'kcol'},[a.name]),el('td',{},[a.value]),el('td',{},[a.status])])));
+  aPanel.appendChild(el('div',{class:'tblscroll'},[at]));
   m.appendChild(aPanel);
 }
 
 function renderFilterBar(container) {
   const bar = el('div', {id:'filterbar'});
-  const trackingSel = el('select', {onchange:e=>{state.filters.tracking=e.target.value; rerenderCurrent();}});
+  const trackingSel = el('select', {class:'sel', onchange:e=>{state.filters.tracking=e.target.value; rerenderCurrent();}});
   trackingSel.appendChild(el('option',{value:''},['All tracking']));
   [...new Set(DATA.sites.map(s=>s.tracking))].filter(Boolean).forEach(t=>trackingSel.appendChild(el('option',{value:t},[t])));
   trackingSel.value = state.filters.tracking;
 
-  const tierSel = el('select', {onchange:e=>{state.filters.tier=e.target.value; rerenderCurrent();}});
+  const tierSel = el('select', {class:'sel', onchange:e=>{state.filters.tier=e.target.value; rerenderCurrent();}});
   tierSel.appendChild(el('option',{value:''},['All conviction tiers']));
   ['Chronic','Event','New','Improving','Healthy','Warranty-urgent'].forEach(t=>tierSel.appendChild(el('option',{value:t},[t])));
   tierSel.value = state.filters.tier;
 
-  const sigSel = el('select', {onchange:e=>{state.filters.signature=e.target.value; rerenderCurrent();}});
+  const sigSel = el('select', {class:'sel', onchange:e=>{state.filters.signature=e.target.value; rerenderCurrent();}});
   sigSel.appendChild(el('option',{value:''},['All top signatures']));
   SIGNATURES.forEach(s=>sigSel.appendChild(el('option',{value:s},[SIG_LABEL[s]])));
   sigSel.value = state.filters.signature;
+
+  const staleSel = el('select', {class:'sel', onchange:e=>{state.filters.stale=e.target.value; rerenderCurrent();}});
+  staleSel.appendChild(el('option',{value:''},['All staleness']));
+  staleSel.appendChild(el('option',{value:'stale'},['Stale only']));
+  staleSel.appendChild(el('option',{value:'fresh'},['Fresh only']));
+  staleSel.value = state.filters.stale||'';
 
   const search = el('input', {type:'text', placeholder:'Search site / operator', value: state.filters.search,
     oninput:e=>{state.filters.search=e.target.value; rerenderCurrent();}});
@@ -357,16 +449,17 @@ function renderFilterBar(container) {
   const gapChk = el('label',{},[el('input',{type:'checkbox', onchange:e=>{state.filters.gap2022=e.target.checked; rerenderCurrent();}}), ' has 2022 gap']);
   const noAssetChk = el('label',{},[el('input',{type:'checkbox', onchange:e=>{state.filters.noAssetMatch=e.target.checked; rerenderCurrent();}}), ' no asset match']);
 
-  const clearBtn = el('button', {onclick:()=>{state.filters={year:'',tracking:'',module:'',tier:'',signature:'',confidence:'',search:'',peersLt4:false,gap2022:false,noAssetMatch:false}; rerenderCurrent();}}, ['Clear filters']);
+  const clearBtn = el('button', {onclick:()=>{state.filters={year:'',tracking:'',module:'',tier:'',signature:'',confidence:'',search:'',peersLt4:false,gap2022:false,noAssetMatch:false,stale:''}; rerenderCurrent();}}, ['Clear filters']);
   const exportBtn = el('button', {onclick: exportCsv}, ['Export filtered CSV']);
 
-  [trackingSel, tierSel, sigSel, search, peersChk, gapChk, noAssetChk, clearBtn, exportBtn].forEach(x=>bar.appendChild(x));
+  [trackingSel, tierSel, sigSel, staleSel, search, peersChk, gapChk, noAssetChk, clearBtn, exportBtn].forEach(x=>bar.appendChild(x));
   container.appendChild(bar);
 }
 
 function exportCsv() {
   const list = filteredSites();
   const cols = ['site','state','operator','mwac','mwdc','dcac','tracking','cod','years_present','latest_pi','latest_pri','latest_d',
+    'latest_scored_month','months_since_last_scored','stale',
     'beta','beta_t','fault_months','episode_count','top_signature','conviction_tier','recoverable_mwh_yr','recoverable_usd_yr'];
   const rows = [cols.join(',')].concat(list.map(s => cols.map(c => JSON.stringify(s[c]===undefined?'':s[c])).join(',')));
   const blob = new Blob([rows.join('\n')], {type:'text/csv'});
@@ -377,28 +470,31 @@ const ROW_H = 28;
 function renderTriage() {
   const m = document.getElementById('main');
   m.innerHTML = '';
-  const panel = el('div', {class:'panel'});
-  panel.appendChild(el('h2',{},['Triage list — click a row to open, or use j/k to move once a row is focused']));
+  const panel = el('div', {class:'card-panel'});
+  panelHeader(panel, 'TRIAGE', 'Triage list', 'Click a row to open, or use j/k to move once a row is focused. Default sort is recoverable $/yr descending — the sites worth calling first sort to the top.');
   renderFilterBar(panel);
 
-  const list = filteredSites();
+  let list = filteredSites();
+  if (state.filters.stale === 'stale') list = list.filter(s=>s.stale);
+  else if (state.filters.stale === 'fresh') list = list.filter(s=>!s.stale);
   updatePosIndicator(list, null);
 
   const cols = [
     ['site','Site'], ['state','State'], ['operator','Operator'], ['mwac','MWac'], ['mwdc','MWdc'],
     ['dcac','DC/AC'], ['tracking','Tracking'], ['cod','COD'], ['years_present','Yrs'],
-    ['latest_pi','PI'], ['latest_pri','PRI'], ['latest_d','D'], ['beta','β'], ['beta_t','t'],
+    ['latest_pi','PI'], ['latest_pri','PRI'], ['latest_d','D'], ['latest_scored_month','Last scored'],
+    ['beta','β'], ['beta_t','t'],
     ['fault_months','Fault mo'], ['episode_count','Episodes'], ['top_signature','Top sig'],
     ['confidence','Conf'], ['recoverable_mwh_yr','MWh/yr'], ['recoverable_usd_yr','USD/yr'],
     ['conviction_tier','Tier'], ['warranty_urgent','Warranty'], ['peer_count','Peers'], ['peer_radius_km','Radius km'],
     ['data_quality_flags','DQ flags'],
   ];
 
-  const scrollDiv = el('div', {id:'triage-scroll'});
-  const table = el('table', {class:'triage'});
+  const scrollDiv = el('div', {id:'triage-scroll', class:'tblscroll'});
+  const table = el('table', {class:'grid'});
   const thead = el('tr', {});
-  cols.forEach(([key,label]) => {
-    const th = el('th', {onclick:()=>{ if(state.sortCol===key) state.sortDir*=-1; else {state.sortCol=key; state.sortDir=-1;} renderTriage(); }},
+  cols.forEach(([key,label], i) => {
+    const th = el('th', {class: i===0?'kcol':'', onclick:()=>{ if(state.sortCol===key) state.sortDir*=-1; else {state.sortCol=key; state.sortDir=-1;} renderTriage(); }},
       [label + (state.sortCol===key ? (state.sortDir>0?' ▲':' ▼') : '')]);
     thead.appendChild(th);
   });
@@ -420,7 +516,7 @@ function renderTriage() {
     for (let i=first;i<last;i++) {
       const s = list[i];
       const tr = el('tr', {onclick:()=>openSite(s.site)});
-      cols.forEach(([key]) => {
+      cols.forEach(([key], ci) => {
         let v = s[key];
         if (key==='recoverable_usd_yr') v = fmtUsd(v);
         else if (['latest_pi','latest_pri','latest_d','dcac'].includes(key)) v = fmtNum(v,3);
@@ -429,6 +525,11 @@ function renderTriage() {
         else if (key==='top_signature') v = SIG_LABEL[v]||v;
         else if (key==='warranty_urgent') v = v ? '⚠ urgent' : '';
         else if (key==='data_quality_flags') v = (v||[]).join(', ');
+        else if (key==='site') {
+          const td = el('td',{class:'kcol'},[s.site + (s.stale ? '' : '')]);
+          if (s.stale) td.appendChild(el('span',{class:'badge stale', style:'margin-left:6px'},['STALE']));
+          tr.appendChild(td); return;
+        }
         else if (key==='conviction_tier') { const b=el('span',{class:'badge '+String(v).replace('-','')},[v]); tr.appendChild(el('td',{},[b])); return; }
         else if (v===null||v===undefined) v='—';
         tr.appendChild(el('td', {}, [String(v)]));
@@ -472,19 +573,20 @@ function renderDetail() {
   let site = state.currentSite;
   if (!site && list.length) site = list[0].site;
   const s = DATA.sites.find(x=>x.site===site);
-  if (!s) { m.appendChild(el('div',{class:'panel'},['No site selected. Go to Triage List and click a row.'])); return; }
+  if (!s) { m.appendChild(el('div',{class:'card-panel'},['No site selected. Go to Triage List and click a row.'])); return; }
   state.currentSite = site;
   updatePosIndicator(list, site);
-  const idx = list.findIndex(x=>x.site===site);
 
-  const header = el('div', {class:'panel'});
+  const header = el('div', {class:'card-panel'});
   const hh = el('div', {class:'detail-header'});
   const meta = el('div', {class:'meta'}, [
     el('div',{},[el('b',{},[s.site]), '  ', el('span',{class:'badge '+String(s.conviction_tier).replace('-','')},[s.conviction_tier]),
-      s.warranty_urgent? el('span',{class:'badge WarrantyUrgent'},[' WARRANTY URGENT ']) : '']),
+      s.warranty_urgent? el('span',{class:'badge WarrantyUrgent'},[' WARRANTY URGENT ']) : '',
+      s.stale? el('span',{class:'badge stale'},[' STALE ']) : ''
+    ]),
     el('div',{},[`${s.operator||'—'} | ${s.utility||'—'} | ${s.state||'—'}, ${s.county||'—'} | BA ${s.ba||'—'} | plant_id ${s.plant_id||'—'}`]),
     el('div',{},[`MWac ${fmtNum(s.mwac,1)} | MWdc ${fmtNum(s.mwdc,1)} | DC/AC ${fmtNum(s.dcac,2)} | ${s.tracking||'—'} | ${s.module||'—'} | tilt ${fmtNum(s.tilt,0)} | az ${fmtNum(s.azimuth,0)}`]),
-    el('div',{},[`COD ${s.cod||'—'} | ${s.years_present} yrs of data | β=${s.beta!==null?(s.beta*100).toFixed(2)+'%/yr':'—'} (SE ${fmtNum(s.beta_se,4)}, t=${fmtNum(s.beta_t,1)}) | β_excess=${s.beta_excess!==null?(s.beta_excess*100).toFixed(2)+'%/yr':'—'} (${s.excess_category})`]),
+    el('div',{},[`COD ${s.cod||'—'} | ${s.years_present} yrs of data | Last scored ${s.latest_scored_month||'—'} (${s.months_since_last_scored===null?'—':s.months_since_last_scored+'mo ago'}) | β=${s.beta!==null?(s.beta*100).toFixed(2)+'%/yr':'—'} (SE ${fmtNum(s.beta_se,4)}, t=${fmtNum(s.beta_t,1)}${s.beta_t!==null && Math.abs(s.beta_t)<2 ? ', NOT SIGNIFICANT':''}) | β_excess=${s.beta_excess!==null?(s.beta_excess*100).toFixed(2)+'%/yr':'—'} (${s.excess_category})`]),
     el('div',{},(s.data_quality_flags||[]).map(f=>el('span',{class:'badge LOW', style:'margin-right:4px'},[f]))),
   ]);
   const nav = el('div', {class:'navbtns'}, [
@@ -505,14 +607,15 @@ function renderDetail() {
   m.appendChild(header);
 
   // monthly chart
-  const chartPanel = el('div', {class:'panel'});
-  chartPanel.appendChild(el('h2',{},['Monthly actual vs expected, PI/PRI on secondary axis (0.92 threshold marked). Gaps are missing months, never zero.']));
+  const chartPanel = el('div', {class:'card-panel'});
+  panelHeader(chartPanel, 'PERFORMANCE', 'Monthly actual vs. expected generation',
+    `PI/PRI plotted on the secondary axis against the 0.92 threshold (dashed) — gaps in the bars are missing months, never zero, and the fault ribbon below explains any dip.`);
   chartPanel.appendChild(monthlyChart(s));
   m.appendChild(chartPanel);
 
   // fault ribbon
-  const ribbonPanel = el('div', {class:'panel'});
-  ribbonPanel.appendChild(el('h2',{},['Fault ribbon — hover a cell for D, band, gate, confidence']));
+  const ribbonPanel = el('div', {class:'card-panel'});
+  panelHeader(ribbonPanel, 'FAULT HISTORY', 'Fault ribbon', 'Hover a cell for D, band, gate and confidence. Colour encodes the classified signature — this is the one place in the tool signature colours are used outside this legend.');
   const ribbon = el('div', {class:'ribbon'});
   s.months.forEach((mo,i) => {
     const sig = s.signature[i];
@@ -529,23 +632,23 @@ function renderDetail() {
 
   // peer panel + risk (credibility as thin risk proxy)
   const grid = el('div', {class:'grid2'});
-  const peerPanel = el('div', {class:'panel'});
+  const peerPanel = el('div', {class:'card-panel'});
   const lastPeerIdx = [...s.peer_count.keys()].reverse().find(i=>s.peer_count[i]!==null);
-  peerPanel.appendChild(el('h2',{},['Peers (latest scored month)']));
+  panelHeader(peerPanel, 'PEER GROUP', 'Peers (latest scored month)');
   if (lastPeerIdx!==undefined) {
     peerPanel.appendChild(el('div',{},[`peer_count=${s.peer_count[lastPeerIdx]}, radius=${s.peer_radius_km[lastPeerIdx]} km, healthy=${s.peers_healthy[lastPeerIdx]}, benchmark_mode=${s.benchmark_mode[lastPeerIdx]}`]));
   } else {
-    peerPanel.appendChild(el('div',{class:'small'},['No peer-benchmarked month for this site.']));
+    peerPanel.appendChild(el('div',{class:'small'},['No peer-benchmarked month for this site — PRI is not available; PI (physical fallback) is the only index computed.']));
   }
   grid.appendChild(peerPanel);
 
-  const riskPanel = el('div', {class:'panel'});
-  riskPanel.appendChild(el('h2',{},['Risk / credibility (per-signature, from S8 — thin at subsample scale)']));
+  const riskPanel = el('div', {class:'card-panel'});
+  panelHeader(riskPanel, 'CREDIBILITY', 'Risk / credibility by signature', 'Z is the shrinkage weight toward the pooled prior — a young or low-history site leans on the fleet prior more than its own record, and that is expected, not a defect.');
   if (s.credibility.length) {
-    const rt = el('table',{class:'risk'});
-    rt.appendChild(el('tr',{},[el('th',{},['Signature']),el('th',{},['λ (shrunk)']),el('th',{},['Credibility Z']),el('th',{},['Pool level'])]));
-    s.credibility.forEach(c=>rt.appendChild(el('tr',{},[el('td',{},[SIG_LABEL[c.signature]||c.signature]),el('td',{},[fmtNum(c.lambda_shrunk,4)]),el('td',{},[fmtNum(c.Z,3)]),el('td',{},[c.pool])])));
-    riskPanel.appendChild(rt);
+    const rt = el('table',{class:'grid'});
+    rt.appendChild(el('tr',{},[el('th',{class:'kcol'},['Signature']),el('th',{},['λ (shrunk)']),el('th',{},['Credibility Z']),el('th',{},['Pool level'])]));
+    s.credibility.forEach(c=>rt.appendChild(el('tr',{},[el('td',{class:'kcol'},[SIG_LABEL[c.signature]||c.signature]),el('td',{},[fmtNum(c.lambda_shrunk,4)]),el('td',{},[fmtNum(c.Z,3)]),el('td',{},[c.pool])])));
+    riskPanel.appendChild(el('div',{class:'tblscroll'},[rt]));
   } else {
     riskPanel.appendChild(el('div',{class:'small'},['No credibility rows for this site (too few fault episodes at subsample scale).']));
   }
@@ -553,32 +656,33 @@ function renderDetail() {
   m.appendChild(grid);
 
   // revenue table
-  const revPanel = el('div', {class:'panel'});
-  revPanel.appendChild(el('h2',{},['Recoverable revenue by month (Part 8 authoritative $, tracker quick-estimate alongside)']));
-  const rt2 = el('table', {class:'ledger'});
-  rt2.appendChild(el('tr',{},[el('th',{},['Month']),el('th',{},['Signature']),el('th',{},['rho']),el('th',{},['$ (Part 8)']),el('th',{},['$ (quick est.)']),el('th',{},['Block fraction'])]));
+  const revPanel = el('div', {class:'card-panel'});
+  panelHeader(revPanel, 'DOLLARS', 'Recoverable revenue by month',
+    `Part 8's authoritative $ alongside the tracker quick-estimate for cross-check — every figure is a ranking signal, not a quote (see the Assumptions panel).`);
+  const rt2 = el('table', {class:'grid'});
+  rt2.appendChild(el('tr',{},[el('th',{class:'kcol'},['Month']),el('th',{},['Signature']),el('th',{},['rho']),el('th',{},['$ (Part 8)']),el('th',{},['$ (quick est.)']),el('th',{},['Block fraction'])]));
   s.months.forEach((mo,i) => {
     if (!s.value_usd[i]) return;
     let frac = s.block_fraction[i];
     if (frac) frac += ` (n_candidates=${s.n_candidates[i]}, indicative sizing only)`;
-    rt2.appendChild(el('tr',{},[el('td',{},[mo]),el('td',{},[SIG_LABEL[s.signature[i]]||s.signature[i]]),
+    rt2.appendChild(el('tr',{},[el('td',{class:'kcol'},[mo]),el('td',{},[SIG_LABEL[s.signature[i]]||s.signature[i]]),
       el('td',{},[fmtNum(s.rec_pct[i],2)]), el('td',{},[fmtUsd(s.value_usd[i])]), el('td',{},[fmtUsd(s.value_usd_quick[i])]),
       el('td',{},[frac||'—'])]));
   });
-  revPanel.appendChild(rt2);
+  revPanel.appendChild(el('div',{class:'tblscroll'},[rt2]));
   m.appendChild(revPanel);
 
   // event ledger for this site
-  const ledPanel = el('div', {class:'panel'});
-  ledPanel.appendChild(el('h2',{},['Event ledger for this site']));
+  const ledPanel = el('div', {class:'card-panel'});
+  panelHeader(ledPanel, 'EVENT LEDGER', 'Event ledger for this site');
   const led = DATA.ledger.filter(l=>l.site===site);
-  const lt = el('table', {class:'ledger'});
-  lt.appendChild(el('tr',{},[el('th',{},['Year']),el('th',{},['Signature']),el('th',{},['Months']),el('th',{},['Episodes']),
+  const lt = el('table', {class:'grid'});
+  lt.appendChild(el('tr',{},[el('th',{class:'kcol'},['Year']),el('th',{},['Signature']),el('th',{},['Months']),el('th',{},['Episodes']),
     el('th',{},['Exposure mo']),el('th',{},['MWh lost']),el('th',{},['USD lost']),el('th',{},['Max severity'])]));
-  led.forEach(l=>lt.appendChild(el('tr',{},[el('td',{},[l.year]),el('td',{},[SIG_LABEL[l.signature]||l.signature]),
+  led.forEach(l=>lt.appendChild(el('tr',{},[el('td',{class:'kcol'},[l.year]),el('td',{},[SIG_LABEL[l.signature]||l.signature]),
     el('td',{},[l.months]),el('td',{},[l.episodes===null?'—':l.episodes]),el('td',{},[l.exposure_months]),
     el('td',{},[fmtNum(l.mwh_lost,1)]),el('td',{},[fmtUsd(l.usd_lost)]),el('td',{},[fmtNum(l.max_severity,3)])])));
-  ledPanel.appendChild(lt);
+  ledPanel.appendChild(el('div',{class:'tblscroll'},[lt]));
   m.appendChild(ledPanel);
 }
 
@@ -593,9 +697,9 @@ function monthlyChart(s) {
   function yIdx(v){ return h-pad - (Math.min(v,1.3)/1.3)*(h-2*pad); } // PI/PRI axis 0-1.3
 
   // expected bars (light)
-  s.e_exp.forEach((v,i) => { if (v!==null) svgEl.appendChild(svg('rect',{x:xAt(i)-cw*0.35,y:yMwh(v),width:cw*0.7,height:h-pad-yMwh(v), fill:'#2e3852'})); });
+  s.e_exp.forEach((v,i) => { if (v!==null) svgEl.appendChild(svg('rect',{x:xAt(i)-cw*0.35,y:yMwh(v),width:cw*0.7,height:h-pad-yMwh(v), fill:'#e2ded8'})); });
   // actual bars
-  s.e_act.forEach((v,i) => { if (v!==null) svgEl.appendChild(svg('rect',{x:xAt(i)-cw*0.2,y:yMwh(v),width:cw*0.4,height:h-pad-yMwh(v), fill:'#4f8cff'})); });
+  s.e_act.forEach((v,i) => { if (v!==null) svgEl.appendChild(svg('rect',{x:xAt(i)-cw*0.2,y:yMwh(v),width:cw*0.4,height:h-pad-yMwh(v), fill:'var(--accent)'})); });
   // 0.92 threshold line on secondary axis
   svgEl.appendChild(svg('line',{x1:pad,y1:yIdx(0.92),x2:w-pad,y2:yIdx(0.92), stroke:'var(--warn)','stroke-dasharray':'4,3'}));
   // PI line
@@ -624,6 +728,19 @@ function render() {
   else renderDetail();
   const reviewed = Object.values(triage).filter(t=>t.status && t.status!=='unreviewed').length;
   document.getElementById('progress-indicator').textContent = `reviewed ${reviewed} of ${DATA.sites.length}`;
+  renderScopeBanner();
+}
+
+// Part H: non-dismissable scope banner, same pattern the weather-track
+// caveat already used well in v1 - carried forward, not just kept as-is.
+function renderScopeBanner() {
+  const track = DATA.meta.weather_track_summary;
+  const trackStr = Object.entries(track).map(([k,v])=>`${k}: ${v}`).join(', ');
+  document.getElementById('footer-scope').innerHTML =
+    `<b>${DATA.meta.scope}.</b> Weather this run: ${trackStr} — ` +
+    (DATA.meta.decision_grade ? `decision-grade on weather track, ` : `NOT decision-grade (${DATA.meta.decision_grade_reason}), `) +
+    `${DATA.meta.pi_provisional ? 'PI provisional (lead with PRI) — ' : ''}` +
+    `RANKING SIGNAL, NOT A QUOTE. See the Assumptions panel for what's measured vs. assumed.`;
 }
 
 document.querySelectorAll('#topbar nav button').forEach(b => b.addEventListener('click', () => {
@@ -649,8 +766,35 @@ function parseHash() {
   if (m) { state.currentSite = decodeURIComponent(m[1]); state.view = 'detail'; }
 }
 
+// Part H: "How to read this" - dismissible on first load, always
+// reachable afterward via the header link. Plain English, four sentences,
+// written for an asset manager or CFO, not a PV engineer.
+const HOW_TO_READ_HTML = `
+<p><b>PI (Performance Index)</b> compares what a plant actually generated to what a physical model of that plant, in that weather, predicts it should generate — 1.00 means it matched the model exactly. <b>PRI (Peer-Relative Index)</b> compares a plant to similar nearby plants instead, which cancels out most modelling error, so it's the more trustworthy number until PI is recalibrated (see the methodology note on the Fleet Overview).</p>
+<p><b>D</b> is the deficit — how far below expectation a site ran in a given month — and it's what the fault classifier reads to decide whether a dip looks like snow, an outage, soiling, or something else.</p>
+<p><b>Conviction tier</b> (Chronic, Event, New, Improving, Healthy, Warranty-urgent) is SkySpecs' call-priority label for a site: Chronic means a real, sustained problem; Event means a current flag without established history; New means too little data yet to say. No site can be labelled Healthy while it's still carrying recoverable dollar value or an accelerating decline.</p>
+<p>Every dollar figure in this tool is a <b>ranking signal, not a quote</b> — it depends on assumed prices, an assumed PPA rate and placeholder recovery fractions until SkySpecs confirms real ones. Check the Assumptions panel before citing a number externally.</p>
+`;
+function showHowToRead() {
+  const backdrop = el('div', {class:'modal-backdrop', onclick:(e)=>{ if(e.target===backdrop) closeModal(); }});
+  const modal = el('div', {class:'modal'});
+  modal.appendChild(el('h2',{},['How to read this']));
+  modal.appendChild(el('div',{html:HOW_TO_READ_HTML}));
+  modal.appendChild(el('button',{class:'close', onclick:closeModal},['Got it']));
+  backdrop.appendChild(modal);
+  backdrop.id='how-to-read-modal';
+  document.body.appendChild(backdrop);
+}
+function closeModal() {
+  const m = document.getElementById('how-to-read-modal');
+  if (m) m.remove();
+  localStorage.setItem('seen_how_to_read', '1');
+}
+document.getElementById('meth-link').addEventListener('click', showHowToRead);
+
 parseHash();
 render();
+if (!localStorage.getItem('seen_how_to_read')) showHowToRead();
 </script>
 </body>
 </html>
