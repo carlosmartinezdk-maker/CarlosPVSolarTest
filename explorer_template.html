@@ -212,6 +212,7 @@ const state = {
   ownersMultiSiteOnly: true,
   sortCol: 'recoverable_usd_yr', sortDir: -1,
   currentSite: null,
+  hiddenCols: new Set(['confidence', 'peer_count', 'peer_radius_km']),
 };
 
 function loadTriage() {
@@ -293,39 +294,75 @@ function drawAxes(s, w, h, baseline) {
   s.appendChild(svg('line', {x1:1, y1:0, x2:1, y2:baseline, stroke:AXIS_COLOR, 'stroke-width':1}));
 }
 
-function histogram(values, w, h, threshold) {
+function axisLabel(s, w, h, xLabel, yLabel, yMax) {
+  if (xLabel) {
+    const xl = svg('text', {x:w/2, y:h-2, 'text-anchor':'middle', style:'font-size:10px; font-weight:bold; fill:var(--ink)'});
+    xl.textContent = xLabel;
+    s.appendChild(xl);
+  }
+  if (yLabel) {
+    const yl = svg('text', {x:4, y:10, style:'font-size:9px; font-weight:bold; fill:var(--ink)'});
+    yl.textContent = yMax !== undefined ? `${yLabel} (max ${yMax})` : yLabel;
+    s.appendChild(yl);
+  }
+}
+
+function histogram(values, w, h, threshold, xLabel) {
   const s = svg('svg', {width:w, height:h, viewBox:`0 0 ${w} ${h}`});
   if (!values.length) return s;
-  const bins = 20, min = 0, max = Math.max(1.5, Math.max(...values));
+  // PI/PRI are ratios centred on 1.0 - a handful of extreme outliers (bad
+  // denominators, not real performance) were stretching the axis so far
+  // that the real distribution (mostly 0.6-1.1) was an invisible sliver.
+  // Cap the domain and note what got clipped, rather than auto-scaling to
+  // whatever the max happens to be.
+  const bins = 20, min = 0, max = 2.0;
   const counts = new Array(bins).fill(0);
-  values.forEach(v => { let b = Math.floor((v-min)/(max-min)*bins); if (b>=bins) b=bins-1; if (b<0) b=0; counts[b]++; });
-  const maxC = Math.max(...counts);
-  const bw = w/bins;
-  drawAxes(s, w, h, h-14);
-  counts.forEach((c,i) => {
-    const bh = maxC ? (c/maxC)*(h-16) : 0;
-    s.appendChild(svg('rect', {x:i*bw+1, y:h-14-bh, width:bw-2, height:bh, class:'bar'}));
+  let overflow = 0;
+  values.forEach(v => {
+    if (v > max) { overflow++; return; }
+    let b = Math.floor((v-min)/(max-min)*bins); if (b>=bins) b=bins-1; if (b<0) b=0; counts[b]++;
   });
-  if (threshold !== undefined) {
+  const maxC = Math.max(...counts, 1);
+  const bw = w/bins;
+  const baseline = h-26;
+  drawAxes(s, w, h, baseline);
+  counts.forEach((c,i) => {
+    const bh = maxC ? (c/maxC)*(baseline-14) : 0;
+    s.appendChild(svg('rect', {x:i*bw+1, y:baseline-bh, width:bw-2, height:bh, class:'bar'}));
+  });
+  if (threshold !== undefined && threshold <= max) {
     const tx = ((threshold-min)/(max-min))*w;
-    s.appendChild(svg('line', {x1:tx,y1:0,x2:tx,y2:h-14, stroke:'var(--warn)', 'stroke-dasharray':'3,2'}));
+    s.appendChild(svg('line', {x1:tx,y1:0,x2:tx,y2:baseline, stroke:'var(--warn)', 'stroke-dasharray':'3,2'}));
   }
-  s.appendChild(svg('text', {x:2, y:h-2}, )).textContent = min.toFixed(1);
-  const t2 = svg('text', {x:w-24, y:h-2}); t2.textContent = max.toFixed(1); s.appendChild(t2);
+  s.appendChild(svg('text', {x:2, y:baseline+12}, )).textContent = min.toFixed(1);
+  const t2 = svg('text', {x:w-28, y:baseline+12}); t2.textContent = max.toFixed(1)+'+'; s.appendChild(t2);
+  if (overflow) {
+    const ov = svg('text', {x:w-2, y:12, 'text-anchor':'end', fill:'var(--warn)', style:'font-size:9px'});
+    ov.textContent = `${overflow} above ${max.toFixed(1)}, clipped`;
+    s.appendChild(ov);
+  }
+  axisLabel(s, w, h, xLabel, 'Count of site-months', maxC);
   return s;
 }
-function barChart(labels, values, w, h) {
+function barChart(labels, values, w, h, opts) {
+  opts = opts || {};
   const s = svg('svg', {width:w, height:h, viewBox:`0 0 ${w} ${h}`});
   const maxV = Math.max(1, ...values);
   const bw = w/labels.length;
-  drawAxes(s, w, h, h-20);
+  const baseline = opts.fullLabels ? h-46 : h-20;
+  drawAxes(s, w, h, baseline);
   values.forEach((v,i) => {
-    const bh = (v/maxV)*(h-28);
-    s.appendChild(svg('rect', {x:i*bw+2, y:h-20-bh, width:bw-4, height:bh, fill:'var(--accent)'}));
-    const t = svg('text', {x:i*bw+bw/2, y:h-8, 'text-anchor':'middle'}); t.textContent = labels[i].length>10?labels[i].slice(0,9)+'…':labels[i];
+    const bh = (v/maxV)*(baseline-18);
+    s.appendChild(svg('rect', {x:i*bw+2, y:baseline-bh, width:bw-4, height:bh, fill:'var(--accent)'}));
+    const label = opts.fullLabels ? labels[i] : (labels[i].length>10?labels[i].slice(0,9)+'…':labels[i]);
+    const t = opts.fullLabels
+      ? svg('text', {x:i*bw+bw/2, y:baseline+12, 'text-anchor':'end', transform:`rotate(-35 ${i*bw+bw/2} ${baseline+12})`})
+      : svg('text', {x:i*bw+bw/2, y:baseline+10, 'text-anchor':'middle'});
+    t.textContent = label;
     s.appendChild(t);
-    const tv = svg('text', {x:i*bw+bw/2, y:h-22-bh, 'text-anchor':'middle'}); tv.textContent = v; s.appendChild(tv);
+    const tv = svg('text', {x:i*bw+bw/2, y:baseline-bh-4, 'text-anchor':'middle'}); tv.textContent = v; s.appendChild(tv);
   });
+  axisLabel(s, w, h, opts.xLabel, opts.yLabel || 'Count', maxV);
   return s;
 }
 function sigColor(sig) {
@@ -365,7 +402,7 @@ function renderFleet() {
     `scoreable sites after hybrid/lat-lon/capacity/DC:AC gates - everything downstream is scored against this smaller, cleaner set.`);
   const fLabels = DATA.funnel.map(r => r.step);
   const fValues = DATA.funnel.map(r => r.n_sites);
-  funnelPanel.appendChild(barChart(fLabels, fValues, 900, 160));
+  funnelPanel.appendChild(barChart(fLabels, fValues, 900, 190, {xLabel:'Funnel step', yLabel:'Sites', fullLabels:true}));
   funnelPanel.appendChild(el('div',{class:'small'},[`GWac at each step: ${DATA.funnel.map(r=>r.gw_ac.toFixed(1)).join(' → ')}`]));
   m.appendChild(funnelPanel);
 
@@ -383,13 +420,13 @@ function renderFleet() {
         `That gap is model bias, not fleet underperformance — see the methodology note below. Treat PI as provisional and lead with PRI.`
       : `Median PI is ${fmtNum(piMedian,2)} against the 0.92 decision threshold (dashed line).`
   ]));
-  piDiv.appendChild(histogram(allPi, 420, 140, 0.92));
+  piDiv.appendChild(histogram(allPi, 420, 150, 0.92, 'PI'));
   const priDiv = el('div', {});
   panelHeader(priDiv, 'PRI', 'PRI distribution');
   priDiv.appendChild(el('div',{class:'interp'},[
     `Median PRI is ${fmtNum(priMedian,2)}, peer-relative so it divides out most of the PI model bias — the more trustworthy absolute read at subsample scale.`
   ]));
-  priDiv.appendChild(histogram(allPri, 420, 140, 0.92));
+  priDiv.appendChild(histogram(allPri, 420, 150, 0.92, 'PRI'));
   distPanel.appendChild(piDiv); distPanel.appendChild(priDiv);
   m.appendChild(distPanel);
   if (DATA.meta.pi_bias_note) {
@@ -410,7 +447,7 @@ function renderFleet() {
     (topSig==='SNOW' ? 'See the SNOW-by-state diagnostic in run_report.md before treating this as pure weather.' :
      'Cross-check against the reference episode-per-plant-year profile (run_report.md TEST 22) before treating counts alone as diagnostic.')
   ]));
-  sigPanel.appendChild(barChart(sigLabels.map(l=>SIG_LABEL[l]||l), sigValues, 900, 160));
+  sigPanel.appendChild(barChart(sigLabels.map(l=>SIG_LABEL[l]||l), sigValues, 900, 170, {xLabel:'Signature', yLabel:'Site-months'}));
   m.appendChild(sigPanel);
 
   // by-year stacked (simplified: separate small bars per year per signature count)
@@ -421,40 +458,27 @@ function renderFleet() {
   yearPanel.appendChild(el('div',{class:'interp'},[
     `Read year-over-year counts alongside site count per year (subsample composition shifts over history) rather than as a fleet-wide trend at this scale.`
   ]));
-  yearPanel.appendChild(barChart(years, yearTotals, 700, 140));
+  yearPanel.appendChild(barChart(years, yearTotals, 700, 150, {xLabel:'Year', yLabel:'Site-months'}));
   m.appendChild(yearPanel);
 
   // Part C: real US-projected map (Albers USA), state choropleth + site
   // markers, both toggled by a segmented control and both a filter, not
   // just a picture - click a state to filter every other view to it.
+  const TIERS = ['Chronic','Event','New','Improving','Healthy','Warranty-urgent'];
   const mapPanel = el('div', {class:'card-panel'});
   panelHeader(mapPanel, 'GEOGRAPHY', 'Fleet map');
   const mapInterp = el('div',{class:'interp'});
   mapPanel.appendChild(mapInterp);
-  const TIERS = ['Chronic','Event','New','Improving','Healthy','Warranty-urgent'];
   const mapModeSeg = el('div', {class:'seg', style:'margin-bottom:8px'});
-  const mapMode = {v: 'choropleth', tier: 'Chronic', tierMetric: 'pct'};
+  const mapMode = {v: 'choropleth'};
   function setMapMode(mode) { mapMode.v = mode; renderMap(); }
-  [['choropleth','Choropleth: recoverable $/yr'], ['tiermix','Choropleth: tier mix'], ['markers','Site markers']].forEach(([mode,label]) => {
+  [['choropleth','Choropleth: recoverable $/yr'], ['markers','Site markers']].forEach(([mode,label]) => {
     mapModeSeg.appendChild(el('button', {class: mapMode.v===mode?'active':'', onclick:()=>{
       [...mapModeSeg.children].forEach(b=>b.classList.remove('active'));
       setMapMode(mode);
     }}, [label]));
   });
   mapPanel.appendChild(mapModeSeg);
-  const tierControls = el('div', {style:'display:flex; gap:10px; align-items:center; margin-bottom:8px'});
-  const tierSelEl = el('select', {class:'sel', onchange:(e)=>{ mapMode.tier = e.target.value; renderMap(); }});
-  TIERS.forEach(t => tierSelEl.appendChild(el('option', {value:t, selected: t===mapMode.tier}, [t])));
-  const tierMetricSeg = el('div', {class:'seg'});
-  [['pct','% of sites'], ['mwdc','MWdc share']].forEach(([v,label]) => {
-    tierMetricSeg.appendChild(el('button', {class: mapMode.tierMetric===v?'active':'', onclick:()=>{
-      mapMode.tierMetric = v; [...tierMetricSeg.children].forEach(b=>b.classList.remove('active'));
-      renderMap();
-    }}, [label]));
-  });
-  tierControls.appendChild(tierSelEl); tierControls.appendChild(tierMetricSeg);
-  mapPanel.appendChild(tierControls);
-  function syncTierControls() { tierControls.style.display = mapMode.v === 'tiermix' ? 'flex' : 'none'; }
   if (state.filters.state) {
     mapPanel.appendChild(el('div', {class:'small', style:'margin-bottom:6px'}, [
       `Filtered to ${state.filters.state}. `,
@@ -468,7 +492,6 @@ function renderFleet() {
   m.appendChild(mapPanel);
 
   function renderMap() {
-    syncTierControls();
     mapSvgHolder.innerHTML = '';
     legend.innerHTML = '';
     const W=975, H=610;
@@ -481,55 +504,15 @@ function renderFleet() {
     });
     const maxRec = Math.max(1, ...Object.values(recByState));
 
-    // Tier mix per state: count and MWdc per tier, for the tooltip
-    // breakdown and for colouring by the selected tier/metric.
-    const tierMixByState = {};
-    Object.entries(byState).forEach(([st, ss]) => {
-      const mix = {};
-      TIERS.forEach(t => mix[t] = {count: 0, mwdc: 0});
-      let totalMwdc = 0;
-      ss.forEach(s => {
-        const t = TIERS.includes(s.conviction_tier) ? s.conviction_tier : null;
-        if (t) { mix[t].count++; mix[t].mwdc += (s.mwdc || 0); }
-        totalMwdc += (s.mwdc || 0);
-      });
-      tierMixByState[st] = {mix, nSites: ss.length, totalMwdc};
-    });
-    let maxTierShare = 0.0001;
-    if (mapMode.v === 'tiermix') {
-      Object.values(tierMixByState).forEach(({mix, nSites, totalMwdc}) => {
-        const cell = mix[mapMode.tier];
-        const share = mapMode.tierMetric === 'pct' ? (nSites ? cell.count / nSites : 0) : (totalMwdc ? cell.mwdc / totalMwdc : 0);
-        maxTierShare = Math.max(maxTierShare, share);
-      });
-    }
-
     STATE_FEATURES.forEach(f => {
       const abbr = STATE_ABBR[f.properties.name];
       const rec = recByState[abbr] || 0;
-      const tm = tierMixByState[abbr];
-      let t = 0, fill = 'var(--land)';
-      if (mapMode.v === 'choropleth') { t = Math.min(1, rec / maxRec); fill = choroplethColor(t); }
-      else if (mapMode.v === 'tiermix' && tm) {
-        const cell = tm.mix[mapMode.tier];
-        const share = mapMode.tierMetric === 'pct' ? (tm.nSites ? cell.count / tm.nSites : 0) : (tm.totalMwdc ? cell.mwdc / tm.totalMwdc : 0);
-        t = Math.min(1, share / maxTierShare);
-        fill = choroplethColor(t);
-      }
+      const t = mapMode.v === 'choropleth' ? Math.min(1, rec / maxRec) : 0;
+      const fill = mapMode.v === 'choropleth' ? choroplethColor(t) : 'var(--land)';
       const path = svg('path', {d: GEO_PATH(f), class:'geo', fill, stroke:'var(--stroke)', 'stroke-width':1});
       path.style.cursor = 'pointer';
       path.addEventListener('click', () => { state.filters.state = state.filters.state===abbr ? '' : abbr; rerenderCurrent(); });
-      path.addEventListener('mousemove', (e) => {
-        let html = `<b>${f.properties.name}</b><br>${(byState[abbr]||[]).length} sites<br>Recoverable: ${fmtUsd(rec)}/yr`;
-        if (mapMode.v === 'tiermix' && tm) {
-          html += '<br><br>' + TIERS.map(t2 => {
-            const cell = tm.mix[t2];
-            const pct = tm.nSites ? (100*cell.count/tm.nSites).toFixed(0) : '0';
-            return `${t2}: ${cell.count} sites (${pct}%), ${fmtNum(cell.mwdc,1)} MWdc`;
-          }).join('<br>');
-        }
-        showTip(e, html);
-      });
+      path.addEventListener('mousemove', (e) => showTip(e, `<b>${f.properties.name}</b><br>${(byState[abbr]||[]).length} sites<br>Recoverable: ${fmtUsd(rec)}/yr`));
       path.addEventListener('mouseleave', hideTip);
       s2.appendChild(path);
     });
@@ -561,11 +544,6 @@ function renderFleet() {
       });
       Object.entries(tierColor).forEach(([k,v]) => legend.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${v}`}),k])));
       mapInterp.textContent = `${DATA.sites.filter(s=>s.lat!==null).length} sites projected with the same Albers USA transform as the state polygons above, sized by MWac and coloured by conviction tier. Click a marker to open its Site Detail, or a state to filter every view to it.`;
-    } else if (mapMode.v === 'tiermix') {
-      legend.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${choroplethColor(0.15)}`}),'Low']));
-      legend.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${choroplethColor(1)}`}),`High (${mapMode.tier} share)`]));
-      const metricLabel = mapMode.tierMetric === 'pct' ? '% of sites' : 'share of MWdc';
-      mapInterp.textContent = `Shaded by each state's ${metricLabel} in the "${mapMode.tier}" tier. Hover a state for the full tier breakdown; click to filter every other view to it.`;
     } else {
       legend.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${choroplethColor(0.15)}`}),'Low']));
       legend.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${choroplethColor(1)}`}),'High (recoverable $/yr)']));
@@ -574,6 +552,35 @@ function renderFleet() {
     mapSvgHolder.appendChild(s2);
   }
   renderMap();
+
+  // Tier mix - a plain table (sites and MWdc per conviction tier), not
+  // folded into the map, per feedback that the map choropleth was the
+  // wrong place for it.
+  const tierMixPanel = el('div', {class:'card-panel'});
+  panelHeader(tierMixPanel, 'PORTFOLIO', 'Sites and capacity by conviction tier');
+  const tierTotals = {};
+  TIERS.forEach(t => tierTotals[t] = {count: 0, mwdc: 0});
+  DATA.sites.forEach(s => {
+    const t = TIERS.includes(s.conviction_tier) ? s.conviction_tier : null;
+    if (t) { tierTotals[t].count++; tierTotals[t].mwdc += (s.mwdc || 0); }
+  });
+  const nSitesTotal = DATA.sites.length;
+  tierMixPanel.appendChild(el('div',{class:'interp'},[
+    `${TIERS.filter(t=>tierTotals[t].count>0).sort((a,b)=>tierTotals[b].count-tierTotals[a].count)[0]} is the largest tier by site count - click a row to filter every other view to it.`
+  ]));
+  const tierTable = el('table', {class:'grid'});
+  tierTable.appendChild(el('tr',{}, [el('th',{class:'kcol'},['Tier']), el('th',{},['Sites']), el('th',{},['% of sites']), el('th',{},['MWdc']), el('th',{},['% of MWdc'])]));
+  const totalMwdcAll = Object.values(tierTotals).reduce((a,t)=>a+t.mwdc,0);
+  TIERS.forEach(t => {
+    const c = tierTotals[t];
+    const tr = el('tr', {onclick:()=>{ state.filters.tier = state.filters.tier===t ? '' : t; state.view='triage'; render(); }});
+    [t, c.count, nSitesTotal?(100*c.count/nSitesTotal).toFixed(1)+'%':'—',
+     fmtNum(c.mwdc,1), totalMwdcAll?(100*c.mwdc/totalMwdcAll).toFixed(1)+'%':'—'
+    ].forEach((v,i)=>tr.appendChild(el('td',{class:i===0?'kcol':''},[String(v)])));
+    tierTable.appendChild(tr);
+  });
+  tierMixPanel.appendChild(el('div',{class:'tblscroll'},[tierTable]));
+  m.appendChild(tierMixPanel);
 
   // hazard curves
   if (DATA.hazard.length) {
@@ -584,22 +591,28 @@ function renderFleet() {
     ]));
     const bands = [...new Set(DATA.hazard.map(h=>h.age_band))];
     const sigsPresent = [...new Set(DATA.hazard.map(h=>h.signature))];
-    const w3=900,h3=200, bw = w3/bands.length;
+    const w3=900,h3=220, bw = w3/bands.length;
     const maxRate = Math.max(0.1, ...DATA.hazard.map(h=>h.rate||0));
+    const baseline3 = h3-30;
     const s3 = svg('svg',{width:w3,height:h3,viewBox:`0 0 ${w3} ${h3}`});
-    drawAxes(s3, w3, h3, h3-20);
+    drawAxes(s3, w3, h3, baseline3);
     sigsPresent.forEach(sig => {
       let pts = [];
       bands.forEach((b,i) => {
         const rec = DATA.hazard.find(h=>h.signature===sig && h.age_band===b);
-        if (rec) pts.push([i*bw+bw/2, h3-20-((rec.rate/maxRate)*(h3-40))]);
+        if (rec) pts.push([i*bw+bw/2, baseline3-20-((rec.rate/maxRate)*(baseline3-40))]);
       });
       if (pts.length>1) {
         const path = pts.map((p,i)=> (i===0?'M':'L')+p[0]+','+p[1]).join(' ');
         s3.appendChild(svg('path',{d:path, fill:'none', stroke:sigColor(sig), 'stroke-width':2}));
       }
     });
-    bands.forEach((b,i)=> s3.appendChild(svg('text',{x:i*bw+bw/2,y:h3-4,'text-anchor':'middle'})).textContent=b);
+    bands.forEach((b,i)=> s3.appendChild(svg('text',{x:i*bw+bw/2,y:baseline3+14,'text-anchor':'middle'})).textContent=b);
+    // Y-axis values were previously missing entirely - add 0 and the max
+    // rate so the curve shapes have a scale to read against.
+    s3.appendChild(svg('text',{x:2,y:baseline3-16},)).textContent = '0';
+    s3.appendChild(svg('text',{x:2,y:16},)).textContent = maxRate.toFixed(2);
+    axisLabel(s3, w3, h3, 'Age band', 'Hazard rate (episodes / exposure-yr)');
     hazPanel.appendChild(s3);
     const leg2 = el('div',{class:'legend'});
     sigsPresent.forEach(sig => leg2.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${sigColor(sig)}`}),SIG_LABEL[sig]||sig])));
@@ -679,7 +692,7 @@ function renderTriage() {
   else if (state.filters.stale === 'fresh') list = list.filter(s=>!s.stale);
   updatePosIndicator(list, null);
 
-  const cols = [
+  const allCols = [
     ['site','Site'], ['state','State'], ['operator','Operator'], ['mwac','MWac'], ['mwdc','MWdc'],
     ['dcac','DC/AC'], ['tracking','Tracking'], ['cod','COD'], ['years_present','Yrs'],
     ['latest_pi','PI'], ['latest_pri','PRI'], ['latest_d','D'], ['latest_scored_month','Last scored'],
@@ -689,6 +702,23 @@ function renderTriage() {
     ['conviction_tier','Tier'], ['warranty_urgent','Warranty'], ['peer_count','Peers'], ['peer_radius_km','Radius km'],
     ['data_quality_flags','DQ flags'],
   ];
+  const cols = allCols.filter(([key]) => !state.hiddenCols.has(key));
+
+  // Column visibility picker - a checkbox per column, so any column can be
+  // hidden (Confidence, Peers and Radius km are hidden by default).
+  const colPicker = el('details', {style:'margin-bottom:10px'});
+  colPicker.appendChild(el('summary', {style:'cursor:pointer; font-size:12px; color:var(--muted)'}, ['Columns']));
+  const colPickerGrid = el('div', {style:'display:flex; flex-wrap:wrap; gap:8px 14px; margin-top:8px; font-size:12px'});
+  allCols.filter(([key])=>key!=='site').forEach(([key,label]) => {
+    const cb = el('input', {type:'checkbox', onchange:(e)=>{
+      if (e.target.checked) state.hiddenCols.delete(key); else state.hiddenCols.add(key);
+      renderTriage();
+    }});
+    if (!state.hiddenCols.has(key)) cb.checked = true;
+    colPickerGrid.appendChild(el('label', {style:'display:flex; align-items:center; gap:4px'}, [cb, label]));
+  });
+  colPicker.appendChild(colPickerGrid);
+  panel.appendChild(colPicker);
 
   const scrollDiv = el('div', {id:'triage-scroll', class:'tblscroll'});
   const table = el('table', {class:'grid'});
@@ -789,18 +819,28 @@ function renderDetail() {
   panelHeader(pickerPanel, 'NAVIGATE', 'Choose a customer, then a site');
   const pickerRow = el('div', {style:'display:flex; gap:12px; align-items:center; flex-wrap:wrap'});
   const owners = [...new Set(DATA.sites.map(s2=>s2.utility).filter(Boolean))].sort();
-  const ownerSel = el('select', {class:'sel', onchange:(e)=>{
-    state.filters.utility = e.target.value;
-    state.currentSite = null;
-    render();
-  }});
-  ownerSel.appendChild(el('option', {value:''}, ['All customers']));
-  owners.forEach(o => ownerSel.appendChild(el('option', {value:o, selected: o===state.filters.utility ? true : undefined}, [o])));
+  // Search-as-you-type customer picker (native datalist) - a plain <select>
+  // with 2000+ owners is unusable; typing narrows it, selecting a
+  // suggestion (or clearing the box) commits the filter.
+  const ownerListId = 'owner-datalist';
+  const ownerInput = el('input', {type:'text', class:'sel', list: ownerListId,
+    placeholder:'Type to search customers…', value: state.filters.utility || '',
+    oninput:(e)=>{
+      const v = e.target.value;
+      if (v === '' || owners.includes(v)) {
+        state.filters.utility = v;
+        state.currentSite = null;
+        render();
+      }
+    }});
+  const ownerDatalist = el('datalist', {id: ownerListId});
+  owners.forEach(o => ownerDatalist.appendChild(el('option', {value:o})));
   const siteSel = el('select', {class:'sel', onchange:(e)=>{ openSite(e.target.value); }});
   if (!list.length) siteSel.appendChild(el('option', {value:''}, ['(no sites for this customer under current filters)']));
   list.forEach(x => siteSel.appendChild(el('option', {value:x.site, selected: x.site===site ? true : undefined}, [x.site])));
   pickerRow.appendChild(el('span',{class:'small'},['Customer']));
-  pickerRow.appendChild(ownerSel);
+  pickerRow.appendChild(ownerInput);
+  pickerRow.appendChild(ownerDatalist);
   pickerRow.appendChild(el('span',{class:'small'},['Site']));
   pickerRow.appendChild(siteSel);
   pickerPanel.appendChild(pickerRow);
@@ -945,6 +985,13 @@ function monthlyChart(s) {
   s.pri.forEach((v,i)=>{ if(v!==null) svgEl.appendChild(svg('circle',{cx:xAt(i),cy:yIdx(v),r:2.5, fill:'var(--lead)'})); });
   // x labels (yearly ticks)
   s.months.forEach((mo,i)=>{ if (mo.endsWith('-01')) svgEl.appendChild(svg('text',{x:xAt(i),y:h-6,'text-anchor':'middle'})).textContent = mo.slice(0,4); });
+
+  // axes: left = MWh (bars), right = PI/PRI index (0-1.3), x = month
+  svgEl.appendChild(svg('line', {x1:pad, y1:0, x2:pad, y2:h-pad, stroke:AXIS_COLOR, 'stroke-width':1}));
+  svgEl.appendChild(svg('line', {x1:pad, y1:h-pad, x2:w-pad, y2:h-pad, stroke:AXIS_COLOR, 'stroke-width':1}));
+  svgEl.appendChild(svg('text', {x:pad+4, y:12, style:'font-size:10px; font-weight:bold; fill:var(--accent)'})).textContent = `MWh (max ${fmtNum(maxMwh,0)})`;
+  svgEl.appendChild(svg('text', {x:w-pad-4, y:12, 'text-anchor':'end', style:'font-size:10px; font-weight:bold; fill:var(--good)'})).textContent = 'PI / PRI (0-1.3)';
+  svgEl.appendChild(svg('text', {x:w/2, y:h-18, 'text-anchor':'middle', style:'font-size:10px; font-weight:bold; fill:var(--ink)'})).textContent = 'Month';
   return svgEl;
 }
 
