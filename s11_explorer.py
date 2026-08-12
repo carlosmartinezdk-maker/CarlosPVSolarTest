@@ -15,9 +15,11 @@ per the brief's "standing caveats" requirement.
 import json
 import logging
 import math
+import os
 
 import numpy as np
 import pandas as pd
+import yaml
 
 import config
 
@@ -82,6 +84,178 @@ def pi_bias_diagnostic(idx: pd.DataFrame, sites: pd.DataFrame) -> dict:
     )
 
 
+def load_pricing(path: str = "pricing.yaml") -> dict:
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+# --------------------------------------------------------------------------
+# Explorer v2 Part E - service routing layer
+# --------------------------------------------------------------------------
+QUADRANT_BASE_OFFERING = {
+    "plant_specific_fault": "Recurrent Inspection",
+    "weather_or_curtailment": "SCADA Monitoring",
+    "peer_group_distant": "Solar SaaS",
+    "normal_conditions": "Solar SaaS",
+}
+
+
+def compute_quadrant(pi, pri, threshold=None) -> str | None:
+    """Carlos's PI/PRI matrix (brief Part E). threshold=0.92 on both."""
+    threshold = config.PI_PRI_DECISION_THRESHOLD if threshold is None else threshold
+    if pi is None or pri is None:
+        return None
+    pi_low, pri_low = pi < threshold, pri < threshold
+    if pi_low and pri_low:
+        return "plant_specific_fault"
+    if pi_low and not pri_low:
+        return "weather_or_curtailment"
+    if not pi_low and pri_low:
+        return "peer_group_distant"
+    return "normal_conditions"
+
+
+def trailing12_modal_quadrant(months: list, pi_arr: list, pri_arr: list, threshold=None) -> str | None:
+    """A single odd month should not reroute a site - trailing-12-month
+    modal quadrant is what actually drives routing; the latest-month
+    quadrant is shown alongside for urgency only (brief Part E)."""
+    quads = [compute_quadrant(pi_arr[i], pri_arr[i], threshold) for i in range(len(months))][-12:]
+    quads = [q for q in quads if q is not None]
+    if not quads:
+        return None
+    return max(set(quads), key=quads.count)
+
+
+def compute_routing(pi_latest, pri_latest, quadrant_trailing12, beta_excess, beta_t,
+                     age_years, warranty_active, eal_top_decile, pricing) -> dict:
+    """Two-step routing (brief Part E section 7): quadrant gives the base
+    offering, then trajectory/age/warranty overlay adds RVM, warranty claim
+    support, or the SCADA prevention sale. A site can carry more than one
+    offering."""
+    quadrant_latest = compute_quadrant(pi_latest, pri_latest)
+    base_offering = QUADRANT_BASE_OFFERING.get(quadrant_trailing12)
+    offerings = [base_offering] if base_offering else []
+    rvm = pricing["rvm_eligibility"]
+    slope_significant = beta_excess is not None and beta_t is not None and abs(beta_t) >= abs(rvm["beta_t_threshold"])
+    declining = slope_significant and beta_excess < rvm["beta_excess_threshold"]
+
+    warranty_claim = bool(warranty_active and declining)
+    rvm_eligible = bool(declining and not warranty_active and age_years is not None
+                         and age_years >= rvm["min_age_years"])
+    if warranty_claim:
+        offerings = ["Warranty Claim Support"] + offerings  # highest priority - carries a deadline
+    elif rvm_eligible:
+        offerings.append("RVM")
+    if eal_top_decile and "SCADA Monitoring" not in offerings:
+        offerings.append("SCADA Monitoring")  # the prevention sale
+    return dict(
+        quadrant_latest=quadrant_latest, quadrant_trailing12=quadrant_trailing12,
+        base_offering=base_offering, rvm_eligible=rvm_eligible, warranty_active=bool(warranty_active),
+        warranty_claim_support=warranty_claim, recommended_offerings=offerings,
+    )
+
+
+# --------------------------------------------------------------------------
+# Explorer v2 Part F - ROI engine (PRICING_AND_ROI_ADDENDUM.md)
+# --------------------------------------------------------------------------
+def repair_cost(signature: str, severity, mwdc, pricing) -> dict:
+    """addendum section 3: repair_cost = mobilisation + unit_rate x
+    affected_mwdc, affected_mwdc = mwdc x severity (block_fraction for a
+    fitted BLOCK_OUTAGE, else D). ESTIMATE, not a vendor quote."""
+    rc = pricing["repair_costs"]["by_signature"].get(signature)
+    if rc is None or severity is None or mwdc is None:
+        return dict(repair_cost_usd=None, affected_mwdc=None, repair_uneconomic=False,
+                    repair_cost_source="ESTIMATE")
+    affected = mwdc * severity
+    cost = rc["mobilisation_usd"] + rc["usd_per_mwdc_affected"] * affected
+    cap = pricing["repair_costs"]["uneconomic_repair_fraction_of_capex"] * pricing["repair_costs"]["capex_usd_per_mwdc"] * mwdc
+    return dict(repair_cost_usd=r(cost, 0), affected_mwdc=r(affected, 3),
+                repair_uneconomic=bool(cost > cap), repair_cost_source="ESTIMATE")
+
+
+def remediation_timeline(signature: str, pricing) -> dict:
+    """addendum section 5: t_detect = data_lag + review_cadence/2;
+    t_total = t_detect + t_remediate(signature)."""
+    t = pricing["timelines"]
+    t_detect = t["data_lag_months"] + t["review_cadence_months"] / 2
+    t_remediate = t["remediation_months"].get(signature)
+    if t_remediate is None:
+        return dict(t_detect_months=r(t_detect, 2), t_remediate_months=None, t_total_months=None)
+    t_total = t_detect + t_remediate
+    return dict(t_detect_months=r(t_detect, 2), t_remediate_months=r(t_remediate, 2), t_total_months=r(t_total, 2))
+
+
+def detection_value(recoverable_usd_yr, t_total_months, pricing) -> dict:
+    """addendum section 5: V_detect_year1 prorates by the detection +
+    remediation clock; steady-state is the full recoverable value."""
+    conv = pricing["conversion"]["detection_to_remediation"]
+    steady = (recoverable_usd_yr or 0) * conv
+    if t_total_months is None:
+        return dict(v_detect_year1_usd=r(steady, 0), v_detect_steady_usd=r(steady, 0))
+    year1 = steady * max(0, 1 - t_total_months / 12)
+    return dict(v_detect_year1_usd=r(year1, 0), v_detect_steady_usd=r(steady, 0))
+
+
+def cost_of_inaction(recoverable_usd_yr, beta_excess, beta_t, horizon_years, discount_rate, pricing) -> float | None:
+    """addendum: loss_h = current_gap x (1+|beta_excess|)^h, discounted.
+    Only compound a beta whose |t| >= threshold (Part A5/test 37) - never
+    compound a noise slope into a multi-year dollar figure."""
+    if recoverable_usd_yr is None:
+        return None
+    slope_significant = beta_excess is not None and beta_t is not None and \
+        abs(beta_t) >= config.BETA_T_SIGNIFICANCE_THRESHOLD
+    growth = abs(beta_excess) if (slope_significant and beta_excess is not None and beta_excess < 0) else 0.0
+    total = 0.0
+    for h in range(1, horizon_years + 1):
+        loss_h = recoverable_usd_yr * (1 + growth) ** h
+        total += loss_h / (1 + discount_rate) ** h
+    return r(total, 0)
+
+
+def compute_roi(recoverable_usd_yr, offerings, mwdc, signature, severity, beta_excess, beta_t, pricing) -> dict:
+    off = pricing["offerings"]
+    fee = 0.0
+    fee_sources = []
+    if "Solar SaaS" in offerings:
+        fee += off["solar_saas"]["usd_per_mwdc_year"] * (mwdc or 0); fee_sources.append("solar_saas")
+    if "SCADA Monitoring" in offerings:
+        fee += off["scada_monitoring"]["usd_per_mwdc_year"] * (mwdc or 0); fee_sources.append("scada_monitoring")
+    if "Recurrent Inspection" in offerings:
+        insp = off["solar_inspection"]
+        fee += insp["usd_per_mwdc_inspected"] * (mwdc or 0) * insp["inspections_per_year"]
+        fee_sources.append("solar_inspection")
+
+    rc = repair_cost(signature, severity, mwdc, pricing)
+    rvm_fee_gross = rvm_fee_incremental = None
+    if "RVM" in offerings and rc["repair_cost_usd"] is not None and not rc["repair_uneconomic"]:
+        markup = off["rvm"]["markup_pct_of_repair_spend"]
+        rvm_fee_gross = r(rc["repair_cost_usd"] * (1 + markup), 0)
+        rvm_fee_incremental = r(rc["repair_cost_usd"] * markup, 0)  # addendum sec 4: default headline
+
+    timeline = remediation_timeline(signature, pricing)
+    value = detection_value(recoverable_usd_yr, timeline["t_total_months"], pricing)
+    horizon = pricing["horizon_years"]
+    coi = cost_of_inaction(recoverable_usd_yr, beta_excess, beta_t, horizon, pricing["discount_rate"], pricing)
+
+    ssi_cost = fee * horizon  # simple undiscounted sum for the ratio; net_benefit below discounts CoI already
+    net_benefit = (coi or 0) - ssi_cost
+    roi_multiple = (coi / ssi_cost) if (coi and ssi_cost > 0) else None
+    payback_months = (12 * fee / value["v_detect_steady_usd"]) if (fee > 0 and value["v_detect_steady_usd"]) else None
+    ratio_suppressed = bool(roi_multiple is not None and roi_multiple > pricing["ratio_suppression_threshold"])
+
+    return dict(
+        annual_fee_usd=r(fee, 0) if fee else 0, pricing_source="confirmed" if fee_sources else None,
+        repair_cost_usd=rc["repair_cost_usd"], repair_cost_source=rc["repair_cost_source"],
+        repair_uneconomic=rc["repair_uneconomic"],
+        rvm_fee_gross_usd=rvm_fee_gross, rvm_fee_incremental_usd=rvm_fee_incremental,
+        t_detect_months=timeline["t_detect_months"], t_remediate_months=timeline["t_remediate_months"],
+        v_detect_year1_usd=value["v_detect_year1_usd"], v_detect_steady_usd=value["v_detect_steady_usd"],
+        cost_of_inaction_usd=coi, net_benefit_usd=r(net_benefit, 0) if coi is not None else None,
+        roi_multiple=None if ratio_suppressed else (r(roi_multiple, 1) if roi_multiple is not None else None),
+        ratio_suppressed=ratio_suppressed, payback_months=r(payback_months, 1) if payback_months is not None else None,
+    )
+
+
 def compute_conviction_tier(site_years: pd.DataFrame, traj_row: pd.Series | None,
                              recoverable_usd_yr: float = 0.0, excess_category: str | None = None) -> str:
     """Explorer v2 Part A5/A6: tier must consume trajectory AND dollars, and
@@ -136,12 +310,25 @@ def build_payload() -> dict:
     nsrdb_summary = pd.read_parquet("data/nsrdb_pull_summary.parquet")
     idx = pd.read_parquet("data/site_month_indices.parquet")
     pi_bias = pi_bias_diagnostic(idx, sites)
+    pricing = load_pricing()
 
     dollars = dollars.sort_values(["site", "month_start"])
 
     site_year_stats = dollars.groupby(["site", "year"]).agg(
         mean_PI=("PI", "mean"), is_lead=("is_lead", "max")
     ).reset_index()
+
+    # Part E prevention overlay: "EAL in the top decile of peers". No
+    # single $ EAL column exists yet in S8's output, so this is a proxy
+    # (shrunk event rate x severity, summed across signatures) - directionally
+    # right for ranking, not a claimed dollar figure. Documented as such.
+    if len(credibility):
+        eal_proxy = (credibility.assign(_eal=credibility["lambda_shrunk"] * credibility["tau_s"])
+                     .groupby("site")["_eal"].sum())
+        eal_decile_cutoff = eal_proxy.quantile(0.9)
+    else:
+        eal_proxy = pd.Series(dtype=float)
+        eal_decile_cutoff = None
 
     site_payloads = []
     for _, srow in sites.iterrows():
@@ -232,7 +419,42 @@ def build_payload() -> dict:
 
         cred = credibility[credibility["site"] == site]
 
+        # Part E/F: routing + ROI. Severity for repair costing comes from
+        # the most recent fault month - block_fraction when a BLOCK_OUTAGE
+        # fraction was fitted, D otherwise (addendum section 3).
+        age_years = srow.get("plant_age")
+        age_years = None if pd.isna(age_years) else float(age_years)
+        warranty_active = bool(age_years is not None and age_years < config.WARRANTY_DEFAULTS_YEARS["module_performance"])
+        fault_idxs = [i for i, sgv in enumerate(sig_final) if sgv not in ("NONE", "UNSCORED", "WATCH_NOT_A_FAULT")]
+        if fault_idxs:
+            fi = fault_idxs[-1]
+            fault_sig = sig_final[fi]
+            severity = block_fraction[fi] if (fault_sig == "BLOCK_OUTAGE" and block_fraction[fi]) else d_arr[fi]
+            if isinstance(severity, str):
+                severity = None
+        else:
+            fault_sig, severity = top_signature, None
+        quadrant_trailing12 = trailing12_modal_quadrant(months, pi, pri)
+        site_eal = eal_proxy.get(site, 0.0)
+        eal_top_decile = bool(eal_decile_cutoff is not None and site_eal >= eal_decile_cutoff and site_eal > 0)
+        routing = compute_routing(
+            pi_latest=latest_scored.get("PI") if latest_scored is not None else None,
+            pri_latest=latest_scored.get("PRI") if latest_scored is not None else None,
+            quadrant_trailing12=quadrant_trailing12,
+            beta_excess=t["beta_excess"] if t is not None else None,
+            beta_t=t["beta_t"] if t is not None else None,
+            age_years=age_years, warranty_active=warranty_active,
+            eal_top_decile=eal_top_decile, pricing=pricing,
+        )
+        roi = compute_roi(
+            recoverable_usd_yr=recoverable_usd_yr, offerings=routing["recommended_offerings"],
+            mwdc=srow.get("mwdc"), signature=fault_sig, severity=severity,
+            beta_excess=t["beta_excess"] if t is not None else None,
+            beta_t=t["beta_t"] if t is not None else None, pricing=pricing,
+        )
+
         site_payloads.append(dict(
+            **routing, **roi,
             site=site, state=srow.get("state"), operator=srow.get("operator"),
             utility=srow.get("utility"), county=srow.get("county"), ba=srow.get("ba"),
             plant_id=r(srow.get("plant_id"), 0), mwac=r(srow.get("mwac"), 2), mwdc=r(srow.get("mwdc"), 2),

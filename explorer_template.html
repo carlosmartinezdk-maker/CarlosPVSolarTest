@@ -121,10 +121,12 @@ textarea.note { width:100%; background: #fff; color:var(--ink); border:1px solid
 <header id="topbar">
   <h1>PI/PRI Solar Underperformance Explorer</h1>
   <nav class="seg" id="view-nav">
-    <button data-view="fleet" class="active">Fleet Overview</button>
+    <button data-view="owners" class="active">Owners</button>
+    <button data-view="fleet">Portfolio Overview</button>
     <button data-view="triage">Triage List</button>
     <button data-view="detail">Site Detail</button>
   </nav>
+  <span class="small" id="breadcrumb"></span>
   <span class="pos-indicator" id="pos-indicator"></span>
   <span class="methlink" id="meth-link" style="margin-left:auto">How to read this</span>
   <span class="small" id="progress-indicator"></span>
@@ -204,9 +206,10 @@ function hideTip() { tipEl.style.display = 'none'; }
 
 // ---------------------------------------------------------------- state ----
 const state = {
-  view: 'fleet',
+  view: 'owners',
   filters: { year:'', tracking:'', module:'', tier:'', signature:'', confidence:'',
-             search:'', peersLt4:false, gap2022:false, noAssetMatch:false, state:'', stale:'' },
+             search:'', peersLt4:false, gap2022:false, noAssetMatch:false, state:'', stale:'', utility:'' },
+  ownersMultiSiteOnly: true,
   sortCol: 'recoverable_usd_yr', sortDir: -1,
   currentSite: null,
 };
@@ -219,6 +222,7 @@ let triage = loadTriage();
 
 // ------------------------------------------------------------- filtering ----
 function siteMatches(s, f) {
+  if (f.utility && s.utility !== f.utility) return false;
   if (f.state && s.state !== f.state) return false;
   if (f.tracking && s.tracking !== f.tracking) return false;
   if (f.module && s.module !== f.module) return false;
@@ -575,7 +579,7 @@ function renderFilterBar(container) {
   const gapChk = el('label',{},[el('input',{type:'checkbox', onchange:e=>{state.filters.gap2022=e.target.checked; rerenderCurrent();}}), ' has 2022 gap']);
   const noAssetChk = el('label',{},[el('input',{type:'checkbox', onchange:e=>{state.filters.noAssetMatch=e.target.checked; rerenderCurrent();}}), ' no asset match']);
 
-  const clearBtn = el('button', {onclick:()=>{state.filters={year:'',tracking:'',module:'',tier:'',signature:'',confidence:'',search:'',peersLt4:false,gap2022:false,noAssetMatch:false,stale:'',state:''}; rerenderCurrent();}}, ['Clear filters']);
+  const clearBtn = el('button', {onclick:()=>{state.filters={year:'',tracking:'',module:'',tier:'',signature:'',confidence:'',search:'',peersLt4:false,gap2022:false,noAssetMatch:false,stale:'',state:'',utility:''}; rerenderCurrent();}}, ['Clear filters']);
   const exportBtn = el('button', {onclick: exportCsv}, ['Export filtered CSV']);
 
   [trackingSel, tierSel, sigSel, staleSel, search, peersChk, gapChk, noAssetChk, clearBtn, exportBtn].forEach(x=>bar.appendChild(x));
@@ -849,12 +853,86 @@ function rerenderCurrent() { render(); }
 
 function render() {
   document.querySelectorAll('#topbar nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===state.view));
-  if (state.view==='fleet') renderFleet();
+  if (state.view==='owners') renderOwners();
+  else if (state.view==='fleet') renderFleet();
   else if (state.view==='triage') renderTriage();
   else renderDetail();
   const reviewed = Object.values(triage).filter(t=>t.status && t.status!=='unreviewed').length;
   document.getElementById('progress-indicator').textContent = `reviewed ${reviewed} of ${DATA.sites.length}`;
+  renderBreadcrumb();
   renderScopeBanner();
+}
+
+function renderBreadcrumb() {
+  const parts = ['Portfolio'];
+  if (state.filters.utility) parts.push(state.filters.utility);
+  if (state.view==='detail' && state.currentSite) parts.push(state.currentSite);
+  document.getElementById('breadcrumb').textContent = parts.join(' › ');
+}
+
+// Part D View 2 - Owners (landing view). SkySpecs sells to asset owners,
+// not sites: a ranked owner list with portfolio-level exposure and a
+// recommended bundle is the actual sales motion. Grouped on `utility`
+// (J4, confirmed: zero nulls across the scoreable fleet). Defaults to
+// multi-site owners (the addendum: 282 of 2,147 owners hold 60% of
+// scoreable MWdc; the other 1,865 are single-site, a long tail) with a
+// toggle for the full list.
+function renderOwners() {
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+  const panel = el('div', {class:'card-panel'});
+  panelHeader(panel, 'PORTFOLIO', 'Owners',
+    'One row per owner (utility_name), aggregated across their sites - sorted by 3-year cost of inaction, the number that answers "who do we call first." Click a row to filter every other view to that owner.');
+
+  const toggle = el('div', {class:'seg', style:'margin-bottom:10px'});
+  ['Multi-site owners', 'All owners (incl. single-site)'].forEach((label, i) => {
+    toggle.appendChild(el('button', {class: (state.ownersMultiSiteOnly ? i===0 : i===1) ? 'active':'', onclick:()=>{
+      state.ownersMultiSiteOnly = i===0; renderOwners();
+    }}, [label]));
+  });
+  panel.appendChild(toggle);
+
+  const byOwner = {};
+  DATA.sites.forEach(s => { const o = s.utility || '(no utility on file)'; (byOwner[o] = byOwner[o] || []).push(s); });
+  let owners = Object.entries(byOwner).map(([owner, ss]) => {
+    const pris = ss.map(s=>s.latest_pri).filter(v=>v!==null).sort((a,b)=>a-b);
+    const medianPri = pris.length ? pris[Math.floor(pris.length/2)] : null;
+    const quadCounts = {};
+    ss.forEach(s => { const q = s.quadrant_trailing12 || 'insufficient_data'; quadCounts[q] = (quadCounts[q]||0)+1; });
+    const recoverable = ss.reduce((a,s)=>a+(s.recoverable_usd_yr||0), 0);
+    const coi = ss.reduce((a,s)=>a+(s.cost_of_inaction_usd||0), 0);
+    const fee = ss.reduce((a,s)=>a+(s.annual_fee_usd||0), 0);
+    const offeringCounts = {};
+    ss.forEach(s => (s.recommended_offerings||[]).forEach(o2 => offeringCounts[o2]=(offeringCounts[o2]||0)+1));
+    const bundle = Object.entries(offeringCounts).sort((a,b)=>b[1]-a[1]).map(([o2])=>o2);
+    const warrantyUrgent = ss.filter(s=>s.warranty_urgent).length;
+    const mwdc = ss.reduce((a,s)=>a+(s.mwdc||0), 0);
+    return { owner, n: ss.length, mwdc, medianPri, quadCounts, recoverable, coi, fee, bundle, warrantyUrgent,
+             roiMultiple: (coi && fee*3>0 && coi/(fee*3)<=20) ? coi/(fee*3) : null,
+             payback: fee>0 ? 12*fee/Math.max(1,recoverable*0.85) : null };
+  });
+  if (state.ownersMultiSiteOnly) owners = owners.filter(o=>o.n>1);
+  owners.sort((a,b) => b.coi - a.coi);
+
+  panel.appendChild(el('div',{class:'small', style:'margin-bottom:8px'},
+    [`${owners.length} owners shown (${Object.keys(byOwner).length} total, ${Object.values(byOwner).filter(s=>s.length>1).length} multi-site).`]));
+
+  const cols = ['Owner','Sites','MWdc','Median PRI','Quadrant mix','Recoverable $/yr','3yr cost of inaction',
+    'Recommended bundle','Annual fee','ROI multiple','Payback (mo)','Warranty-urgent'];
+  const table = el('table', {class:'grid'});
+  table.appendChild(el('tr',{}, cols.map((c,i)=>el('th',{class:i===0?'kcol':''},[c]))));
+  owners.forEach(o => {
+    const tr = el('tr', {onclick:()=>{ state.filters.utility = o.owner; state.view='fleet'; location.hash=''; render(); }});
+    const quadStr = Object.entries(o.quadCounts).map(([k,v])=>`${k.slice(0,4)}:${v}`).join(' ');
+    [o.owner, o.n, fmtNum(o.mwdc,1), fmtNum(o.medianPri,3), quadStr, fmtUsd(o.recoverable), fmtUsd(o.coi),
+     o.bundle.slice(0,2).join(', ')||'—', fmtUsd(o.fee),
+     o.roiMultiple ? fmtNum(o.roiMultiple,1)+'x' : (o.fee>0?'net/payback only':'—'),
+     o.payback!==null ? fmtNum(o.payback,1) : '—', o.warrantyUrgent||''
+    ].forEach((v,i) => tr.appendChild(el('td', {class:i===0?'kcol':''}, [String(v)])));
+    table.appendChild(tr);
+  });
+  panel.appendChild(el('div',{class:'tblscroll'},[table]));
+  m.appendChild(panel);
 }
 
 // Part H: non-dismissable scope banner, same pattern the weather-track

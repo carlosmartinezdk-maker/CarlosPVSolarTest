@@ -94,6 +94,12 @@ def test_38_map_offline_and_markers_land_in_state():
         page.on("pageerror", lambda exc: errors.append(str(exc)))
         page.goto(path)
         page.wait_for_timeout(400)
+        modal_close = page.locator(".modal button.close")
+        if modal_close.count():
+            modal_close.click()
+        # the map lives on Portfolio Overview (Fleet); Owners is the Part D landing view
+        page.click("button[data-view='fleet']")
+        page.wait_for_timeout(300)
         n_states = page.locator("path.geo").count()
         assert n_states == 51, f"expected 51 state polygons rendered offline, got {n_states}"
         assert not errors, f"page errors while rendering the offline map: {errors}"
