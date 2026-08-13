@@ -8,6 +8,8 @@ Run from repo root: PYTHONPATH=. python3 tests/test_reliability.py
 import json
 import os
 
+import numpy as np
+import openpyxl
 import pandas as pd
 
 import config
@@ -83,9 +85,59 @@ def test_explorer_reliability_payload_present():
     print(f"test (explorer reliability payload): passed, {len(rel['signatures'])} signatures embedded")
 
 
+def test_41_conditional_probability_bounds():
+    """Q(t0+t|t0) lies in [0,1] and is monotonically non-decreasing in t
+    for every fitted signature (addendum test 41)."""
+    forecast = pd.read_parquet(os.path.join(REPO_ROOT, "data/reliability_forecast.parquet"))
+    bad_bounds = forecast[(forecast["cond_prob_failure"] < 0) | (forecast["cond_prob_failure"] > 1)]
+    assert len(bad_bounds) == 0, f"{len(bad_bounds)} forecast rows outside [0,1]"
+    n_checked = 0
+    for (site, sig), g in forecast.groupby(["site", "signature"]):
+        probs = g.sort_values("horizon_months")["cond_prob_failure"].to_numpy()
+        assert np.all(np.diff(probs) >= -1e-9), f"non-monotonic forecast at {site}/{sig}: {probs}"
+        n_checked += 1
+    print(f"test 41 (conditional probability bounds): passed, {len(forecast)} rows / {n_checked} site-signature series checked")
+
+
+def test_at_risk_excludes_mid_episode_sites():
+    """A site currently mid-episode for a signature (no tail suspension
+    after its last failure) must not appear in the forecast for that
+    signature - it isn't at risk of STARTING a new episode while already
+    in one (Section 6)."""
+    life = pd.read_parquet(os.path.join(REPO_ROOT, "data/life_records.parquet"))
+    forecast = pd.read_parquet(os.path.join(REPO_ROOT, "data/reliability_forecast.parquet"))
+    last = life.sort_values("spell_index").groupby(["site", "signature"], as_index=False).tail(1)
+    mid_episode = set(zip(last.loc[last["status"] == "F", "site"], last.loc[last["status"] == "F", "signature"]))
+    forecast_pairs = set(zip(forecast["site"], forecast["signature"]))
+    overlap = mid_episode & forecast_pairs
+    assert not overlap, f"{len(overlap)} mid-episode site/signature pairs incorrectly forecast: {list(overlap)[:5]}"
+    print(f"test (at-risk excludes mid-episode): passed, {len(mid_episode)} mid-episode pairs correctly excluded")
+
+
+def test_workbook_reconciliation_gates_pass():
+    """S17's Reconciliation tab gates must all read PASS before the
+    workbook is delivered (addendum test 46) - a failing gate blocks
+    delivery, not just a printed warning."""
+    path = os.path.join(REPO_ROOT, "output/SSI_Solar_Reliability_Metrics.xlsx")
+    wb = openpyxl.load_workbook(path, data_only=False)
+    assert "Reconciliation" in wb.sheetnames, "workbook missing Reconciliation tab"
+    ws = wb["Reconciliation"]
+    fails = [row[0].value for row in ws.iter_rows(min_row=2) if row[3].value == "FAIL"]
+    assert not fails, f"Reconciliation gate(s) failing: {fails}"
+    expected_tabs = {"Notes", "Assumptions", "Fleet Summary", "Life Records", "Fits", "Hazard by Age",
+                      "Forecast", "Spares Plan", "Inspection Schedule", "Warranty Value",
+                      "Vintage Scorecard", "FMECA", "Benchmark", "Reconciliation"}
+    missing = expected_tabs - set(wb.sheetnames)
+    assert not missing, f"workbook missing tabs: {missing}"
+    print(f"test (workbook reconciliation + tabs): passed, {len(wb.sheetnames)} sheets, all Reconciliation gates PASS")
+
+
 if __name__ == "__main__":
     test_life_records_no_negative_duration()
     test_life_records_only_reliability_signatures()
     test_min_failures_threshold_flagged()
     test_beta_below_one_never_rvm_eligible()
     test_explorer_reliability_payload_present()
+    test_41_conditional_probability_bounds()
+    test_at_risk_excludes_mid_episode_sites()
+    test_workbook_reconciliation_gates_pass()

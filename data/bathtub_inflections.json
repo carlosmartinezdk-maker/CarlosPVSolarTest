@@ -1,0 +1,32 @@
+{
+  "BLOCK_OUTAGE": {
+    "infant_end_years": 16.0,
+    "wearout_start_years": 16.0,
+    "note": null
+  },
+  "BOS_INTERMITTENT": {
+    "infant_end_years": 16.0,
+    "wearout_start_years": 16.0,
+    "note": null
+  },
+  "OUTAGE_FULL": {
+    "infant_end_years": 4.0,
+    "wearout_start_years": 4.0,
+    "note": null
+  },
+  "SOILING": {
+    "infant_end_years": 10.0,
+    "wearout_start_years": 10.0,
+    "note": null
+  },
+  "TRACKER": {
+    "infant_end_years": 8.0,
+    "wearout_start_years": 8.0,
+    "note": null
+  },
+  "UNATTRIBUTED": {
+    "infant_end_years": 8.0,
+    "wearout_start_years": 8.0,
+    "note": null
+  }
+}

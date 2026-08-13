@@ -78,6 +78,18 @@ WARRANTY_DEFAULTS_YEARS = {
 }
 WARRANTY_URGENT_THRESHOLD_YEARS = 0.5  # < 6 months remaining
 
+# Reliability Engineering Addendum Section 9.2: the blanket 25yr
+# module_performance term marks 2,799/2,801 sites as "in warranty" for
+# every fault type, which is wrong - that term covers power-output
+# degradation over time, not the equipment/workmanship failures the 6
+# RELIABILITY_SIGNATURES represent. Those are covered by the much shorter
+# inverter and module-product warranties. Blended midpoint used as a single
+# representative term (a simplification - true coverage varies by which
+# component actually failed, which we cannot observe at plant-level
+# resolution) rather than reusing module_performance for reliability
+# warranty-valuation math (S14).
+RELIABILITY_WARRANTY_YEARS = (WARRANTY_DEFAULTS_YEARS["inverter_max"] + WARRANTY_DEFAULTS_YEARS["module_product_max"]) / 2
+
 # --------------------------------------------------------------------------
 # D-Band fault classifier (Fault Estimation Tracker, restated at S6)
 # --------------------------------------------------------------------------

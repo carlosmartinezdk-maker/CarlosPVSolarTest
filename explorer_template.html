@@ -932,6 +932,66 @@ function renderDetail() {
   grid.appendChild(riskPanel);
   m.appendChild(grid);
 
+  // Reliability panel (S12-S16) - sits below Risk, answers *why* the risk
+  // number is what it is. Uses the fleet-level fit for the site's dominant
+  // signature (no per-site refit in this pass) plus the site's own
+  // forecast/inspection numbers.
+  if (s.rel) {
+    const relPanel = el('div', {class:'card-panel'});
+    panelHeader(relPanel, 'RELIABILITY', 'Life data - this site');
+    const domSig = s.top_signature;
+    const domFit = (DATA.reliability && DATA.reliability.signatures || []).find(f=>f.signature===domSig);
+    if (domFit) {
+      const badge = el('div', {class:'small', style:'font-size:14px; font-weight:bold; padding:6px 10px; '+
+        'border-radius:4px; display:inline-block; margin-bottom:8px; background:var(--panel-border)'},
+        [`beta = ${fmtNum(domFit.weibull_beta,2)} · ${BETA_CLASS_LABEL[domFit.beta_classification]||domFit.beta_classification} `+
+         `(${SIG_LABEL[domSig]||domSig}, fleet-level fit - no per-site refit this pass)`]);
+      relPanel.appendChild(badge);
+    }
+    const relStrip = el('div', {class:'cards'});
+    [['N_blocks', s.rel.nb===null?'—':s.rel.nb], ['Current age (yr)', fmtNum(s.rel.age,1)]]
+      .forEach(([l,v]) => relStrip.appendChild(el('div',{class:'card'},[el('div',{class:'v'},[String(v)]), el('div',{class:'l'},[l])])));
+    relPanel.appendChild(relStrip);
+
+    const sigOrder = ['BLOCK_OUTAGE','BOS_INTERMITTENT','OUTAGE_FULL','SOILING','TRACKER','UNATTRIBUTED'];
+    const fcTable = el('table', {class:'grid'});
+    fcTable.appendChild(el('tr',{}, [el('th',{class:'kcol'},['Signature']), el('th',{},['At risk?']),
+      el('th',{},['12mo P(fail)']), el('th',{},['24mo P(fail)']), el('th',{},['36mo P(fail)'])]));
+    sigOrder.forEach((sig,i) => {
+      const tr = el('tr', {});
+      const atRisk = s.rel.at_risk && s.rel.at_risk[i];
+      [SIG_LABEL[sig]||sig, atRisk?'Yes':'No (mid-episode)',
+       atRisk?fmtNum(100*s.rel.p12[i],1)+'%':'—', atRisk?fmtNum(100*s.rel.p24[i],1)+'%':'—', atRisk?fmtNum(100*s.rel.p36[i],1)+'%':'—']
+        .forEach((v,j)=>tr.appendChild(el('td',{class:j===0?'kcol':''},[String(v)])));
+      fcTable.appendChild(tr);
+    });
+    relPanel.appendChild(el('div',{class:'interp'},['12/24/36-month conditional failure probability, pooled fleet-level fit - a young site\'s forecast leans mostly on this prior, not its own history.']));
+    relPanel.appendChild(el('div',{class:'tblscroll'},[fcTable]));
+
+    if (s.rel.insp) {
+      const [optT, optCost, saving, scadaVal] = s.rel.insp;
+      relPanel.appendChild(el('div',{class:'interp', style:'margin-top:10px'},[
+        `Recommended inspection interval: every ${optT} months (est. annual cost incl. undetected-loss risk: ${fmtUsd(optCost)}), `+
+        `saving ${fmtUsd(Math.max(0,saving))}/yr vs. the assumed 12-month baseline cadence. `+
+        `Continuous (SCADA) monitoring would be worth ${fmtUsd(Math.max(0,scadaVal))}/yr vs. that optimum at this site.`
+      ]));
+    }
+    if (s.rel.war) {
+      const [remaining, claimVal] = s.rel.war;
+      relPanel.appendChild(el('div',{class:'interp'},[
+        `Warranty: ${fmtNum(remaining,1)} years remaining under the reliability-relevant warranty term `+
+        `(blended inverter/module-product, not the 25yr output-performance term). Expected claim value: ${fmtUsd(claimVal)}.`
+      ]));
+    } else {
+      relPanel.appendChild(el('div',{class:'small'},['Outside the reliability-relevant warranty window.']));
+    }
+    relPanel.appendChild(el('div',{class:'small', style:'margin-top:8px'},[
+      'Data quality: left-truncated at this site\'s first PI-scored month; fitted on the pooled fleet-wide '+
+      'distribution, not this site\'s own history; any episode dated before COD was quarantined fleet-wide before fitting.'
+    ]));
+    m.appendChild(relPanel);
+  }
+
   // revenue table
   const revPanel = el('div', {class:'card-panel'});
   panelHeader(revPanel, 'DOLLARS', 'Recoverable revenue by month',
@@ -1070,16 +1130,21 @@ function renderOwners() {
   panel.appendChild(el('div',{class:'small', style:'margin-bottom:8px'},
     [`${owners.length} owners shown (${Object.keys(byOwner).length} total, ${Object.values(byOwner).filter(s=>s.length>1).length} multi-site).`]));
 
+  const sparesByOwner = (DATA.reliability && DATA.reliability.spares_by_owner) || {};
   const cols = ['Owner','Sites','MWdc','Median PRI','Recoverable $/yr','3yr cost of inaction',
-    'Recommended bundle','Annual fee','ROI multiple','Payback (mo)','Warranty-urgent'];
+    'Recommended bundle','Annual fee','ROI multiple','Payback (mo)','Warranty-urgent',
+    'Expected block failures (24mo)','Spares gap (95%)'];
   const table = el('table', {class:'grid'});
   table.appendChild(el('tr',{}, cols.map((c,i)=>el('th',{class:i===0?'kcol':''},[c]))));
   owners.forEach(o => {
     const tr = el('tr', {onclick:()=>{ state.filters.utility = o.owner; state.view='fleet'; location.hash=''; render(); }});
+    const sp = sparesByOwner[o.owner];
     [o.owner, o.n, fmtNum(o.mwdc,1), fmtNum(o.medianPri,3), fmtUsd(o.recoverable), fmtUsd(o.coi),
      o.bundle.slice(0,2).join(', ')||'—', fmtUsd(o.fee),
      o.roiMultiple ? fmtNum(o.roiMultiple,1)+'x' : (o.fee>0?'net/payback only':'—'),
-     o.payback!==null ? fmtNum(o.payback,1) : '—', o.warrantyUrgent||''
+     o.payback!==null ? fmtNum(o.payback,1) : '—', o.warrantyUrgent||'',
+     sp ? fmtNum(sp.expected_block_failures_24mo,1) : '—',
+     sp ? sp.gap_at_0_held : '—',
     ].forEach((v,i) => tr.appendChild(el('td', {class:i===0?'kcol':''}, [String(v)])));
     table.appendChild(tr);
   });
@@ -1120,6 +1185,26 @@ function renderReliability() {
   ])));
   kpiPanel.appendChild(strip);
   m.appendChild(kpiPanel);
+
+  if (rel.lost_energy_by_signature && rel.lost_energy_by_signature.length) {
+    const lossPanel = el('div', {class:'card-panel'});
+    panelHeader(lossPanel, 'LOST ENERGY', 'Lost-energy contribution by signature',
+      'Ranked by dollars, not episode count - a rare but long-running signature can cost more than a frequent, cheap one. Commercially the more useful ranking than the fault-count chart above.');
+    const sorted = rel.lost_energy_by_signature.slice().sort((a,b)=>b.lost_usd-a.lost_usd);
+    lossPanel.appendChild(barChart(sorted.map(s=>SIG_LABEL[s.signature]||s.signature), sorted.map(s=>s.lost_usd), 900, 170, {xLabel:'Signature', yLabel:'Lost USD'}));
+    m.appendChild(lossPanel);
+  }
+
+  if (rel.availability_benchmark) {
+    const availPanel = el('div', {class:'card-panel'});
+    panelHeader(availPanel, 'AVAILABILITY BENCHMARK', 'Fleet energy availability (1 - lost MWh / target MWh)');
+    const b = rel.availability_benchmark;
+    const strip2 = el('div', {class:'cards'});
+    [['P10', b.p10], ['Median', b.median], ['P90', b.p90]].forEach(([l,v]) => strip2.appendChild(
+      el('div',{class:'card'},[el('div',{class:'v'},[v!==null?(100*v).toFixed(1)+'%':'—']), el('div',{class:'l'},[l])])));
+    availPanel.appendChild(strip2);
+    m.appendChild(availPanel);
+  }
 
   const fitPanel = el('div', {class:'card-panel'});
   panelHeader(fitPanel, 'LIFE DATA FIT', 'Best-fit distribution and Weibull shape per signature',
@@ -1171,6 +1256,56 @@ function renderReliability() {
   });
   mttrPanel.appendChild(el('div',{class:'tblscroll'},[mttrTable]));
   m.appendChild(mttrPanel);
+
+  if (rel.hazard_by_age && rel.hazard_by_age.length) {
+    const bathtubPanel = el('div', {class:'card-panel'});
+    panelHeader(bathtubPanel, 'BATHTUB VERIFICATION', 'Empirical hazard rate by age band, per signature',
+      'Exploratory (addendum Section 9.8) - inflection points below use only age bands with >=3 site-years of exposure, to avoid reading a handful of sites as a trend.');
+    const bt = rel.bathtub_inflections || {};
+    const btTable = el('table', {class:'grid'});
+    btTable.appendChild(el('tr',{}, [el('th',{class:'kcol'},['Signature']), el('th',{},['Age band (yr)']), el('th',{},['Hazard rate']), el('th',{},['Exposure (site-yr)']), el('th',{},['Sites'])]));
+    const bySig = {};
+    rel.hazard_by_age.forEach(h => { (bySig[h.signature] = bySig[h.signature]||[]).push(h); });
+    Object.keys(bySig).sort().forEach(sig => {
+      bySig[sig].sort((a,b)=>a.age_low-b.age_low).forEach(h => {
+        const tr = el('tr', {});
+        [SIG_LABEL[sig]||sig, `${h.age_low}-${h.age_high}`, h.hazard_rate!==null?fmtNum(h.hazard_rate,3):'—',
+         fmtNum(h.exposure_years,1), h.n_sites].forEach((v,i)=>tr.appendChild(el('td',{class:i===0?'kcol':''},[String(v)])));
+        btTable.appendChild(tr);
+      });
+    });
+    bathtubPanel.appendChild(el('div',{class:'tblscroll', style:'max-height:320px'},[btTable]));
+    const inflLines = Object.keys(bt).map(sig => {
+      const inf = bt[sig];
+      return `${SIG_LABEL[sig]||sig}: infant-mortality end ~${inf.infant_end_years ?? '—'}yr, wear-out start ~${inf.wearout_start_years ?? '—'}yr${inf.note ? ' ('+inf.note+')' : ''}`;
+    });
+    bathtubPanel.appendChild(el('div',{class:'small', style:'margin-top:6px'},[inflLines.join(' | ')]));
+    m.appendChild(bathtubPanel);
+  }
+
+  if (rel.vintage_scorecard && rel.vintage_scorecard.length) {
+    const vsPanel = el('div', {class:'card-panel'});
+    panelHeader(vsPanel, 'VINTAGE SCORECARD', 'Failure rate by COD year band x tracking type',
+      'Cell counts shown so a thin cell (few sites/little exposure) is not read as a fleet-wide rate.');
+    const vsTable = el('table', {class:'grid'});
+    vsTable.appendChild(el('tr',{}, [el('th',{class:'kcol'},['COD band']), el('th',{},['Tracking']), el('th',{},['Sites']), el('th',{},['Failures']), el('th',{},['Exposure (site-yr)']), el('th',{},['Lambda (site-yr)'])]));
+    const lambdas = rel.vintage_scorecard.map(v=>v.lambda_site_yr).filter(v=>v!==null);
+    const maxLambda = lambdas.length ? Math.max(...lambdas) : 1;
+    rel.vintage_scorecard.slice().sort((a,b)=> a.cod_band.localeCompare(b.cod_band) || String(a.tracking).localeCompare(String(b.tracking)))
+      .forEach(v => {
+        const tr = el('tr', {});
+        const heat = v.lambda_site_yr!==null ? Math.min(1, v.lambda_site_yr/maxLambda) : 0;
+        [v.cod_band, v.tracking, v.sites, v.failures, fmtNum(v.exposure_years,1), v.lambda_site_yr!==null?fmtNum(v.lambda_site_yr,3):'—']
+          .forEach((val,i)=>{
+            const td = el('td',{class:i===0?'kcol':''},[String(val)]);
+            if (i===5 && v.lambda_site_yr!==null) td.style.background = `rgba(200,60,40,${(0.08+0.5*heat).toFixed(2)})`;
+            tr.appendChild(td);
+          });
+        vsTable.appendChild(tr);
+      });
+    vsPanel.appendChild(el('div',{class:'tblscroll', style:'max-height:320px'},[vsTable]));
+    m.appendChild(vsPanel);
+  }
 }
 
 // Part H: non-dismissable scope banner, same pattern the weather-track

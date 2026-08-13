@@ -345,6 +345,8 @@ def build_payload() -> dict:
         eal_proxy = pd.Series(dtype=float)
         eal_decile_cutoff = None
 
+    reliability_site_lookup = load_reliability_site_lookup()
+
     site_payloads = []
     for _, srow in sites.iterrows():
         site = srow["site"]
@@ -504,6 +506,7 @@ def build_payload() -> dict:
             credibility=[dict(signature=row["signature"], lambda_shrunk=r(row["lambda_shrunk"], 4),
                               Z=r(row["credibility_Z"], 3), pool=row["pool_level"])
                         for _, row in cred.iterrows()],
+            rel=reliability_site_lookup.get(site),
         ))
 
     ledger_out = []
@@ -607,12 +610,18 @@ def build_payload() -> dict:
     return payload
 
 
+RELIABILITY_SIGS_SORTED = sorted(config.RELIABILITY_SIGNATURES)
+
+
 def load_reliability(path: str = "data/reliability_fits.json") -> dict:
-    """S12/S13 output (Reliability Engineering Addendum, first pass -
-    life-data fitting only; forecasting/spares/inspection-interval
-    optimization are S14-S16, not yet built). Returns a minimal
+    """S12-S16 output (Reliability Engineering Addendum). Returns a minimal
     'not_available' shape if S12/S13 haven't been run this cycle, so the
-    explorer degrades gracefully rather than crashing on a missing file."""
+    explorer degrades gracefully rather than crashing on a missing file.
+    S14-S16 fleet-level aggregates (lost-energy bar, bathtub hazard-by-age,
+    vintage scorecard, availability benchmark, owner spares rollup) are
+    included when their files exist; per-site forecast/inspection/warranty
+    data is returned separately by load_reliability_site_lookup() below,
+    since it's the expensive part of the 25MB payload budget."""
     if not os.path.exists(path):
         log.warning("%s not found - Reliability panel will show 'not available' (run "
                     "s12_lifedata.py + s13_reliability.py first)", path)
@@ -635,7 +644,8 @@ def load_reliability(path: str = "data/reliability_fits.json") -> dict:
             all_fits=[dict(family=f["family"], loglik=r(f["loglik"], 1), aic=r(f["aic"], 1))
                       for f in s["all_fits"]],
         ))
-    return dict(
+
+    out = dict(
         available=True,
         generated_from=fits.get("generated_from"),
         signatures=signatures,
@@ -645,9 +655,6 @@ def load_reliability(path: str = "data/reliability_fits.json") -> dict:
             for m in fits.get("mttr_diagnostic", [])
         ],
         notes=[
-            "First pass: life-data fitting (S12/S13) only. Forecasting, spares "
-            "planning, and inspection-interval optimization (S14-S16 in the "
-            "addendum) are not yet built.",
             "beta > 1 (wear-out) is the ONLY classification eligible for "
             "preventive-replacement/RVM framing - beta < 1 (infant mortality) is a "
             "warranty conversation, never a 'replace before it breaks' one.",
@@ -655,8 +662,123 @@ def load_reliability(path: str = "data/reliability_fits.json") -> dict:
             "~1.0 month reference - flagged as a signature-attribution question, "
             "not yet resolved. Treat SOILING-driven spares/forecast output as "
             "provisional until investigated.",
+            "Forecasting/inspection/spares math (S14-S16) uses one fleet-wide "
+            "Weibull fit per signature - there is no per-site or per-stratum refit "
+            "in this pass, so every site's forecast leans on the same pooled prior.",
         ],
+        lost_energy_by_signature=[], hazard_by_age=[], vintage_scorecard=[],
+        availability_benchmark=None, bathtub_inflections={}, spares_by_owner={},
     )
+
+    if os.path.exists("data/event_ledger.parquet"):
+        ledger = pd.read_parquet("data/event_ledger.parquet")
+        led = ledger[ledger["signature"].isin(config.RELIABILITY_SIGNATURES)]
+        total = led["usd_lost"].sum()
+        out["lost_energy_by_signature"] = [
+            dict(signature=sig, lost_mwh=r(g["mwh_lost"].sum(), 0), lost_usd=r(g["usd_lost"].sum(), 0),
+                 share_pct=r(100 * g["usd_lost"].sum() / total, 1) if total else 0)
+            for sig, g in led.groupby("signature")
+        ]
+
+    if os.path.exists("data/hazard_by_age.parquet"):
+        hazard = pd.read_parquet("data/hazard_by_age.parquet")
+        out["hazard_by_age"] = [
+            dict(signature=row["signature"], age_low=r(row["age_band_low"], 0), age_high=r(row["age_band_high"], 0),
+                 hazard_rate=r(row["hazard_rate"], 4) if pd.notna(row["hazard_rate"]) else None,
+                 exposure_years=r(row["exposure_years"], 1), n_sites=ri(row["n_sites"]))
+            for _, row in hazard.iterrows()
+        ]
+
+    if os.path.exists("data/bathtub_inflections.json"):
+        with open("data/bathtub_inflections.json") as f:
+            out["bathtub_inflections"] = json.load(f)
+
+    if os.path.exists("data/life_records.parquet") and os.path.exists("data/subsample_sites.parquet"):
+        life = pd.read_parquet("data/life_records.parquet")
+        sites_min = pd.read_parquet("data/subsample_sites.parquet")[["site", "tracking"]]
+        life2 = life.merge(sites_min, on="site", how="left")
+        life2["cod_band"] = life2["cod"].dt.year.map(
+            lambda y: f"{(int(y)//3)*3}-{(int(y)//3)*3+2}" if pd.notna(y) else "unknown")
+        vg = life2.groupby(["cod_band", "tracking"]).agg(
+            sites=("site", "nunique"), failures=("status", lambda s: (s == "F").sum()),
+            exposure_years=("duration_years", "sum")).reset_index()
+        out["vintage_scorecard"] = [
+            dict(cod_band=row["cod_band"], tracking=row["tracking"], sites=ri(row["sites"]),
+                 failures=ri(row["failures"]), exposure_years=r(row["exposure_years"], 1),
+                 lambda_site_yr=r(row["failures"] / row["exposure_years"], 3) if row["exposure_years"] else None)
+            for _, row in vg.iterrows()
+        ]
+
+    if os.path.exists("data/site_month_dollars.parquet"):
+        smd = pd.read_parquet("data/site_month_dollars.parquet")
+        site_target = smd.groupby("site")["T_mwh"].sum()
+        site_act = smd.groupby("site")["E_act_mwh"].sum()
+        avail = (1 - (site_target - site_act).clip(lower=0) / site_target.replace(0, float("nan"))).dropna()
+        if len(avail):
+            out["availability_benchmark"] = dict(
+                median=r(avail.median(), 4), p10=r(avail.quantile(0.10), 4), p90=r(avail.quantile(0.90), 4))
+
+    if os.path.exists("data/spares_plan.parquet"):
+        spares = pd.read_parquet("data/spares_plan.parquet")
+        out["spares_by_owner"] = {
+            row["owner"]: dict(n_sites=ri(row["n_sites"]), blocks_at_risk=ri(row["blocks_at_risk"]),
+                                expected_block_failures_24mo=r(row["expected_block_failures_24mo"], 2),
+                                spares_needed_95pct=ri(row["spares_needed_95pct"]),
+                                gap_at_0_held=ri(row["spares_needed_95pct"]))
+            for _, row in spares.iterrows()
+        }
+
+    return out
+
+
+def load_reliability_site_lookup() -> dict:
+    """Per-site reliability fields (S14/S16), keyed by site name, in the
+    same fixed 6-signature order as RELIABILITY_SIGS_SORTED so per-site
+    entries don't repeat signature name strings - this is the expensive
+    part of the payload addition (addendum Section 10's own budget
+    warning), kept to parallel arrays of rounded numbers accordingly."""
+    if not (os.path.exists("data/reliability_forecast.parquet") and os.path.exists("data/life_records.parquet")):
+        return {}
+
+    life = pd.read_parquet("data/life_records.parquet")
+    last = life.sort_values("spell_index").groupby(["site", "signature"], as_index=False).tail(1)
+    forecast = pd.read_parquet("data/reliability_forecast.parquet")
+    inspection = pd.read_parquet("data/inspection_schedule.parquet") if os.path.exists("data/inspection_schedule.parquet") else None
+    warranty = pd.read_parquet("data/warranty_valuation.parquet") if os.path.exists("data/warranty_valuation.parquet") else None
+
+    lookup = {}
+    n_blocks_by_site = last.groupby("site")["n_blocks"].first()
+    age_by_site = last.groupby("site")["age_last_known_years"].max()
+    fc_grouped = forecast.groupby(["site", "signature"]) if len(forecast) else None
+
+    for site in age_by_site.index:
+        entry = dict(nb=ri(n_blocks_by_site.get(site)), age=r(age_by_site.get(site), 2),
+                     at_risk=[], p12=[], p24=[], p36=[])
+        for sig in RELIABILITY_SIGS_SORTED:
+            key = (site, sig)
+            if fc_grouped is not None and key in fc_grouped.groups:
+                rows = forecast.loc[fc_grouped.groups[key]].set_index("horizon_months")
+                entry["at_risk"].append(True)
+                entry["p12"].append(r(rows.loc[12, "cond_prob_failure"], 4) if 12 in rows.index else None)
+                entry["p24"].append(r(rows.loc[24, "cond_prob_failure"], 4) if 24 in rows.index else None)
+                entry["p36"].append(r(rows.loc[36, "cond_prob_failure"], 4) if 36 in rows.index else None)
+            else:
+                entry["at_risk"].append(False)
+                entry["p12"].append(None); entry["p24"].append(None); entry["p36"].append(None)
+        lookup[site] = entry
+
+    if inspection is not None:
+        for row in inspection.itertuples():
+            if row.site in lookup:
+                lookup[row.site]["insp"] = [ri(row.optimal_interval_months), r(row.optimal_total_cost_usd, 0),
+                                             r(row.saving_vs_current_usd, 0), r(row.scada_value_usd, 0)]
+
+    if warranty is not None:
+        for row in warranty.itertuples():
+            if row.site in lookup:
+                lookup[row.site]["war"] = [r(row.remaining_window_years, 2), r(row.claim_value_usd, 0)]
+
+    return lookup
 
 
 def sanitize(obj):
