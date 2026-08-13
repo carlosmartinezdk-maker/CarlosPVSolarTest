@@ -109,8 +109,9 @@ def main():
     update_ledger_dollars("data/event_ledger.parquet", df)
 
     total_usd = df.loc[~df["signature_final"].isin(config.ZERO_RECOVERY_SIGNATURES), "value_usd"].sum()
+    n_sites = df["site"].nunique()
     log.info("S9 complete: total recoverable value (subsample, all years) = $%.0f "
-              "(NOT a fleet estimate - 100 sites, not 6,204)", total_usd)
+              "(NOT a fleet estimate - %d sites, not 6,204)", total_usd, n_sites)
 
     # Test 9/17 at row level.
     bad = df[df["signature_final"].isin(config.ZERO_RECOVERY_SIGNATURES) & (df["value_usd"] != 0)]

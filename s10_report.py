@@ -335,8 +335,11 @@ def main():
         f"Scope: {scope_desc}.",
         f"Weather track this run: {track_counts} - {decision_grade_reason}",
         "solar_assets_data.csv supplied and used - time-varying DC capacity on phased builds is live.",
-        "2022 EIA-923 gap (Section 4 item 1) is still open upstream; absent 2022 months are treated "
-        "as missing data throughout, never as zero or an outage.",
+        (f"2022 EIA-923 gap (Section 4 item 1) resolved {datetime.now().strftime('%Y-%m-%d')}: "
+         f"data/raw/production_long.csv's 2022 rows now come from a full-year re-pull "
+         f"({idx[pd.to_datetime(idx['month_start']).dt.year==2022]['site'].nunique()} sites with "
+         "2022 data scored this run), replacing the earlier partial export. Absent months for any "
+         "year are still treated as missing data throughout, never as zero or an outage."),
         "2026 (Jan-May) has PRI but never PI/PR_T (NSRDB has no 2026 data yet) and can never carry "
         "a qualified LEAD - see Section 0.7.",
         "rho_s recovery fractions are placeholders with no ground truth (Section 11 item 6 open).",

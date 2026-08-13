@@ -1,44 +1,44 @@
 {
   "BLOCK_OUTAGE": {
-    "n_site_years": 1640,
-    "var_over_mean": 0.09158970923971425,
+    "n_site_years": 2685,
+    "var_over_mean": 0.09303560470387856,
     "converged": true,
-    "alpha_intercept": 0.16549143762809015,
-    "aic": 4785.380238145889
+    "alpha_intercept": 0.09314863053832291,
+    "aic": 7851.859337321788
   },
   "BOS_INTERMITTENT": {
-    "n_site_years": 1999,
-    "var_over_mean": 0.2024944484714599,
+    "n_site_years": 3349,
+    "var_over_mean": 0.19933980888015224,
     "converged": true,
-    "alpha_intercept": 0.13956017061987788,
-    "aic": 6321.032417794733
+    "alpha_intercept": 0.11903283064831732,
+    "aic": 10483.021844326999
   },
   "OUTAGE_FULL": {
-    "n_site_years": 673,
-    "var_over_mean": 0.11048861420393782,
+    "n_site_years": 994,
+    "var_over_mean": 0.10913367610876855,
     "converged": true,
-    "alpha_intercept": 0.2219115906130735,
-    "aic": 1990.8736919289604
+    "alpha_intercept": 0.11373618455230629,
+    "aic": 2941.5531065502755
   },
   "SOILING": {
-    "n_site_years": 562,
-    "var_over_mean": 0.07661383255876374,
+    "n_site_years": 860,
+    "var_over_mean": 0.0637801953891794,
     "converged": true,
-    "alpha_intercept": 0.061662581053365376,
-    "aic": 1634.174069084956
+    "alpha_intercept": 0.04714940930266148,
+    "aic": 2479.359824597766
   },
   "TRACKER": {
-    "n_site_years": 260,
-    "var_over_mean": 0.12553480121047686,
+    "n_site_years": 467,
+    "var_over_mean": 0.10596731594585673,
     "converged": true,
-    "alpha_intercept": -0.037600327291554436,
-    "aic": 776.418326828416
+    "alpha_intercept": -0.04890556395798742,
+    "aic": 1373.5134376738827
   },
   "UNATTRIBUTED": {
-    "n_site_years": 1694,
-    "var_over_mean": 0.1832826191819394,
+    "n_site_years": 3533,
+    "var_over_mean": 0.1983028888655976,
     "converged": true,
-    "alpha_intercept": 0.15498614813911232,
-    "aic": 5357.669494613901
+    "alpha_intercept": 0.05479514682783478,
+    "aic": 11265.218047870621
   }
 }
