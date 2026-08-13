@@ -1,0 +1,389 @@
+{
+  "generated_from": "data/life_records.parquet + data/episodes.parquet",
+  "config": {
+    "distributions": [
+      "exponential",
+      "weibull",
+      "gamma",
+      "lognormal",
+      "loglogistic"
+    ],
+    "selection_criterion": "max_loglikelihood",
+    "min_failures_to_fit": 20,
+    "left_truncation": true,
+    "competing_risks": true,
+    "block_mw_default": 2.5,
+    "forecast_horizons_months": [
+      12,
+      24,
+      36
+    ],
+    "inspection_intervals_months": [
+      3,
+      6,
+      12,
+      24
+    ],
+    "spares_service_level": 0.95,
+    "data_lag_months": 3,
+    "quarantine_negative_age": true,
+    "workbook_max_rows_inline": 60000
+  },
+  "signatures": [
+    {
+      "signature": "BLOCK_OUTAGE",
+      "n_records": 5000,
+      "n_failures": 2448,
+      "n_suspensions": 2552,
+      "n_equipment_keys": 2576,
+      "below_min_failures_threshold": false,
+      "best_fit": {
+        "family": "lognormal",
+        "params": [
+          1.0792287657519597,
+          6.005921493128276
+        ],
+        "loglik": -7676.926610959086,
+        "aic": 15357.853221918172
+      },
+      "all_fits": [
+        {
+          "family": "lognormal",
+          "loglik": -7676.926610959086,
+          "aic": 15357.853221918172,
+          "converged": true
+        },
+        {
+          "family": "loglogistic",
+          "loglik": -7688.928480991029,
+          "aic": 15381.856961982057,
+          "converged": true
+        },
+        {
+          "family": "gamma",
+          "loglik": -7705.572273965293,
+          "aic": 15415.144547930586,
+          "converged": true
+        },
+        {
+          "family": "weibull",
+          "loglik": -7714.0087383437085,
+          "aic": 15432.017476687417,
+          "converged": true
+        },
+        {
+          "family": "exponential",
+          "loglik": -7732.0324553762675,
+          "aic": 15466.064910752535,
+          "converged": true
+        }
+      ],
+      "weibull_beta": 1.1385764461847567,
+      "weibull_eta_years": 8.887861503940181,
+      "beta_classification": "wear_out",
+      "rvm_eligible": 1.0
+    },
+    {
+      "signature": "BOS_INTERMITTENT",
+      "n_records": 6550,
+      "n_failures": 4030,
+      "n_suspensions": 2520,
+      "n_equipment_keys": 2653,
+      "below_min_failures_threshold": false,
+      "best_fit": {
+        "family": "gamma",
+        "params": [
+          1.4821201408341222,
+          4.935006711039017
+        ],
+        "loglik": -11874.819241751014,
+        "aic": 23753.63848350203
+      },
+      "all_fits": [
+        {
+          "family": "gamma",
+          "loglik": -11874.819241751014,
+          "aic": 23753.63848350203,
+          "converged": true
+        },
+        {
+          "family": "weibull",
+          "loglik": -11879.638110983764,
+          "aic": 23763.276221967528,
+          "converged": true
+        },
+        {
+          "family": "lognormal",
+          "loglik": -11929.930477452164,
+          "aic": 23863.86095490433,
+          "converged": true
+        },
+        {
+          "family": "loglogistic",
+          "loglik": -11961.391669344313,
+          "aic": 23926.783338688627,
+          "converged": true
+        },
+        {
+          "family": "exponential",
+          "loglik": -11986.852126083606,
+          "aic": 23975.704252167212,
+          "converged": true
+        }
+      ],
+      "weibull_beta": 1.2756269258849404,
+      "weibull_eta_years": 7.769326312258877,
+      "beta_classification": "wear_out",
+      "rvm_eligible": 1.0
+    },
+    {
+      "signature": "OUTAGE_FULL",
+      "n_records": 3521,
+      "n_failures": 991,
+      "n_suspensions": 2530,
+      "n_equipment_keys": 2573,
+      "below_min_failures_threshold": false,
+      "best_fit": {
+        "family": "weibull",
+        "params": [
+          1.2715873540374443,
+          16.340034446948465
+        ],
+        "loglik": -3832.731004219324,
+        "aic": 7669.462008438648
+      },
+      "all_fits": [
+        {
+          "family": "weibull",
+          "loglik": -3832.731004219324,
+          "aic": 7669.462008438648,
+          "converged": true
+        },
+        {
+          "family": "gamma",
+          "loglik": -3838.559913224355,
+          "aic": 7681.11982644871,
+          "converged": true
+        },
+        {
+          "family": "exponential",
+          "loglik": -3856.2574641694823,
+          "aic": 7714.514928338965,
+          "converged": true
+        },
+        {
+          "family": "loglogistic",
+          "loglik": -3860.4680779690934,
+          "aic": 7724.936155938187,
+          "converged": true
+        },
+        {
+          "family": "lognormal",
+          "loglik": -3890.8377599130754,
+          "aic": 7785.675519826151,
+          "converged": true
+        }
+      ],
+      "weibull_beta": 1.2715873540374443,
+      "weibull_eta_years": 16.340034446948465,
+      "beta_classification": "wear_out",
+      "rvm_eligible": 1.0
+    },
+    {
+      "signature": "SOILING",
+      "n_records": 3193,
+      "n_failures": 642,
+      "n_suspensions": 2551,
+      "n_equipment_keys": 2558,
+      "below_min_failures_threshold": false,
+      "best_fit": {
+        "family": "gamma",
+        "params": [
+          1.3380915728274898,
+          16.151709425913612
+        ],
+        "loglik": -2716.2679138234016,
+        "aic": 5436.535827646803
+      },
+      "all_fits": [
+        {
+          "family": "gamma",
+          "loglik": -2716.2679138234016,
+          "aic": 5436.535827646803,
+          "converged": true
+        },
+        {
+          "family": "weibull",
+          "loglik": -2716.4728422417725,
+          "aic": 5436.945684483545,
+          "converged": true
+        },
+        {
+          "family": "loglogistic",
+          "loglik": -2718.1533373138573,
+          "aic": 5440.3066746277145,
+          "converged": true
+        },
+        {
+          "family": "lognormal",
+          "loglik": -2720.7620052909524,
+          "aic": 5445.524010581905,
+          "converged": true
+        },
+        {
+          "family": "exponential",
+          "loglik": -2730.3826345284974,
+          "aic": 5462.765269056995,
+          "converged": true
+        }
+      ],
+      "weibull_beta": 1.253790764195559,
+      "weibull_eta_years": 21.8374053852891,
+      "beta_classification": "wear_out",
+      "rvm_eligible": 1.0
+    },
+    {
+      "signature": "TRACKER",
+      "n_records": 3030,
+      "n_failures": 496,
+      "n_suspensions": 2534,
+      "n_equipment_keys": 2539,
+      "below_min_failures_threshold": false,
+      "best_fit": {
+        "family": "lognormal",
+        "params": [
+          1.3968686093027787,
+          23.655629627162195
+        ],
+        "loglik": -2192.96259613812,
+        "aic": 4389.92519227624
+      },
+      "all_fits": [
+        {
+          "family": "lognormal",
+          "loglik": -2192.96259613812,
+          "aic": 4389.92519227624,
+          "converged": true
+        },
+        {
+          "family": "loglogistic",
+          "loglik": -2199.403218069387,
+          "aic": 4402.806436138774,
+          "converged": true
+        },
+        {
+          "family": "gamma",
+          "loglik": -2200.6300568833567,
+          "aic": 4405.260113766713,
+          "converged": true
+        },
+        {
+          "family": "weibull",
+          "loglik": -2201.6525758152347,
+          "aic": 4407.3051516304695,
+          "converged": true
+        },
+        {
+          "family": "exponential",
+          "loglik": -2207.7392676367135,
+          "aic": 4417.478535273427,
+          "converged": true
+        }
+      ],
+      "weibull_beta": 1.1865242020585882,
+      "weibull_eta_years": 26.867373213711215,
+      "beta_classification": "wear_out",
+      "rvm_eligible": 1.0
+    },
+    {
+      "signature": "UNATTRIBUTED",
+      "n_records": 6442,
+      "n_failures": 4169,
+      "n_suspensions": 2273,
+      "n_equipment_keys": 2683,
+      "below_min_failures_threshold": false,
+      "best_fit": {
+        "family": "exponential",
+        "params": [
+          5.552012411607909
+        ],
+        "loglik": -11315.33318134793,
+        "aic": 22632.66636269586
+      },
+      "all_fits": [
+        {
+          "family": "exponential",
+          "loglik": -11315.33318134793,
+          "aic": 22632.66636269586,
+          "converged": true
+        },
+        {
+          "family": "weibull",
+          "loglik": -1000000000000.0,
+          "aic": 2000000000004.0,
+          "converged": true
+        },
+        {
+          "family": "gamma",
+          "loglik": -1000000000000.0,
+          "aic": 2000000000004.0,
+          "converged": true
+        },
+        {
+          "family": "lognormal",
+          "loglik": -1000000000000.0,
+          "aic": 2000000000004.0,
+          "converged": true
+        },
+        {
+          "family": "loglogistic",
+          "loglik": -1000000000000.0,
+          "aic": 2000000000004.0,
+          "converged": true
+        }
+      ],
+      "weibull_beta": 1.2,
+      "weibull_eta_years": 4.932428312424303,
+      "beta_classification": "wear_out",
+      "rvm_eligible": 1.0
+    }
+  ],
+  "mttr_diagnostic": [
+    {
+      "signature": "BLOCK_OUTAGE",
+      "mttr_months": 5.267156862745098,
+      "median_months": 3.0,
+      "n": 2448
+    },
+    {
+      "signature": "BOS_INTERMITTENT",
+      "mttr_months": 2.3590570719602977,
+      "median_months": 1.0,
+      "n": 4030
+    },
+    {
+      "signature": "OUTAGE_FULL",
+      "mttr_months": 3.8647830474268416,
+      "median_months": 2.0,
+      "n": 991
+    },
+    {
+      "signature": "SOILING",
+      "mttr_months": 7.457943925233645,
+      "median_months": 5.0,
+      "n": 642
+    },
+    {
+      "signature": "TRACKER",
+      "mttr_months": 4.229838709677419,
+      "median_months": 1.0,
+      "n": 496
+    },
+    {
+      "signature": "UNATTRIBUTED",
+      "mttr_months": 3.9262369496141627,
+      "median_months": 2.0,
+      "n": 4406
+    }
+  ]
+}

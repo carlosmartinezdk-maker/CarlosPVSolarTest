@@ -251,8 +251,33 @@ FUNNEL_EXPECTED = [
     ("require_dcac_range", 6204),
 ]
 ANNUAL_TOTALS_MWH_EXPECTED = {
-    2019: 68_611_474, 2020: 85_979_097, 2021: 111_896_359, 2022: 12_961_245,
+    # 2022 updated 13 Aug 2026: was 12,961,245 (partial 224-plant export),
+    # now the full EIA-923 re-pull (5,067 plants) - see run_report.md.
+    2019: 68_611_474, 2020: 85_979_097, 2021: 111_896_359, 2022: 140_511_195,
     2023: 162_330_524, 2024: 215_425_229, 2025: 290_808_705, "2026 YTD": 110_195_267,
 }
 
 RANDOM_SEED = 42
+
+# --------------------------------------------------------------------------
+# Reliability engineering (RELIABILITY_ENGINEERING_ADDENDUM.md, S12-S17)
+# --------------------------------------------------------------------------
+RELIABILITY_SIGNATURES = FAULT_LEDGER_SIGNATURES  # the 6 repairable-fault
+# signatures; CURTAILMENT/SNOW/CLIPPING are exposure not unreliability
+# (same guardrail as ZERO_RECOVERY_SIGNATURES), DEGRADATION is a
+# continuous state already handled by S7, not a discrete failure.
+
+RELIABILITY = dict(
+    distributions=["exponential", "weibull", "gamma", "lognormal", "loglogistic"],
+    selection_criterion="max_loglikelihood",
+    min_failures_to_fit=20,          # below this, pool to a broader stratum
+    left_truncation=True,            # REQUIRED - see S12
+    competing_risks=True,
+    block_mw_default=2.5,            # MWdc per block where no fraction was fitted
+    forecast_horizons_months=[12, 24, 36],
+    inspection_intervals_months=[3, 6, 12, 24],
+    spares_service_level=0.95,
+    data_lag_months=3,
+    quarantine_negative_age=True,    # 1,088 ledger rows currently affected
+    workbook_max_rows_inline=60000,  # beyond this, Life Records goes to a companion CSV
+)

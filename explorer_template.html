@@ -125,6 +125,7 @@ textarea.note { width:100%; background: #fff; color:var(--ink); border:1px solid
     <button data-view="fleet">Portfolio Overview</button>
     <button data-view="triage">Triage List</button>
     <button data-view="detail">Site Detail</button>
+    <button data-view="reliability">Reliability</button>
   </nav>
   <span class="small" id="breadcrumb"></span>
   <span class="pos-indicator" id="pos-indicator"></span>
@@ -1009,6 +1010,7 @@ function render() {
   if (state.view==='owners') renderOwners();
   else if (state.view==='fleet') renderFleet();
   else if (state.view==='triage') renderTriage();
+  else if (state.view==='reliability') renderReliability();
   else renderDetail();
   const reviewed = Object.values(triage).filter(t=>t.status && t.status!=='unreviewed').length;
   document.getElementById('progress-indicator').textContent = `reviewed ${reviewed} of ${DATA.sites.length}`;
@@ -1083,6 +1085,92 @@ function renderOwners() {
   });
   panel.appendChild(el('div',{class:'tblscroll'},[table]));
   m.appendChild(panel);
+}
+
+const BETA_CLASS_LABEL = {wear_out:'Wear-out (age-driven)', random:'Random (no age signal)', infant_mortality:'Infant mortality (warranty)'};
+
+// Reliability Engineering Addendum, first pass (S12 life records + S13
+// left-truncated MLE fitting). Forecasting/spares/inspection-interval
+// optimization are not built yet - see DATA.reliability.notes.
+function renderReliability() {
+  const m = document.getElementById('main');
+  m.innerHTML = '';
+  const rel = DATA.reliability;
+
+  if (!rel || !rel.available) {
+    const panel = el('div', {class:'card-panel'});
+    panelHeader(panel, 'RELIABILITY', 'Not available this run');
+    panel.appendChild(el('div', {class:'interp'}, [
+      'S12 (life records) and S13 (distribution fitting) have not been run for this dataset yet.'
+    ]));
+    m.appendChild(panel);
+    return;
+  }
+
+  const notesPanel = el('div', {class:'card-panel'});
+  panelHeader(notesPanel, 'RELIABILITY', 'Life data analysis - first pass', rel.generated_from);
+  rel.notes.forEach(n => notesPanel.appendChild(el('div', {class:'interp'}, [n])));
+  m.appendChild(notesPanel);
+
+  const kpiPanel = el('div', {class:'card-panel'});
+  panelHeader(kpiPanel, 'FLEET', 'Failures / suspensions by signature (all life records, all years)');
+  const strip = el('div', {class:'cards'});
+  rel.signatures.forEach(s => strip.appendChild(el('div',{class:'card'},[
+    el('div',{class:'v'},[String(s.n_failures)]), el('div',{class:'l'},[`${SIG_LABEL[s.signature]||s.signature} failures`])
+  ])));
+  kpiPanel.appendChild(strip);
+  m.appendChild(kpiPanel);
+
+  const fitPanel = el('div', {class:'card-panel'});
+  panelHeader(fitPanel, 'LIFE DATA FIT', 'Best-fit distribution and Weibull shape per signature',
+    'beta > 1 = wear-out (age-driven, preventive-replacement/RVM eligible) - the ONLY classification eligible for that framing. beta < 1 = infant mortality, a warranty conversation, never a replace-before-it-breaks one.');
+  const fitTable = el('table', {class:'grid'});
+  fitTable.appendChild(el('tr',{}, [
+    el('th',{class:'kcol'},['Signature']), el('th',{},['Failures']), el('th',{},['Suspensions']),
+    el('th',{},['Best fit']), el('th',{},['Weibull beta']), el('th',{},['Classification']),
+    el('th',{},['Eta (yr)']), el('th',{},['RVM eligible']), el('th',{},['Below min-n?']),
+  ]));
+  rel.signatures.forEach(s => {
+    const tr = el('tr', {});
+    [SIG_LABEL[s.signature]||s.signature, s.n_failures, s.n_suspensions, s.best_fit_family,
+     fmtNum(s.weibull_beta,3), BETA_CLASS_LABEL[s.beta_classification]||s.beta_classification,
+     fmtNum(s.weibull_eta_years,2), s.rvm_eligible?'Yes':'No', s.below_min_failures_threshold?'Yes':'No',
+    ].forEach((v,i)=>tr.appendChild(el('td',{class:i===0?'kcol':''},[String(v)])));
+    fitTable.appendChild(tr);
+  });
+  fitPanel.appendChild(el('div',{class:'tblscroll'},[fitTable]));
+  m.appendChild(fitPanel);
+
+  const candPanel = el('div', {class:'card-panel'});
+  panelHeader(candPanel, 'CANDIDATE DISTRIBUTIONS', 'Log-likelihood of all 5 fitted families (not just the winner)');
+  const candTable = el('table', {class:'grid'});
+  candTable.appendChild(el('tr',{}, [el('th',{class:'kcol'},['Signature']), ...['exponential','weibull','gamma','lognormal','loglogistic'].map(f=>el('th',{},[f]))]));
+  rel.signatures.forEach(s => {
+    const tr = el('tr', {});
+    tr.appendChild(el('td',{class:'kcol'},[SIG_LABEL[s.signature]||s.signature]));
+    ['exponential','weibull','gamma','lognormal','loglogistic'].forEach(fam => {
+      const fit = s.all_fits.find(f=>f.family===fam);
+      const cell = fit ? `${fmtNum(fit.loglik,0)}` : '—';
+      tr.appendChild(el('td',{style: fit && fam===s.best_fit_family ? 'font-weight:bold':''},[cell]));
+    });
+    candTable.appendChild(tr);
+  });
+  candPanel.appendChild(el('div',{class:'tblscroll'},[candTable]));
+  candPanel.appendChild(el('div',{class:'small'},['Higher (less negative) log-likelihood = better fit. Bold cell = the family used above.']));
+  m.appendChild(candPanel);
+
+  const mttrPanel = el('div', {class:'card-panel'});
+  panelHeader(mttrPanel, 'MTTR DIAGNOSTIC', 'Mean episode duration by signature (calibration cross-check, not used in the fit above)');
+  const mttrTable = el('table', {class:'grid'});
+  mttrTable.appendChild(el('tr',{}, [el('th',{class:'kcol'},['Signature']), el('th',{},['Mean MTTR (mo)']), el('th',{},['Median (mo)']), el('th',{},['n episodes'])]));
+  rel.mttr_diagnostic.forEach(mt => {
+    const tr = el('tr', {});
+    [SIG_LABEL[mt.signature]||mt.signature, fmtNum(mt.mttr_months,2), fmtNum(mt.median_months,1), mt.n]
+      .forEach((v,i)=>tr.appendChild(el('td',{class:i===0?'kcol':''},[String(v)])));
+    mttrTable.appendChild(tr);
+  });
+  mttrPanel.appendChild(el('div',{class:'tblscroll'},[mttrTable]));
+  m.appendChild(mttrPanel);
 }
 
 // Part H: non-dismissable scope banner, same pattern the weather-track

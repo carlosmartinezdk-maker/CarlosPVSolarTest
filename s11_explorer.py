@@ -602,8 +602,61 @@ def build_payload() -> dict:
         hazard=hazard_out,
         sites=site_payloads,
         ledger=ledger_out,
+        reliability=load_reliability(),
     )
     return payload
+
+
+def load_reliability(path: str = "data/reliability_fits.json") -> dict:
+    """S12/S13 output (Reliability Engineering Addendum, first pass -
+    life-data fitting only; forecasting/spares/inspection-interval
+    optimization are S14-S16, not yet built). Returns a minimal
+    'not_available' shape if S12/S13 haven't been run this cycle, so the
+    explorer degrades gracefully rather than crashing on a missing file."""
+    if not os.path.exists(path):
+        log.warning("%s not found - Reliability panel will show 'not available' (run "
+                    "s12_lifedata.py + s13_reliability.py first)", path)
+        return dict(available=False, signatures=[], mttr_diagnostic=[])
+    with open(path) as f:
+        fits = json.load(f)
+    signatures = []
+    for s in fits["signatures"]:
+        signatures.append(dict(
+            signature=s["signature"],
+            n_failures=s["n_failures"], n_suspensions=s["n_suspensions"],
+            n_equipment_keys=s["n_equipment_keys"],
+            below_min_failures_threshold=s["below_min_failures_threshold"],
+            best_fit_family=s["best_fit"]["family"],
+            best_fit_loglik=r(s["best_fit"]["loglik"], 1),
+            weibull_beta=r(s["weibull_beta"], 3),
+            weibull_eta_years=r(s["weibull_eta_years"], 2),
+            beta_classification=s["beta_classification"],
+            rvm_eligible=s["rvm_eligible"],
+            all_fits=[dict(family=f["family"], loglik=r(f["loglik"], 1), aic=r(f["aic"], 1))
+                      for f in s["all_fits"]],
+        ))
+    return dict(
+        available=True,
+        generated_from=fits.get("generated_from"),
+        signatures=signatures,
+        mttr_diagnostic=[
+            dict(signature=m["signature"], mttr_months=r(m["mttr_months"], 2),
+                 median_months=r(m["median_months"], 1), n=m["n"])
+            for m in fits.get("mttr_diagnostic", [])
+        ],
+        notes=[
+            "First pass: life-data fitting (S12/S13) only. Forecasting, spares "
+            "planning, and inspection-interval optimization (S14-S16 in the "
+            "addendum) are not yet built.",
+            "beta > 1 (wear-out) is the ONLY classification eligible for "
+            "preventive-replacement/RVM framing - beta < 1 (infant mortality) is a "
+            "warranty conversation, never a 'replace before it breaks' one.",
+            "SOILING's mean episode duration (MTTR) runs well above the addendum's "
+            "~1.0 month reference - flagged as a signature-attribution question, "
+            "not yet resolved. Treat SOILING-driven spares/forecast output as "
+            "provisional until investigated.",
+        ],
+    )
 
 
 def sanitize(obj):
