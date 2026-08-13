@@ -277,6 +277,8 @@ def run(cells: list[tuple[float, float]], years: list[int], cache_dir: str,
         f"-> {total/MAX_REQUESTS_PER_DAY:.1f} days minimum if run continuously)")
 
     done, skipped, failed = 0, 0, 0
+    consecutive_429 = 0
+    RATE_CAP_STREAK = 3  # this many 429s in a row = the daily cap is hit, not a one-off blip
     for i, (lat, lon) in enumerate(cells):
         for year in years:
             key = f"{lat}_{lon}_{year}"
@@ -297,9 +299,27 @@ def run(cells: list[tuple[float, float]], years: list[int], cache_dir: str,
                                        "attributes": DEFAULT_ATTRIBUTES},
                 }
                 done += 1
+                consecutive_429 = 0
             except Exception as e:
+                is_429 = isinstance(e, requests.exceptions.HTTPError) and \
+                    getattr(e, "response", None) is not None and e.response.status_code == 429
                 log(f"FAILED {key}: {redact_key(str(e), api_key)}")
                 failed += 1
+                if is_429:
+                    consecutive_429 += 1
+                    if consecutive_429 >= RATE_CAP_STREAK:
+                        # Burning through the remaining cell list would just log
+                        # thousands more 429s until the quota resets - stop now,
+                        # a supervisor (or a human) reruns the identical command
+                        # later and every already-cached cell is skipped for free.
+                        save_manifest(cache_dir, manifest)
+                        log(f"RATE_LIMIT_HIT: {consecutive_429} consecutive 429s - daily cap reached. "
+                            f"Stopping early ({done} pulled this run, {skipped} already cached, "
+                            f"{len(cells)*len(years) - done - skipped} cell-years remain). Re-run the "
+                            "identical command after the quota resets - already-cached cells are skipped.")
+                        sys.exit(3)
+                else:
+                    consecutive_429 = 0
         if (i + 1) % 20 == 0 or i == len(cells) - 1:
             save_manifest(cache_dir, manifest)
             log(f"progress: {i+1}/{len(cells)} cells | pulled {done} | cached {skipped} | failed {failed}")
