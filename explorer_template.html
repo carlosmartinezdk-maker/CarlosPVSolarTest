@@ -26,9 +26,15 @@ body { margin:0; font-family: Georgia,"Times New Roman",serif; background:var(--
 a { color: var(--accent); }
 .eyebrow { font-size:11px; font-family:Arial,Helvetica,sans-serif; text-transform:uppercase;
   letter-spacing:.14em; color:var(--accent); font-weight:bold; margin-bottom:4px; }
-header#topbar { position: sticky; top:0; z-index: 50; background: var(--bg);
-  border-bottom: 1px solid var(--panel-border); padding: 10px 20px; display:flex; align-items:center; gap:14px; }
+#topbar-wrap { position: sticky; top:0; z-index: 50; background: var(--bg); }
+header#topbar { border-bottom: 1px solid var(--panel-border); padding: 10px 20px; display:flex; align-items:center; gap:14px; }
 header#topbar h1 { font-size: 17px; margin:0; font-weight:normal; font-family:Georgia,serif; }
+#header-controls { border-bottom: 1px solid var(--panel-border); padding: 8px 20px; display:flex; align-items:center;
+  gap:10px; font-family:Arial,Helvetica,sans-serif; font-size:12px; flex-wrap:wrap; background: var(--panel-bg, var(--bg)); }
+#header-controls .sel { min-width:220px; }
+#header-controls .hdr-clear { background:none; border:1px solid var(--panel-border); border-radius:4px; padding:4px 10px;
+  cursor:pointer; color:var(--muted); font-size:12px; }
+#header-controls .hdr-scope-note { color: var(--muted); }
 .seg { display:flex; gap:0; border:1px solid var(--panel-border); border-radius:6px; overflow:hidden; }
 .seg button { background:var(--bg); border:none; border-right:1px solid var(--panel-border); color: var(--muted);
   padding: 6px 12px; cursor:pointer; font-size:12px; }
@@ -118,6 +124,7 @@ textarea.note { width:100%; background: #fff; color:var(--ink); border:1px solid
 </head>
 <body>
 
+<div id="topbar-wrap">
 <header id="topbar">
   <h1>PI/PRI Solar Underperformance Explorer</h1>
   <nav class="seg" id="view-nav">
@@ -132,6 +139,16 @@ textarea.note { width:100%; background: #fff; color:var(--ink); border:1px solid
   <span class="methlink" id="meth-link" style="margin-left:auto">How to read this</span>
   <span class="small" id="progress-indicator"></span>
 </header>
+<div id="header-controls">
+  <span>Customer</span>
+  <input id="hdr-owner-input" type="text" class="sel" list="hdr-owner-datalist" placeholder="Type to search customers…">
+  <datalist id="hdr-owner-datalist"></datalist>
+  <span>Site</span>
+  <select id="hdr-site-select" class="sel"></select>
+  <button class="hdr-clear" id="hdr-clear-btn">Clear</button>
+  <span class="hdr-scope-note" id="hdr-scope-note"></span>
+</div>
+</div>
 
 <main id="main"></main>
 
@@ -254,6 +271,31 @@ function filteredSites() {
   return list;
 }
 
+// Customer scope only (no tier/stale/search filters) - what Portfolio
+// Overview and Reliability use to answer "this customer's portfolio",
+// independent of whatever the Triage filter bar happens to have set.
+function scopedSites() {
+  return state.filters.utility ? DATA.sites.filter(s => s.utility === state.filters.utility) : DATA.sites;
+}
+
+const ALL_OWNERS = [...new Set(DATA.sites.map(s => s.utility).filter(Boolean))].sort();
+const RELIABILITY_SIGS = ['BLOCK_OUTAGE','BOS_INTERMITTENT','OUTAGE_FULL','SOILING','TRACKER','UNATTRIBUTED'];
+
+function computeScopedLostEnergy(sites) {
+  const siteNames = new Set(sites.map(s=>s.site));
+  const bySig = {};
+  (DATA.ledger||[]).forEach(l => {
+    if (!siteNames.has(l.site) || !RELIABILITY_SIGS.includes(l.signature)) return;
+    bySig[l.signature] = bySig[l.signature] || {lost_mwh:0, lost_usd:0};
+    bySig[l.signature].lost_mwh += (l.mwh_lost||0);
+    bySig[l.signature].lost_usd += (l.usd_lost||0);
+  });
+  const total = Object.values(bySig).reduce((a,b)=>a+b.lost_usd,0);
+  return Object.entries(bySig).map(([signature,v]) => ({
+    signature, lost_mwh: v.lost_mwh, lost_usd: v.lost_usd, share_pct: total ? 100*v.lost_usd/total : 0
+  }));
+}
+
 // -------------------------------------------------------------- helpers ----
 function fmtUsd(v) { if (v===null||v===undefined) return '—'; return '$' + Math.round(v).toLocaleString(); }
 function fmtNum(v, nd) { if (v===null||v===undefined) return '—'; return Number(v).toFixed(nd===undefined?2:nd); }
@@ -373,14 +415,78 @@ function sigColor(sig) {
   return map[sig] || '#888';
 }
 
+function computeScopedSignatureCounts(sites) {
+  const sigCounts = {}, yearSigCounts = {};
+  sites.forEach(s => {
+    s.months.forEach((m,i) => {
+      const sg = s.signature[i];
+      if (sg==='NONE' || sg==='WATCH_NOT_A_FAULT' || sg==='UNSCORED') return;
+      sigCounts[sg] = (sigCounts[sg]||0) + 1;
+      const yr = m.slice(0,4);
+      yearSigCounts[yr] = yearSigCounts[yr] || {};
+      yearSigCounts[yr][sg] = (yearSigCounts[yr][sg]||0) + 1;
+    });
+  });
+  return {sigCounts, yearSigCounts};
+}
+
+function computeScopedKpis(sites) {
+  const leads = sites.filter(s=>['Chronic','Event'].includes(s.conviction_tier)).length;
+  const highConviction = sites.filter(s=>s.conviction_tier==='Chronic').length;
+  const recMwh = sites.reduce((a,s)=>a+(s.recoverable_mwh_yr||0),0);
+  const recUsd = sites.reduce((a,s)=>a+(s.recoverable_usd_yr||0),0);
+  const monthsScored = sites.reduce((a,s)=>a+s.months.length,0);
+  const mwdc = sites.reduce((a,s)=>a+(s.mwdc||0),0);
+  const warrantyUrgent = sites.filter(s=>s.warranty_urgent).length;
+  return {n: sites.length, leads, highConviction, recMwh, recUsd, monthsScored, mwdc, warrantyUrgent};
+}
+
+// Per-site recommended actions for a customer's portfolio - the "which
+// sites need SCADA/Inspection/SaaS/RVM" table, sorted by annual fee so
+// the highest-value site sorts first.
+function renderRecommendedActionsPanel(m, sites) {
+  const panel = el('div', {class:'card-panel'});
+  panelHeader(panel, 'RECOMMENDED ACTIONS', `${state.filters.utility} — site-level routing`,
+    'Base offering comes from the quadrant this site has spent the most trailing-12-months in; RVM/warranty-claim-support are overlays on top of it, not separate products.');
+  const rows = sites.slice().sort((a,b) => (b.annual_fee_usd||0) - (a.annual_fee_usd||0));
+  const table = el('table', {class:'grid'});
+  table.appendChild(el('tr',{}, [el('th',{class:'kcol'},['Site']), el('th',{},['Tier']), el('th',{},['Base offering']),
+    el('th',{},['Recommended bundle']), el('th',{},['RVM eligible']), el('th',{},['Warranty claim support']),
+    el('th',{},['Annual fee']), el('th',{},['Recoverable $/yr'])]));
+  rows.forEach(s => {
+    const tr = el('tr', {onclick:()=>openSite(s.site)});
+    [s.site, s.conviction_tier, s.base_offering||'—', (s.recommended_offerings||[]).join(', ')||'—',
+     s.rvm_eligible?'Yes':'No', s.warranty_claim_support?'Yes':'No', fmtUsd(s.annual_fee_usd), fmtUsd(s.recoverable_usd_yr)
+    ].forEach((v,i)=>tr.appendChild(el('td',{class:i===0?'kcol':''},[String(v)])));
+    table.appendChild(tr);
+  });
+  panel.appendChild(el('div',{class:'tblscroll', style:'max-height:400px'},[table]));
+  m.appendChild(panel);
+}
+
 // ---------------------------------------------------------------- views ----
 function renderFleet() {
   const m = document.getElementById('main');
   m.innerHTML = '';
   const k = DATA.kpi;
+  const scoped = scopedSites();
+  const isScoped = !!state.filters.utility;
+
+  if (isScoped) {
+    const sk = computeScopedKpis(scoped);
+    const scopedKpiPanel = el('div', {class:'card-panel'});
+    panelHeader(scopedKpiPanel, 'PORTFOLIO', `${state.filters.utility} — this customer's sites`);
+    const sstrip = el('div', {class:'cards'});
+    [['Sites', sk.n], ['MWdc', fmtNum(sk.mwdc,1)], ['Leads (Chronic+Event)', sk.leads],
+     ['High conviction (Chronic)', sk.highConviction], ['Warranty-urgent', sk.warrantyUrgent],
+     ['Recoverable MWh/yr', fmtNum(sk.recMwh,0)], ['Recoverable USD/yr', fmtUsd(sk.recUsd)],
+    ].forEach(([l,v]) => sstrip.appendChild(el('div',{class:'card'},[el('div',{class:'v'},[String(v)]), el('div',{class:'l'},[l])])));
+    scopedKpiPanel.appendChild(sstrip);
+    m.appendChild(scopedKpiPanel);
+  }
 
   const kpiPanel = el('div', {class:'card-panel'});
-  panelHeader(kpiPanel, 'PORTFOLIO', 'Fleet KPIs — validation subsample');
+  panelHeader(kpiPanel, 'PORTFOLIO', 'Fleet KPIs — validation subsample' + (isScoped ? ' (full fleet, unaffected by the customer filter)' : ''));
   const strip = el('div', {class:'cards'});
   const kpis = [
     ['Scoreable sites (subsample)', k.scoreable_sites_subsample],
@@ -396,9 +502,15 @@ function renderFleet() {
   kpiPanel.appendChild(strip);
   m.appendChild(kpiPanel);
 
-  // funnel
+  if (isScoped) {
+    renderRecommendedActionsPanel(m, scoped);
+  }
+
+  // funnel - always fleet-wide: it's the data-quality gating process that
+  // ran once over the full 6,204-site fleet before any subsample/owner
+  // scoping existed, so it can't honestly be recomputed per customer.
   const funnelPanel = el('div', {class:'card-panel'});
-  panelHeader(funnelPanel, 'DATA QUALITY', 'Funnel from full fleet to scoreable sites (Section 4)',
+  panelHeader(funnelPanel, 'DATA QUALITY', 'Funnel from full fleet to scoreable sites (Section 4)' + (isScoped ? ' — fleet-wide, not customer-scoped' : ''),
     `${DATA.funnel[0].n_sites.toLocaleString()} raw sites narrow to ${DATA.funnel[DATA.funnel.length-1].n_sites.toLocaleString()} `+
     `scoreable sites after hybrid/lat-lon/capacity/DC:AC gates - everything downstream is scored against this smaller, cleaner set.`);
   const fLabels = DATA.funnel.map(r => r.step);
@@ -409,8 +521,8 @@ function renderFleet() {
 
   // distributions
   const distPanel = el('div', {class:'card-panel grid2'});
-  const allPi = DATA.sites.flatMap(s => s.pi.filter(v=>v!==null));
-  const allPri = DATA.sites.flatMap(s => s.pri.filter(v=>v!==null));
+  const allPi = scoped.flatMap(s => s.pi.filter(v=>v!==null));
+  const allPri = scoped.flatMap(s => s.pri.filter(v=>v!==null));
   const piMedian = allPi.slice().sort((a,b)=>a-b)[Math.floor(allPi.length/2)];
   const priMedian = allPri.slice().sort((a,b)=>a-b)[Math.floor(allPri.length/2)];
   const piDiv = el('div', {});
@@ -437,29 +549,37 @@ function renderFleet() {
     m.appendChild(biasPanel);
   }
 
-  // signature counts
+  // signature counts - recomputed from the scoped site set's own monthly
+  // arrays when a customer is selected, so it's a real per-customer count,
+  // not a fleet aggregate mislabeled as one.
+  const scopedCounts = isScoped ? computeScopedSignatureCounts(scoped) : {sigCounts: DATA.signature_counts, yearSigCounts: DATA.year_signature_counts};
   const sigPanel = el('div', {class:'card-panel'});
-  panelHeader(sigPanel, 'FAULTS', 'Fault counts by signature (subsample, all years)');
-  const sigLabels = Object.keys(DATA.signature_counts);
-  const sigValues = sigLabels.map(l => DATA.signature_counts[l]);
-  const topSig = sigLabels[sigValues.indexOf(Math.max(...sigValues))];
-  sigPanel.appendChild(el('div',{class:'interp'},[
-    `${SIG_LABEL[topSig]||topSig} is the largest classified category (${DATA.signature_counts[topSig]} site-months). `+
-    (topSig==='SNOW' ? 'See the SNOW-by-state diagnostic in run_report.md before treating this as pure weather.' :
-     'Cross-check against the reference episode-per-plant-year profile (run_report.md TEST 22) before treating counts alone as diagnostic.')
-  ]));
-  sigPanel.appendChild(barChart(sigLabels.map(l=>SIG_LABEL[l]||l), sigValues, 900, 170, {xLabel:'Signature', yLabel:'Site-months'}));
+  panelHeader(sigPanel, 'FAULTS', `Fault counts by signature (${isScoped ? state.filters.utility : 'subsample'}, all years)`);
+  const sigLabels = Object.keys(scopedCounts.sigCounts);
+  const sigValues = sigLabels.map(l => scopedCounts.sigCounts[l]);
+  if (sigLabels.length) {
+    const topSig = sigLabels[sigValues.indexOf(Math.max(...sigValues))];
+    sigPanel.appendChild(el('div',{class:'interp'},[
+      `${SIG_LABEL[topSig]||topSig} is the largest classified category (${scopedCounts.sigCounts[topSig]} site-months). `+
+      (topSig==='SNOW' ? 'See the SNOW-by-state diagnostic in run_report.md before treating this as pure weather.' :
+       'Cross-check against the reference episode-per-plant-year profile (run_report.md TEST 22) before treating counts alone as diagnostic.')
+    ]));
+    sigPanel.appendChild(barChart(sigLabels.map(l=>SIG_LABEL[l]||l), sigValues, 900, 170, {xLabel:'Signature', yLabel:'Site-months'}));
+  } else {
+    sigPanel.appendChild(el('div',{class:'small'},['No classified fault months for this customer.']));
+  }
   m.appendChild(sigPanel);
 
   // by-year stacked (simplified: separate small bars per year per signature count)
   const yearPanel = el('div', {class:'card-panel'});
-  panelHeader(yearPanel, 'TREND', 'Fault site-months by year');
-  const years = Object.keys(DATA.year_signature_counts).sort();
-  const yearTotals = years.map(y => Object.values(DATA.year_signature_counts[y]).reduce((a,b)=>a+b,0));
+  panelHeader(yearPanel, 'TREND', `Fault site-months by year${isScoped ? ' — ' + state.filters.utility : ''}`);
+  const years = Object.keys(scopedCounts.yearSigCounts).sort();
+  const yearTotals = years.map(y => Object.values(scopedCounts.yearSigCounts[y]).reduce((a,b)=>a+b,0));
   yearPanel.appendChild(el('div',{class:'interp'},[
-    `Read year-over-year counts alongside site count per year (subsample composition shifts over history) rather than as a fleet-wide trend at this scale.`
+    `Read year-over-year counts alongside site count per year (composition shifts over history) rather than as a trend at this scale.`
   ]));
-  yearPanel.appendChild(barChart(years, yearTotals, 700, 150, {xLabel:'Year', yLabel:'Site-months'}));
+  if (years.length) yearPanel.appendChild(barChart(years, yearTotals, 700, 150, {xLabel:'Year', yLabel:'Site-months'}));
+  else yearPanel.appendChild(el('div',{class:'small'},['No classified fault months for this customer.']));
   m.appendChild(yearPanel);
 
   // Part C: real US-projected map (Albers USA), state choropleth + site
@@ -467,7 +587,7 @@ function renderFleet() {
   // just a picture - click a state to filter every other view to it.
   const TIERS = ['Chronic','Event','New','Improving','Healthy','Warranty-urgent'];
   const mapPanel = el('div', {class:'card-panel'});
-  panelHeader(mapPanel, 'GEOGRAPHY', 'Fleet map');
+  panelHeader(mapPanel, 'GEOGRAPHY', isScoped ? `Map — ${state.filters.utility}` : 'Fleet map');
   const mapInterp = el('div',{class:'interp'});
   mapPanel.appendChild(mapInterp);
   const mapModeSeg = el('div', {class:'seg', style:'margin-bottom:8px'});
@@ -498,7 +618,7 @@ function renderFleet() {
     const W=975, H=610;
     const s2 = svg('svg', {width:'100%', height:400, viewBox:`0 0 ${W} ${H}`});
     const byState = {};
-    DATA.sites.forEach(s => { (byState[s.state] = byState[s.state]||[]).push(s); });
+    scoped.forEach(s => { (byState[s.state] = byState[s.state]||[]).push(s); });
     const recByState = {};
     Object.entries(byState).forEach(([st, ss]) => {
       recByState[st] = ss.reduce((a,x)=>a+(x.recoverable_usd_yr||0), 0);
@@ -530,7 +650,7 @@ function renderFleet() {
 
     if (mapMode.v === 'markers') {
       const tierColor = {Chronic:'#8a2e23', Event:'#c96a2e', New:'#8a8a8a', Improving:'#2e7d4f', Healthy:'#4a5a70', 'Warranty-urgent':'#b0392f'};
-      DATA.sites.forEach(s => {
+      scoped.forEach(s => {
         if (s.lat===null||s.lon===null) return;
         const p = ALBERS_PROJ([s.lon, s.lat]);
         if (!p) return;
@@ -544,11 +664,11 @@ function renderFleet() {
         s2.appendChild(c);
       });
       Object.entries(tierColor).forEach(([k,v]) => legend.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${v}`}),k])));
-      mapInterp.textContent = `${DATA.sites.filter(s=>s.lat!==null).length} sites projected with the same Albers USA transform as the state polygons above, sized by MWac and coloured by conviction tier. Click a marker to open its Site Detail, or a state to filter every view to it.`;
+      mapInterp.textContent = `${scoped.filter(s=>s.lat!==null).length} sites projected with the same Albers USA transform as the state polygons above, sized by MWac and coloured by conviction tier. Click a marker to open its Site Detail, or a state to filter every view to it.`;
     } else {
       legend.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${choroplethColor(0.15)}`}),'Low']));
       legend.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${choroplethColor(1)}`}),'High (recoverable $/yr)']));
-      mapInterp.textContent = `Shaded by total recoverable $/yr per state, across ${DATA.sites.length} sites in ${new Set(DATA.sites.map(s=>s.state)).size} states — read it for where the dollars concentrate, not statistical fleet coverage per state. Click a state to filter every other view to it.`;
+      mapInterp.textContent = `Shaded by total recoverable $/yr per state, across ${scoped.length} sites in ${new Set(scoped.map(s=>s.state)).size} states — read it for where the dollars concentrate, not statistical fleet coverage per state. Click a state to filter every other view to it.`;
     }
     mapSvgHolder.appendChild(s2);
   }
@@ -558,14 +678,14 @@ function renderFleet() {
   // folded into the map, per feedback that the map choropleth was the
   // wrong place for it.
   const tierMixPanel = el('div', {class:'card-panel'});
-  panelHeader(tierMixPanel, 'PORTFOLIO', 'Sites and capacity by conviction tier');
+  panelHeader(tierMixPanel, 'PORTFOLIO', `Sites and capacity by conviction tier${isScoped ? ' — ' + state.filters.utility : ''}`);
   const tierTotals = {};
   TIERS.forEach(t => tierTotals[t] = {count: 0, mwdc: 0});
-  DATA.sites.forEach(s => {
+  scoped.forEach(s => {
     const t = TIERS.includes(s.conviction_tier) ? s.conviction_tier : null;
     if (t) { tierTotals[t].count++; tierTotals[t].mwdc += (s.mwdc || 0); }
   });
-  const nSitesTotal = DATA.sites.length;
+  const nSitesTotal = scoped.length;
   tierMixPanel.appendChild(el('div',{class:'interp'},[
     `${TIERS.filter(t=>tierTotals[t].count>0).sort((a,b)=>tierTotals[b].count-tierTotals[a].count)[0]} is the largest tier by site count - click a row to filter every other view to it.`
   ]));
@@ -685,7 +805,8 @@ function renderTriage() {
   const m = document.getElementById('main');
   m.innerHTML = '';
   const panel = el('div', {class:'card-panel'});
-  panelHeader(panel, 'TRIAGE', 'Triage list', 'Click a row to open, or use j/k to move once a row is focused. Default sort is recoverable $/yr descending — the sites worth calling first sort to the top.');
+  panelHeader(panel, 'TRIAGE', state.filters.utility ? `Triage list — ${state.filters.utility}` : 'Triage list',
+    'Click a row to open, or use j/k to move once a row is focused. Default sort is recoverable $/yr descending — the sites worth calling first sort to the top.');
   renderFilterBar(panel);
 
   let list = filteredSites();
@@ -701,7 +822,8 @@ function renderTriage() {
     ['fault_months','Fault mo'], ['episode_count','Episodes'], ['top_signature','Top sig'],
     ['confidence','Conf'], ['recoverable_mwh_yr','MWh/yr'], ['recoverable_usd_yr','USD/yr'],
     ['conviction_tier','Tier'], ['warranty_urgent','Warranty'], ['peer_count','Peers'], ['peer_radius_km','Radius km'],
-    ['data_quality_flags','DQ flags'],
+    ['base_offering','Base offering'], ['recommended_offerings','Recommended bundle'], ['rvm_eligible','RVM eligible'],
+    ['annual_fee_usd','Annual fee'], ['data_quality_flags','DQ flags'],
   ];
   const cols = allCols.filter(([key]) => !state.hiddenCols.has(key));
 
@@ -762,6 +884,9 @@ function renderTriage() {
         else if (key==='top_signature') v = SIG_LABEL[v]||v;
         else if (key==='warranty_urgent') v = v ? '⚠ urgent' : '';
         else if (key==='data_quality_flags') v = (v||[]).join(', ');
+        else if (key==='recommended_offerings') v = (v||[]).join(', ') || '—';
+        else if (key==='rvm_eligible') v = v ? 'Yes' : 'No';
+        else if (key==='annual_fee_usd') v = fmtUsd(v);
         else if (key==='site') {
           const td = el('td',{class:'kcol'},[s.site + (s.stale ? '' : '')]);
           if (s.stale) td.appendChild(el('span',{class:'badge stale', style:'margin-left:6px'},['STALE']));
@@ -953,7 +1078,7 @@ function renderDetail() {
       .forEach(([l,v]) => relStrip.appendChild(el('div',{class:'card'},[el('div',{class:'v'},[String(v)]), el('div',{class:'l'},[l])])));
     relPanel.appendChild(relStrip);
 
-    const sigOrder = ['BLOCK_OUTAGE','BOS_INTERMITTENT','OUTAGE_FULL','SOILING','TRACKER','UNATTRIBUTED'];
+    const sigOrder = RELIABILITY_SIGS;
     const fcTable = el('table', {class:'grid'});
     fcTable.appendChild(el('tr',{}, [el('th',{class:'kcol'},['Signature']), el('th',{},['At risk?']),
       el('th',{},['12mo P(fail)']), el('th',{},['24mo P(fail)']), el('th',{},['36mo P(fail)'])]));
@@ -1065,7 +1190,35 @@ function navStep(list, delta) {
 
 function rerenderCurrent() { render(); }
 
+// Persistent header: Customer (search-as-you-type) + Site (dependent on
+// customer) dropdowns that drive every view - Portfolio Overview, Triage,
+// Reliability all scope to state.filters.utility via scopedSites()/
+// siteMatches(); picking a Site jumps straight to Site Detail.
+function renderHeaderControls() {
+  const ownerInput = document.getElementById('hdr-owner-input');
+  const ownerDatalist = document.getElementById('hdr-owner-datalist');
+  const siteSel = document.getElementById('hdr-site-select');
+  const note = document.getElementById('hdr-scope-note');
+
+  if (!ownerDatalist.childElementCount) {
+    ALL_OWNERS.forEach(o => ownerDatalist.appendChild(el('option', {value:o})));
+  }
+  if (document.activeElement !== ownerInput) ownerInput.value = state.filters.utility || '';
+
+  const siteList = scopedSites();
+  const wantSite = state.currentSite;
+  siteSel.innerHTML = '';
+  siteSel.appendChild(el('option', {value:''}, [state.filters.utility ? `— pick a site (${siteList.length}) —` : `— pick a site (${siteList.length} total) —`]));
+  siteList.forEach(s2 => siteSel.appendChild(el('option', {value:s2.site, selected: s2.site===wantSite ? true : undefined}, [s2.site])));
+  if (wantSite && siteList.some(s2=>s2.site===wantSite)) siteSel.value = wantSite;
+
+  note.textContent = state.filters.utility
+    ? `Scoped to ${state.filters.utility} (${siteList.length} sites) — Portfolio Overview, Triage and Reliability totals below reflect this customer only.`
+    : `No customer selected — showing the full fleet.`;
+}
+
 function render() {
+  renderHeaderControls();
   document.querySelectorAll('#topbar nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===state.view));
   if (state.view==='owners') renderOwners();
   else if (state.view==='fleet') renderFleet();
@@ -1161,6 +1314,8 @@ function renderReliability() {
   const m = document.getElementById('main');
   m.innerHTML = '';
   const rel = DATA.reliability;
+  const isScoped = !!state.filters.utility;
+  const scoped = scopedSites();
 
   if (!rel || !rel.available) {
     const panel = el('div', {class:'card-panel'});
@@ -1175,10 +1330,30 @@ function renderReliability() {
   const notesPanel = el('div', {class:'card-panel'});
   panelHeader(notesPanel, 'RELIABILITY', 'Life data analysis - first pass', rel.generated_from);
   rel.notes.forEach(n => notesPanel.appendChild(el('div', {class:'interp'}, [n])));
+  if (isScoped) {
+    notesPanel.appendChild(el('div', {class:'interp', style:'font-weight:bold'}, [
+      `Scoped to ${state.filters.utility} where the underlying data supports it (lost energy, fault site-months below). `+
+      `The distribution fits, bathtub curve, vintage scorecard and MTTR diagnostic further down are fleet-wide pooled fits - `+
+      `there is no per-customer refit in this pass, so those stay unfiltered and are labelled as such.`
+    ]));
+  }
   m.appendChild(notesPanel);
 
+  if (isScoped) {
+    const scopedCounts = computeScopedSignatureCounts(scoped);
+    const scopedKpiPanel = el('div', {class:'card-panel'});
+    panelHeader(scopedKpiPanel, 'PORTFOLIO', `${state.filters.utility} — fault site-months by signature`,
+      'Counted directly from this customer\'s own monthly signature classifications - a real per-customer figure, distinct from the fleet-wide failure/suspension counts below (those come from the pooled life-data fit, not decomposable by owner).');
+    const sstrip = el('div', {class:'cards'});
+    RELIABILITY_SIGS.forEach(sig => sstrip.appendChild(el('div',{class:'card'},[
+      el('div',{class:'v'},[String(scopedCounts.sigCounts[sig]||0)]), el('div',{class:'l'},[`${SIG_LABEL[sig]||sig} site-months`])
+    ])));
+    scopedKpiPanel.appendChild(sstrip);
+    m.appendChild(scopedKpiPanel);
+  }
+
   const kpiPanel = el('div', {class:'card-panel'});
-  panelHeader(kpiPanel, 'FLEET', 'Failures / suspensions by signature (all life records, all years)');
+  panelHeader(kpiPanel, 'FLEET', 'Failures / suspensions by signature (all life records, all years)' + (isScoped ? ' — fleet-wide, not customer-filtered' : ''));
   const strip = el('div', {class:'cards'});
   rel.signatures.forEach(s => strip.appendChild(el('div',{class:'card'},[
     el('div',{class:'v'},[String(s.n_failures)]), el('div',{class:'l'},[`${SIG_LABEL[s.signature]||s.signature} failures`])
@@ -1186,18 +1361,24 @@ function renderReliability() {
   kpiPanel.appendChild(strip);
   m.appendChild(kpiPanel);
 
-  if (rel.lost_energy_by_signature && rel.lost_energy_by_signature.length) {
+  const lostEnergyData = isScoped ? computeScopedLostEnergy(scoped) : rel.lost_energy_by_signature;
+  if (lostEnergyData && lostEnergyData.length) {
     const lossPanel = el('div', {class:'card-panel'});
-    panelHeader(lossPanel, 'LOST ENERGY', 'Lost-energy contribution by signature',
+    panelHeader(lossPanel, 'LOST ENERGY', `Lost-energy contribution by signature${isScoped ? ' — ' + state.filters.utility : ''}`,
       'Ranked by dollars, not episode count - a rare but long-running signature can cost more than a frequent, cheap one. Commercially the more useful ranking than the fault-count chart above.');
-    const sorted = rel.lost_energy_by_signature.slice().sort((a,b)=>b.lost_usd-a.lost_usd);
+    const sorted = lostEnergyData.slice().sort((a,b)=>b.lost_usd-a.lost_usd);
     lossPanel.appendChild(barChart(sorted.map(s=>SIG_LABEL[s.signature]||s.signature), sorted.map(s=>s.lost_usd), 900, 170, {xLabel:'Signature', yLabel:'Lost USD'}));
+    m.appendChild(lossPanel);
+  } else if (isScoped) {
+    const lossPanel = el('div', {class:'card-panel'});
+    panelHeader(lossPanel, 'LOST ENERGY', `Lost-energy contribution by signature — ${state.filters.utility}`);
+    lossPanel.appendChild(el('div',{class:'small'},['No ledger rows for this customer\'s sites with a reliability-eligible signature.']));
     m.appendChild(lossPanel);
   }
 
   if (rel.availability_benchmark) {
     const availPanel = el('div', {class:'card-panel'});
-    panelHeader(availPanel, 'AVAILABILITY BENCHMARK', 'Fleet energy availability (1 - lost MWh / target MWh)');
+    panelHeader(availPanel, 'AVAILABILITY BENCHMARK', 'Fleet energy availability (1 - lost MWh / target MWh)' + (isScoped ? ' — fleet-wide distribution, not customer-filtered' : ''));
     const b = rel.availability_benchmark;
     const strip2 = el('div', {class:'cards'});
     [['P10', b.p10], ['Median', b.median], ['P90', b.p90]].forEach(([l,v]) => strip2.appendChild(
@@ -1207,7 +1388,7 @@ function renderReliability() {
   }
 
   const fitPanel = el('div', {class:'card-panel'});
-  panelHeader(fitPanel, 'LIFE DATA FIT', 'Best-fit distribution and Weibull shape per signature',
+  panelHeader(fitPanel, 'LIFE DATA FIT', 'Best-fit distribution and Weibull shape per signature' + (isScoped ? ' — fleet-wide pooled fit, not customer-filtered' : ''),
     'beta > 1 = wear-out (age-driven, preventive-replacement/RVM eligible) - the ONLY classification eligible for that framing. beta < 1 = infant mortality, a warranty conversation, never a replace-before-it-breaks one.');
   const fitTable = el('table', {class:'grid'});
   fitTable.appendChild(el('tr',{}, [
@@ -1227,7 +1408,7 @@ function renderReliability() {
   m.appendChild(fitPanel);
 
   const candPanel = el('div', {class:'card-panel'});
-  panelHeader(candPanel, 'CANDIDATE DISTRIBUTIONS', 'Log-likelihood of all 5 fitted families (not just the winner)');
+  panelHeader(candPanel, 'CANDIDATE DISTRIBUTIONS', 'Log-likelihood of all 5 fitted families (not just the winner)' + (isScoped ? ' — fleet-wide, not customer-filtered' : ''));
   const candTable = el('table', {class:'grid'});
   candTable.appendChild(el('tr',{}, [el('th',{class:'kcol'},['Signature']), ...['exponential','weibull','gamma','lognormal','loglogistic'].map(f=>el('th',{},[f]))]));
   rel.signatures.forEach(s => {
@@ -1245,7 +1426,7 @@ function renderReliability() {
   m.appendChild(candPanel);
 
   const mttrPanel = el('div', {class:'card-panel'});
-  panelHeader(mttrPanel, 'MTTR DIAGNOSTIC', 'Mean episode duration by signature (calibration cross-check, not used in the fit above)');
+  panelHeader(mttrPanel, 'MTTR DIAGNOSTIC', 'Mean episode duration by signature (calibration cross-check, not used in the fit above)' + (isScoped ? ' — fleet-wide, not customer-filtered' : ''));
   const mttrTable = el('table', {class:'grid'});
   mttrTable.appendChild(el('tr',{}, [el('th',{class:'kcol'},['Signature']), el('th',{},['Mean MTTR (mo)']), el('th',{},['Median (mo)']), el('th',{},['n episodes'])]));
   rel.mttr_diagnostic.forEach(mt => {
@@ -1259,7 +1440,7 @@ function renderReliability() {
 
   if (rel.hazard_by_age && rel.hazard_by_age.length) {
     const bathtubPanel = el('div', {class:'card-panel'});
-    panelHeader(bathtubPanel, 'BATHTUB VERIFICATION', 'Empirical hazard rate by age band, per signature',
+    panelHeader(bathtubPanel, 'BATHTUB VERIFICATION', 'Empirical hazard rate by age band, per signature' + (isScoped ? ' — fleet-wide, not customer-filtered' : ''),
       'Exploratory (addendum Section 9.8) - inflection points below use only age bands with >=3 site-years of exposure, to avoid reading a handful of sites as a trend.');
     const bt = rel.bathtub_inflections || {};
     const btTable = el('table', {class:'grid'});
@@ -1285,7 +1466,7 @@ function renderReliability() {
 
   if (rel.vintage_scorecard && rel.vintage_scorecard.length) {
     const vsPanel = el('div', {class:'card-panel'});
-    panelHeader(vsPanel, 'VINTAGE SCORECARD', 'Failure rate by COD year band x tracking type',
+    panelHeader(vsPanel, 'VINTAGE SCORECARD', 'Failure rate by COD year band x tracking type' + (isScoped ? ' — fleet-wide, not customer-filtered' : ''),
       'Cell counts shown so a thin cell (few sites/little exposure) is not read as a fleet-wide rate.');
     const vsTable = el('table', {class:'grid'});
     vsTable.appendChild(el('tr',{}, [el('th',{class:'kcol'},['COD band']), el('th',{},['Tracking']), el('th',{},['Sites']), el('th',{},['Failures']), el('th',{},['Exposure (site-yr)']), el('th',{},['Lambda (site-yr)'])]));
@@ -1324,6 +1505,26 @@ document.querySelectorAll('#topbar nav button').forEach(b => b.addEventListener(
   state.view = b.dataset.view; location.hash = state.view==='detail' && state.currentSite ? 'site='+state.currentSite : '';
   render();
 }));
+
+document.getElementById('hdr-owner-input').addEventListener('input', (e) => {
+  const v = e.target.value;
+  if (v === '' || ALL_OWNERS.includes(v)) {
+    state.filters.utility = v;
+    // Selecting/clearing a customer re-scopes whatever view you're on
+    // rather than forcing navigation - only picking a Site (below) jumps.
+    if (state.currentSite) {
+      const stillInScope = scopedSites().some(s2 => s2.site === state.currentSite);
+      if (!stillInScope) state.currentSite = null;
+    }
+    render();
+  }
+});
+document.getElementById('hdr-site-select').addEventListener('change', (e) => {
+  if (e.target.value) openSite(e.target.value);
+});
+document.getElementById('hdr-clear-btn').addEventListener('click', () => {
+  state.filters.utility = ''; state.currentSite = null; render();
+});
 
 window.addEventListener('keydown', (e) => {
   if (document.activeElement && ['TEXTAREA','INPUT'].includes(document.activeElement.tagName)) return;
