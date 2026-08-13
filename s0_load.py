@@ -154,7 +154,7 @@ def main():
 
     xlsx = os.path.join(RAW_DIR, "Solar_Production_and_Asset_Data_FY19_FY26.xlsx")
     if os.path.exists(xlsx):
-        assert_workbook_p_equals_z(xlsx, sample_years=["2019", "2023", "2025"])
+        assert_workbook_p_equals_z(xlsx, sample_years=["2019", "2022", "2023", "2025"])
 
     log.info("S0 complete: production.parquet (%d rows), sites.parquet (%d rows), "
               "generators.parquet (%d rows)",
