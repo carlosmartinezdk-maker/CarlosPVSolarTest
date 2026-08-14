@@ -1,44 +1,44 @@
 {
   "BLOCK_OUTAGE": {
-    "n_site_years": 2685,
-    "var_over_mean": 0.09303560470387856,
+    "n_site_years": 3319,
+    "var_over_mean": 0.08827972483993025,
     "converged": true,
-    "alpha_intercept": 0.09314863053832291,
-    "aic": 7851.859337321788
+    "alpha_intercept": 0.05020326181474674,
+    "aic": 9672.985898283885
   },
   "BOS_INTERMITTENT": {
-    "n_site_years": 3349,
-    "var_over_mean": 0.19933980888015224,
+    "n_site_years": 4322,
+    "var_over_mean": 0.1939094937223858,
     "converged": true,
-    "alpha_intercept": 0.11903283064831732,
-    "aic": 10483.021844326999
+    "alpha_intercept": 0.09379910055914051,
+    "aic": 13470.538153439964
   },
   "OUTAGE_FULL": {
-    "n_site_years": 994,
-    "var_over_mean": 0.10913367610876855,
+    "n_site_years": 1311,
+    "var_over_mean": 0.11298842350712657,
     "converged": true,
-    "alpha_intercept": 0.11373618455230629,
-    "aic": 2941.5531065502755
+    "alpha_intercept": 0.010446296569303036,
+    "aic": 3891.675321855644
   },
   "SOILING": {
-    "n_site_years": 860,
-    "var_over_mean": 0.0637801953891794,
+    "n_site_years": 1085,
+    "var_over_mean": 0.06470562128301695,
     "converged": true,
-    "alpha_intercept": 0.04714940930266148,
-    "aic": 2479.359824597766
+    "alpha_intercept": -0.10687581564103778,
+    "aic": 3127.4583148487204
   },
   "TRACKER": {
-    "n_site_years": 467,
-    "var_over_mean": 0.10596731594585673,
+    "n_site_years": 624,
+    "var_over_mean": 0.10879258070269307,
     "converged": true,
-    "alpha_intercept": -0.04890556395798742,
-    "aic": 1373.5134376738827
+    "alpha_intercept": 0.1341376162814028,
+    "aic": 1841.8577570801795
   },
   "UNATTRIBUTED": {
-    "n_site_years": 3533,
-    "var_over_mean": 0.1983028888655976,
+    "n_site_years": 4483,
+    "var_over_mean": 0.1924506403719683,
     "converged": true,
-    "alpha_intercept": 0.05479514682783478,
-    "aic": 11265.218047870621
+    "alpha_intercept": 0.03402010024868842,
+    "aic": 14223.199740189422
   }
 }
