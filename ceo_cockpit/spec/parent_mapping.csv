@@ -1,0 +1,28 @@
+spv_name,parent_company,confidence,evidence
+"Double Back Diamond Solar Power, LLC",Swift Current Energy,high,Swift Current is named long-term owner and operator of the 800 MWdc Double Black Diamond project; EIA name appears to be a typo of 'Black'
+"Mockingbird Solar Center, LLC",Orsted,high,Orsted's largest global solar project; TX TDLR filing lists Owner: Orsted
+"Old 300 Solar Center, LLC",Orsted,high,"Developed and owned by Orsted, Fort Bend County TX, operational Oct 2024"
+Dunns Bridge Solar Center LLC,NextEra Energy,high,NextEra Energy Resources project page; subsidiary of NextEra Energy Resources LLC
+"Mammoth North, LLC",Doral Renewables,high,"Phase 1 of Doral's Mammoth Solar, Pulaski/Starke County IN"
+"IP Radian, LLC",Intersect Power,high,'IP' prefix is Intersect Power's project naming convention (cf. IP Titan)
+"IP Lumina, LLC",Intersect Power,high,same naming convention
+"IP Lumina II, LLC",Intersect Power,high,same naming convention
+Intersect Power,Intersect Power,high,already the parent name
+"SE Juno, LLC",SB Energy,medium,SB Energy operates the Juno solar project in Borden County TX; VERIFY before use in a pitch
+"SE Titan, LLC",SB Energy,medium,same 'SE' prefix and geography as SE Juno; VERIFY
+"Eleven Mile Solar Center, LLC",Orsted,medium,Arizona project attributed to Orsted; VERIFY
+"Waco Solar, LLC",,needs_research,
+"Washington County Solar, LLC",,needs_research,
+"Crane Solar Project, LLC",,needs_research,
+Greasewood II LLC,,needs_research,
+"Solar Star California XIX, LLC",,needs_research,
+Desert Quartzite LLC,,needs_research,
+Atrisco Solar LLC,,needs_research,
+Riverstart Solar Park LLC,,needs_research,
+Misae Lessee LLC,,needs_research,
+"AP Solar 2, LLC",,needs_research,
+Corazon Energy LLC,,needs_research,
+"Imperial Valley Solar, LLC",,needs_research,
+Taygete Energy Project LLC,,needs_research,
+Midway Solar,,needs_research,
+Concho Bluff LLC,,needs_research,

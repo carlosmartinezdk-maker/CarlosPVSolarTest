@@ -1,0 +1,110 @@
+account,ultimate_parent,account_owner,category,market,segment,gtm_stage,om_model,relationship,gtm_solar_mw,has_solar_inspections,has_solar_saas,has_rvm,has_performance
+TotalEnergies,TotalEnergies,Benjamin Airey,Owner / IPP,EU,Tier 2,Subscription,FSA,Prospect,,False,False,False,True
+Brookfield,Brookfield,,Owner / IPP,NAM,Tier 2,Subscription,Self-perform,Customer,12200,True,True,False,False
+Enel (Enel Green Power),Enel GreenPower,Brian Steffes,Owner / IPP,NAM,Tier 1,Inspection Only,Self-perform,Prospect,,False,False,False,False
+Engie,Engie EU,,Owner / IPP,EU,Tier 1,Subscription,Self-perform,Customer,7900,True,True,False,False
+NextEra,NextEra,Dan Partin,Owner / IPP,NAM,Tier 1,Subscription,Self-perform,Customer,7600,True,True,False,False
+Axpo,,,,,,,,,,False,False,False,False
+AES (AES Clean Energy),AES,Dan Pasick,Owner / IPP,NAM,Tier 1,Subscription,Self-perform,Customer,5800,True,True,False,False
+RWE,RWE Europe and Offshore,Nagore Guarretxena,Owner / IPP,EU,Tier 1,Inspection Only,Self-perform,Customer,,False,False,False,False
+Exus Group,Exus Management Partners,Carter Beil,Owner / IPP,NAM,Tier 3,Subscription,Self-perform,Customer,6791,True,True,True,False
+Statkraft,Statkraft,Patrick Strom,Owner / IPP,EU,Tier 2,Go Get,Unknown,Prospect,307,True,False,False,False
+Eolus,Eolus Vind AB,Patrick Strom,Owner / IPP,EU,Tier 3,Subscription,Self-perform,Prospect,6200,False,True,False,True
+EDPR,EDPR,Dan Pasick,Owner / IPP,NAM,,,Self-perform,Prospect,5907,True,True,False,False
+EDF,EDF renewables NAM,Brian Steffes,Owner / IPP,NAM,Tier 1,Subscription,Self-perform,Customer,4100,True,True,False,False
+BP (Lightsource bp),BP,Dan Pasick,Owner / IPP,NAM,,,Self-perform,Prospect,3000,True,True,False,False
+Encavis,Encavis,,Owner / IPP,EU,Tier 2,Subscription,Self-perform,Prospect,2200,False,True,False,True
+Greenbacker,Greenbacker,Brian Steffes,Owner / IPP,NAM,Tier 3,Subscription,Unknown,Prospect,1400,True,True,False,True
+Clearway,Clearway Energy,Brian Steffes,Owner / IPP,NAM,Tier 1,Subscription,Self-perform,Customer,2727,True,True,False,False
+Southern Power,Southern Power,Brian Steffes,Owner / IPP,NAM,Tier 2,Subscription,Hybrid,Customer,2000,True,True,True,False
+Invenergy,Invenergy,Dan Pasick,ISP,NAM,Tier 1,Inspection Only,,Prospect,1737,True,False,False,False
+PacifiCorp,Berkshire Hathaway,Dan Pasick,Owner / IPP,NAM,Tier 2,Subscription,Unknown,Customer,360,True,True,True,False
+Naturgy,Naturgy,Nagore Guarretxena,Owner / IPP,EU,Tier 3,Inspection Only,FSA,Prospect,,False,False,False,False
+Orsted,Orsted,,Owner / IPP,EU,Tier 1,Inspection Only,Self-perform,Prospect,1996,True,False,False,False
+Octopus,Octopus,Benjamin Airey,Owner / IPP,EU,Tier 2,Subscription,Self-perform,Prospect,2400,True,True,False,True
+CGN,CGN,Benjamin Airey,Owner / IPP,NAM,,,Unknown,Prospect,2400,False,True,False,True
+Pattern,Pattern Energy,Brian Steffes,Owner / IPP,NAM,Tier 1,Subscription,Hybrid,Customer,2000,True,True,False,False
+BHE Renewables,Berkshire Hathaway,Dan Pasick,Owner / IPP,NAM,Tier 2,Subscription,Hybrid,Customer,1300,True,True,False,False
+Trianel,Trianel,RE Square,Owner / IPP,EU,Tier 3,Subscription,Unknown,Prospect,1250,False,True,False,True
+Alliant Energy,Alliant Energy,Dan Pasick,Owner / IPP,NAM,Tier 2,Inspection Only,Unknown,Prospect,1500,True,False,False,False
+We Energies,We Energies,,Owner / IPP,NAM,Tier 3,Inspection Only,FSA,Prospect,718,True,False,False,False
+Nadara,Nadara,,Owner / IPP,EU,Tier 1,Subscription,Self-perform,Customer,,False,False,False,False
+Exus,,,,,,,,,,False,False,False,False
+EnBW,EnBW Energie,Patrick Strom,Owner / IPP,EU,Tier 2,Inspection Only,FSA,Prospect,1200,True,False,False,False
+D.E. Shaw,D.E. Shaw,,Owner / IPP,NAM,,,FSA,Prospect,431.15,False,False,False,False
+Ameren,Ameren Missouri,Carter Beil,Owner / IPP,NAM,Tier 2,Subscription,FSA,Customer,500,True,True,False,False
+Evergy,Evergy,Brian Steffes,Owner / IPP,NAM,Tier 3,Subscription,FSA,Customer,0,True,True,False,False
+Greenbacker (2),,,,,,,,,,False,False,False,False
+Longroad,Longroad Energy,Brian Steffes,Owner / IPP,NAM,Tier 2,Subscription,Unknown,Customer,200,True,True,False,False
+Scottish Power,Scottish Power,McQueenie,Owner / IPP,EU,Tier 1,Subscription,Self-perform,Customer,300,True,True,False,False
+BayWa r.e.,BayWa R.E.,,Owner / IPP,EU,Tier 2,Go Get,FSA,Prospect,261,True,False,False,False
+UPC,UPC Power Solutions (PivotGen),Carter Beil,Owner / IPP,NAM,Tier 3,Inspection Only,FSA,Prospect,773,True,False,False,False
+Glennmont,Glennmont/Nuveen,Patrick Strom,Owner / IPP,EU,Tier 2,Subscription,FSA,Prospect,634,False,True,False,True
+Deriva Energy,Brookfield,Dan Pasick,Owner / IPP,NAM,Tier 1,Subscription,Self-perform,Customer,344,True,False,False,False
+MidAmerican,Berkshire Hathaway,Dan Pasick,Owner / IPP,NAM,Tier 1,Subscription,Hybrid,Customer,244,True,False,False,False
+AEP,AEP Renewables,Brian Steffes,Owner / IPP,NAM,Tier 2,Inspection Only,FSA,Prospect,10,True,False,False,False
+Fu-Gen,Fu-Gen AG,,Owner / IPP,EU,Tier 3,Subscription,FSA,Prospect,500,False,True,False,True
+Qair,Qair,Patrick Strom,Owner / IPP,EU,Tier 3,Subscription,FSA,Prospect,500,False,True,False,True
+Patriot Renewables,Patriot Renewables,,Owner / IPP,NAM,Tier 3,Inspection Only,FSA,Prospect,443,True,False,False,False
+NTR,NTR,Benjamin Airey,Owner / IPP,EU,Tier 3,Subscription,FSA,Prospect,326,True,True,False,True
+Akuo Energy,Akuo Energy,Benjamin Airey,Owner / IPP,EU,Tier 3,Inspection Only,FSA,Prospect,376,True,False,False,False
+Kruger Energy,Kruger Energie,Dan Pasick,Owner / IPP,NAM,Tier 3,Inspection Only,FSA,Prospect,60,True,False,False,False
+Capital Power,Capital Power,Carter Beil,Owner / IPP,NAM,Tier 2,Inspection Only,FSA,Prospect,130,True,False,False,False
+EWZ,ewz Makaknuten Vind AS,Benjamin Airey,Owner / IPP,EU,Tier 3,Subscription,FSA,Prospect,23.6,True,True,False,True
+BluEarth,BluEarth Renewables,Carter Beil,Owner / IPP,NAM,Tier 3,Subscription,FSA,Customer,275,True,True,False,False
+ATCO,ATCO,,Owner / IPP,NAM,Tier 3,Inspection Only,FSA,Prospect,259,True,False,False,False
+Constellation,Constellation,Brian Steffes,Owner / IPP,NAM,Tier 2,Subscription,Unknown,Customer,242,True,True,False,False
+Boreas,BOREAS,RE Square,ISP,EU,ISP,Subscription,,Prospect,233,False,True,False,True
+Ilmatar,Ilmatar Energy,,Owner / IPP,EU,Tier 3,Subscription,FSA,Prospect,0,False,True,False,True
+DTE Energy,DTE Energy,Carter Beil,Owner / IPP,NAM,Tier 2,Subscription,FSA,Customer,0,True,True,False,False
+Whitewater Wind,,,,,,,,,,False,False,False,False
+Re-Cap,Re-Cap,RE Square,Owner / IPP,EU,Tier 3,Needs Investigation,FSA,Prospect,177,False,True,False,False
+AGL Australia,AGL Australia,Dan Pasick,Owner / IPP,APAC,Tier 2,Inspection Only,Unknown,Prospect,150,True,False,False,False
+Rabbalshede,Rabbalshede Kraft,,Owner / IPP,EU,Tier 3,Subscription,FSA,Prospect,144.7,False,True,False,True
+NTR (2),,,,,,,,,,False,False,False,False
+Liberty Power,Liberty Utilities,,Owner / IPP,NAM,Tier 3,Needs Investigation,FSA,Prospect,134,True,False,False,False
+GRP,GRP,,Owner / IPP,NAM,,,FSA,Prospect,130.47,False,False,False,False
+Evolugen,Evolugen,Carter Beil,Owner / IPP,NAM,Tier 3,Subscription,FSA,Customer,42,True,True,False,False
+Fronteris,FRONTERIS,Patrick Strom,ISP,EU,ISP,Subscription,,Prospect,100,False,True,False,True
+WestWind,WestWind Service,,ISP,EU,ISP,Subscription,,Prospect,0,False,True,False,True
+WPD,WPD,Benjamin Airey,Owner / IPP,EU,Tier 2,Subscription,FSA,Prospect,70,False,True,False,True
+oekostrom,Oekostrom AG,Patrick Strom,Owner / IPP,EU,Tier 3,Subscription,FSA,Prospect,60,False,True,False,True
+Greensolver,Greensolver,,ISP,EU,Tier 3,Inspection Only,,Prospect,55,True,False,False,False
+Saeta Yield,Saeta Yield,,Owner / IPP,EU,Tier 2,Go Get,FSA,Prospect,49,True,False,False,False
+ImWind,ImWind,Patrick Strom,Owner / IPP,EU,Tier 3,Subscription,FSA,Prospect,47,False,True,False,True
+Ventolines,Ventolines,Patrick Strom,ISP,EU,ISP,Subscription,,Prospect,14,False,True,False,True
+Eneco,Eneco,Patrick Strom,Owner / IPP,EU,Tier 2,Subscription,FSA,Customer,40,True,True,False,False
+Mashav,Mashav Energia,Patrick Strom,Owner / IPP,EU,Tier 3,Subscription,FSA,Prospect,16,False,True,False,True
+BNRG,BNRG Renewables,,Fund,EU,Tier 3,Not in ICP,Passive-financial,Prospect,0.5,False,False,False,False
+Aspenall,Aspenall Energies,Brian Steffes,Owner / IPP,NAM,Tier 3,Subscription,FSA,Customer,0,True,True,False,False
+Carleton College,,,,,,,,,,False,False,False,False
+Electricity Distribution Services Ltd.,Electricity Distribution Services,McQueenie,ISP,EU,ISP,Inspection Only,,Prospect,0,True,False,False,False
+Eurus Energy America Corporation,Eurus Energy,,Owner / IPP,EU,Tier 2,Needs Investigation,FSA,Prospect,0,True,False,False,False
+Nergica,,,,,,,,,,False,False,False,False
+PEI Energy Corporation,PEI Energy,,Owner / IPP,NAM,Tier 3,Inspection Only,FSA,Prospect,0,True,False,False,False
+Portland General Electric (PGE),Portland General Electric,,Owner / IPP,NAM,Tier 2,Subscription,FSA,Customer,,False,False,True,False
+Trac Energy,Trac Energy,,ISP,EU,ISP,Inspection Only,,Prospect,0,True,False,False,False
+Vardar Vind AB,,,,,,,,,,False,False,False,False
+Vineyard Wind,,,,,,,,,,False,False,False,False
+WindHQ,WindHQ,Carter Beil,Owner / IPP,NAM,Tier 3,Subscription,FSA,Prospect,0,True,True,True,False
+Eurowatt,Eurowatt,,Owner / IPP,EU,Tier 3,Needs Investigation,FSA,Prospect,0,False,True,False,False
+EOS Wind France,EOS Wind France,,Owner / IPP,EU,Tier 3,Subscription,FSA,Prospect,0,False,True,False,True
+PK Windfarm Management,,,,,,,,,,False,False,False,False
+SL EnergieTechnik,,,,,,,,,,False,False,False,False
+Windcluster,Windcluster,,ISP,EU,ISP,Subscription,,Prospect,0,False,True,False,True
+ACP,,,,,,,,,,False,False,False,False
+EVN,EVN-Naturkraft,Patrick Strom,Owner / IPP,EU,Tier 3,Subscription,FSA,Prospect,0,False,True,False,True
+Swisspower,Swisspower,RE Square,Owner / IPP,EU,Tier 2,Subscription,FSA,Prospect,0,False,True,False,True
+EnergyInMind,,,,,,,,,,False,False,False,False
+Mutkalampi Tuulipuisto Oy,,,,,,,,,,False,False,False,False
+AerSoleir,,,,,,,,,,False,False,False,False
+Elgin,,,,,,,,,,False,False,False,False
+Natural Power,Natural Power,,ISP,EU,ISP,Subscription,,Prospect,,False,False,False,False
+Parkwind,Parkwind NV,Patrick Strom,Owner / IPP,EU,Tier 2,Needs Investigation,FSA,Prospect,0,False,True,False,False
+RWE NAM,RWE NAM,Dan Pasick,Owner / IPP,NAM,Tier 1,Subscription,Self-perform,Customer,2000,True,True,False,False
+EDF renewables EU,EDF renewables EU,Benjamin Airey,Owner / IPP,EU,Tier 1,Subscription,Self-perform,Customer,,False,False,False,True
+Orsted (Onshore),Orsted (Onshore),,Owner / IPP,NAM,Tier 2,Subscription,Self-perform,Customer,,False,False,False,False
+Clearlight Energy (LS Power),Clearlight (fka Liberty Power + BP),,Owner / IPP,NAM,Tier 2,Subscription,Unknown,Customer,,False,False,False,False
+Terraform,Brookfield,Carter Beil,Owner / IPP,NAM,Tier 2,Subscription,Unknown,Customer,,False,False,False,False
+Northland Power,Northland Power,Dan Pasick,Owner / IPP,EU,Tier 2,Go Get,FSA,Customer,,False,False,False,False
+Engie NAM,Engie NAM,,Owner / IPP,NAM,Tier 1,Subscription,Self-perform,Customer,,False,False,False,False
