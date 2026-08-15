@@ -1,44 +1,44 @@
 {
   "BLOCK_OUTAGE": {
-    "n_site_years": 3319,
-    "var_over_mean": 0.08827972483993025,
+    "n_site_years": 4804,
+    "var_over_mean": 0.08558825934498948,
     "converged": true,
-    "alpha_intercept": 0.05020326181474674,
-    "aic": 9672.985898283885
+    "alpha_intercept": 0.033709573770809305,
+    "aic": 13978.042325868453
   },
   "BOS_INTERMITTENT": {
-    "n_site_years": 4322,
-    "var_over_mean": 0.1939094937223858,
+    "n_site_years": 7742,
+    "var_over_mean": 0.20082006192237503,
     "converged": true,
-    "alpha_intercept": 0.09379910055914051,
-    "aic": 13470.538153439964
+    "alpha_intercept": 0.0836434217141663,
+    "aic": 24196.245164343763
   },
   "OUTAGE_FULL": {
-    "n_site_years": 1311,
-    "var_over_mean": 0.11298842350712657,
+    "n_site_years": 2332,
+    "var_over_mean": 0.11698251599729431,
     "converged": true,
-    "alpha_intercept": 0.010446296569303036,
-    "aic": 3891.675321855644
+    "alpha_intercept": 0.11797334338349322,
+    "aic": 6923.9343369472645
   },
   "SOILING": {
-    "n_site_years": 1085,
-    "var_over_mean": 0.06470562128301695,
+    "n_site_years": 1918,
+    "var_over_mean": 0.09727144941067495,
     "converged": true,
-    "alpha_intercept": -0.10687581564103778,
-    "aic": 3127.4583148487204
+    "alpha_intercept": -0.08973600003814727,
+    "aic": 5608.306747181272
   },
   "TRACKER": {
-    "n_site_years": 624,
-    "var_over_mean": 0.10879258070269307,
+    "n_site_years": 933,
+    "var_over_mean": 0.13234392469434125,
     "converged": true,
-    "alpha_intercept": 0.1341376162814028,
-    "aic": 1841.8577570801795
+    "alpha_intercept": 0.06790537524936598,
+    "aic": 2776.462749849162
   },
   "UNATTRIBUTED": {
-    "n_site_years": 4483,
-    "var_over_mean": 0.1924506403719683,
+    "n_site_years": 7353,
+    "var_over_mean": 0.189027868792184,
     "converged": true,
-    "alpha_intercept": 0.03402010024868842,
-    "aic": 14223.199740189422
+    "alpha_intercept": 0.26055671060603874,
+    "aic": 23365.4329106076
   }
 }

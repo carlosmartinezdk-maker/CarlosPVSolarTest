@@ -10,18 +10,18 @@
     "note": null
   },
   "OUTAGE_FULL": {
-    "infant_end_years": 4.0,
-    "wearout_start_years": 4.0,
+    "infant_end_years": 6.0,
+    "wearout_start_years": 6.0,
     "note": null
   },
   "SOILING": {
-    "infant_end_years": 4.0,
-    "wearout_start_years": 4.0,
+    "infant_end_years": 6.0,
+    "wearout_start_years": 6.0,
     "note": null
   },
   "TRACKER": {
-    "infant_end_years": 8.0,
-    "wearout_start_years": 8.0,
+    "infant_end_years": 6.0,
+    "wearout_start_years": 6.0,
     "note": null
   },
   "UNATTRIBUTED": {

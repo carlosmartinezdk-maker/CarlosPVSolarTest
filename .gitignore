@@ -7,3 +7,10 @@ output/*.parquet
 data/raw/*.csv
 data/raw/*.xlsx
 logs/
+
+# Regenerated every pipeline run and delivered directly to Carlos via
+# SendUserFile - too large for git at full-fleet scale (explorer.html and
+# PI_PRI_Results.xlsx both now exceed or approach GitHub's 100MB hard
+# file-size cap). Kept out of the repo entirely rather than via git-lfs.
+explorer.html
+output/PI_PRI_Results.xlsx
