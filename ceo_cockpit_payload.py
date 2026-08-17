@@ -60,7 +60,8 @@ def build_map_sites(sites, account):
     return out
 
 
-def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all_pct, total_coi_all):
+def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all_pct, total_coi_all,
+                   site_detail=None):
     in_scope = in_scope.sort_values("coi_3yr_usd", ascending=False)
 
     accounts_out = []
@@ -70,6 +71,13 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
             n_sites=ri(a["n_sites"]), mwdc=r(a["mwdc"], 1), states=a["states"],
             coi_3yr_usd=r(a["coi_3yr_usd"]), recoverable_usd_yr=r(a["recoverable_usd_yr"]),
             fee_annual_usd=r(a["fee_annual_usd"]), fee_as_pct_of_loss=r(a["fee_as_pct_of_loss"], 4),
+            # Pass 3 §2.2: "lead-offering fee" (fee_annual_usd, above) vs.
+            # "total potential at full attach" (below) - two different
+            # questions, kept as separately-labelled fields, never summed.
+            software_revenue_usd_yr=r(a["software_revenue_usd_yr"]),
+            inspection_revenue_usd_yr=r(a["inspection_revenue_usd_yr"]),
+            total_ssi_potential_usd_yr=r(a["total_ssi_potential_usd_yr"]),
+            n_sites_insp_fitted=ri(a["n_sites_insp_fitted"]),
             payback_weeks=r(a["payback_weeks"], 1), confidence=a["confidence"],
             ownership_unresolved=bool(a["ownership_unresolved"]),
             top_signature=a["top_signature_mode"], focus_band=a["focus_band"], focus_reason=a["focus_reason"],
@@ -137,6 +145,14 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
             if row.get("capacity_suspect"):
                 for f in PI_DERIVED_FIELDS:
                     row[f] = None
+            # Pass 3 §4: site drill-down detail - monthly arrays aligned to
+            # meta.detail_months, plus this site's event-ledger rows.
+            # site_detail is optional (only s18's live build supplies it;
+            # older test payloads without it just carry no `detail` key).
+            if site_detail is not None:
+                d = site_detail["per_site"].get(s["site"])
+                if d is not None:
+                    row["detail"] = d
             rows.append(row)
         sites_by_account[owner] = rows
 
@@ -179,7 +195,18 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
             in_scope_accounts=ri(len(in_scope)),
             in_scope_coi_usd=r(in_scope["coi_3yr_usd"].sum()),
             in_scope_fee_potential_usd=r(in_scope["fee_annual_usd"].sum()),
+            # Pass 3 §2.2: the "$11.5M" lead-offering figure above and this
+            # total-at-full-attach figure (~$48.2M) are the two numbers that
+            # must never be summed or shown without their distinct labels.
+            in_scope_total_ssi_potential_usd=r(in_scope["total_ssi_potential_usd_yr"].sum()),
+            inspection_coverage=dict(n=int(in_scope["n_sites_insp_fitted"].sum()), of=n_in_scope_sites),
             matched_gtm_accounts=coverage["matched_gtm_accounts"],
+            # Pass 3 §4: shared lookups for the site-detail arrays below -
+            # every in-scope site shares this identical month grid, so it's
+            # stored once here rather than once per site.
+            detail_months=site_detail["months"] if site_detail else None,
+            signature_lookup=site_detail["signature_lookup"] if site_detail else None,
+            gate_lookup=site_detail["gate_lookup"] if site_detail else None,
         ),
         screen1=dict(
             waterfall=dict(

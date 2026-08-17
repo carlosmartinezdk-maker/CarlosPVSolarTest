@@ -256,12 +256,35 @@ def match_all_owners(account_df: pd.DataFrame, gtm: pd.DataFrame) -> pd.DataFram
 # --------------------------------------------------------------------------
 # Account rollup
 # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# Pass 3 Section 2.2: "what is this account worth at full attach", as
+# distinct from fee_annual_usd (the "lead-offering fee" - what we'd charge
+# if a site bought only the one product we lead with). Never summed with
+# fee_annual_usd - see CEO_COCKPIT_REVISIONS_PASS3.md Part 2.2's explicit
+# "never sum them".
+# --------------------------------------------------------------------------
+def software_revenue_usd_yr(mwdc: float, pricing: dict) -> float:
+    off = pricing["offerings"]
+    rate = off["solar_saas"]["usd_per_mwdc_year"] + off["scada_monitoring"]["usd_per_mwdc_year"]
+    return (mwdc or 0) * rate
+
+
+def inspection_revenue_usd_yr(mwdc: float, optimal_months, pricing: dict) -> float:
+    off = pricing["offerings"]
+    visits = 12.0 / optimal_months if optimal_months and not pd.isna(optimal_months) else 1.0
+    return (mwdc or 0) * off["solar_inspection"]["usd_per_mwdc_inspected"] * visits
+
+
 def build_account_table(sites: pd.DataFrame, pricing: dict) -> pd.DataFrame:
     sites = sites.copy()
     sites["_offerings_list"] = sites["recommended_offerings"].fillna("").apply(
         lambda s: [x for x in s.split(";") if x])
     sites["_fee_corrected"] = sites.apply(
         lambda r: corrected_site_fee(r["_offerings_list"], r["mwdc"], pricing), axis=1)
+    sites["_software_rev"] = sites["mwdc"].apply(lambda m: software_revenue_usd_yr(m, pricing))
+    sites["_inspection_rev"] = sites.apply(
+        lambda r: inspection_revenue_usd_yr(r["mwdc"], r.get("rel_insp_optimal_months"), pricing), axis=1)
+    sites["_inspection_fitted"] = sites["rel_insp_optimal_months"].notna()
 
     g = sites.groupby("owner_entity")
     acct = g.agg(
@@ -272,6 +295,9 @@ def build_account_table(sites: pd.DataFrame, pricing: dict) -> pd.DataFrame:
         recoverable_usd_yr=("recoverable_usd_yr", lambda s: s.fillna(0).sum()),
         recoverable_mwh_yr=("recoverable_mwh_yr", lambda s: s.fillna(0).sum()),
         fee_annual_usd=("_fee_corrected", "sum"),
+        software_revenue_usd_yr=("_software_rev", "sum"),
+        inspection_revenue_usd_yr=("_inspection_rev", "sum"),
+        n_sites_insp_fitted=("_inspection_fitted", "sum"),
         warranty_urgent_n=("warranty_urgent", "sum"),
         pri_benchmarked_pct=("latest_pri", lambda s: s.notna().mean()),
         median_years_present=("years_present", "median"),
@@ -279,6 +305,7 @@ def build_account_table(sites: pd.DataFrame, pricing: dict) -> pd.DataFrame:
         top_signature_mode=("top_signature", lambda s: s.mode().iloc[0] if len(s.mode()) else None),
     ).reset_index()
 
+    acct["total_ssi_potential_usd_yr"] = acct["software_revenue_usd_yr"] + acct["inspection_revenue_usd_yr"]
     acct["fee_as_pct_of_loss"] = np.where(acct["recoverable_usd_yr"] > 0,
                                            acct["fee_annual_usd"] / acct["recoverable_usd_yr"], np.nan)
     acct["payback_weeks"] = np.where(
@@ -493,12 +520,25 @@ def main():
     total_coi_all = account["coi_3yr_usd"].sum()
     whitespace_all_pct = account.loc[account["relationship"] == "Whitespace", "coi_3yr_usd"].sum() / total_coi_all
 
+    # Pass 3 Section 4: site detail (monthly arrays + event ledger) for the
+    # site drill-down modal, in-scope sites only. Read directly from the
+    # S0-S17 pipeline's own per-site-month parquet - the same source
+    # s11_explorer.py reads - rather than reimplemented, per Carlos's Part 6
+    # caution against the cockpit's site view drifting from the explorer's.
+    import ceo_cockpit_site_detail
+    in_scope_site_names = set(sites.loc[sites["owner_entity"].isin(in_scope_owners), "site"])
+    site_detail = ceo_cockpit_site_detail.load_site_detail(in_scope_site_names)
+    log.info("site detail: %d sites, %d months (%s..%s), %d signature codes, %d gate codes",
+              len(site_detail["per_site"]), len(site_detail["months"]), site_detail["months"][0],
+              site_detail["months"][-1], len(site_detail["signature_lookup"]), len(site_detail["gate_lookup"]))
+
     from ceo_cockpit_payload import build_payload  # local import, defined below in this file's companion module
-    payload = build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all_pct, total_coi_all)
+    payload = build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all_pct, total_coi_all,
+                             site_detail)
 
     with open("ceo_cockpit_template.html") as f:
         template = f.read()
-    html = template.replace("__PAYLOAD_JSON__", json.dumps(payload, default=str))
+    html = template.replace("__PAYLOAD_JSON__", json.dumps(payload, default=str, separators=(",", ":")))
     with open("ceo_cockpit.html", "w") as f:
         f.write(html)
     size_mb = len(html) / 1e6
