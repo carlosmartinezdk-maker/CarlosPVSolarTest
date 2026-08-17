@@ -11,11 +11,16 @@ currency: USD
 basis: MWdc
 
 offerings:
+  # CORRECTED 17 Aug 2026 (CEO_COCKPIT_REVISIONS_PASS2.md Part B3): the
+  # confirmed rates are per MWdc per MONTH, not per year - $10 and $4 were
+  # being used directly as annual rates, undercounting fee potential by
+  # 12x. Annualised here at source so every consumer (S9-S17, explorer.html,
+  # ceo_cockpit.html) agrees - see tests/test_pricing.py.
   solar_saas:
-    usd_per_mwdc_year: 10.0
+    usd_per_mwdc_year: 120.0  # = $10/MWdc/month x 12
     pricing_source: confirmed
   scada_monitoring:
-    usd_per_mwdc_year: 4.0
+    usd_per_mwdc_year: 48.0  # = $4/MWdc/month x 12
     pricing_source: confirmed
   solar_inspection:
     usd_per_mwdc_inspected: 150.0
