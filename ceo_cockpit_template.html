@@ -85,6 +85,20 @@ table.grid th:hover { color:var(--ink); }
 table.grid td.still-avail, table.grid th.still-avail { font-weight:bold; color:var(--accent); }
 tr.rep-account-row td { color:var(--muted); font-size:12.5px; }
 .print-btn { display:inline-block; }
+/* Pass 3 §3.2: site detail modal - an overlay over #main, never a route
+   change or a re-render of the page underneath, so closing it can never
+   move the pitch page's scroll position (test 82). */
+.site-link { color:var(--accent); cursor:pointer; text-decoration:underline; text-decoration-style:dotted; }
+.site-modal-overlay { position:fixed; inset:0; background:rgba(30,28,24,.55); z-index:200;
+  display:flex; align-items:flex-start; justify-content:center; overflow:auto; padding:30px 16px; }
+.site-modal { background:var(--bg); border-radius:10px; max-width:980px; width:100%; padding:0 0 20px; }
+.site-modal-head { display:flex; justify-content:space-between; align-items:center; padding:14px 20px;
+  position:sticky; top:0; background:var(--bg); border-bottom:1px solid var(--panel-border); border-radius:10px 10px 0 0; z-index:1; }
+.site-modal-nav button:disabled { opacity:.4; cursor:default; }
+.site-modal-header { padding:16px 20px 4px; }
+.site-modal .card-panel { margin:14px 20px 0; }
+.fault-ribbon { display:flex; flex-wrap:wrap; gap:2px; }
+.fault-cell { width:14px; height:20px; border-radius:2px; cursor:default; }
 @page { size: A4; margin: 10mm; }
 @media print {
   #topbar-wrap, #header-controls, .no-print { display:none !important; }
@@ -125,6 +139,7 @@ tr.rep-account-row td { color:var(--muted); font-size:12.5px; }
 </div>
 
 <main id="main"></main>
+<div id="site-modal-root"></div>
 
 <script type="application/json" id="payload-data">__PAYLOAD_JSON__</script>
 <!-- Explorer v2 Part C: offline US map. d3-geo + topojson-client + 
@@ -231,6 +246,239 @@ function panelHeader(panel, eyebrow, title, sub) {
   if (sub) panel.appendChild(el('div', {class:'small'}, [sub]));
 }
 function accountByName(name) { return DATA.accounts.find(a => a.owner_entity === name); }
+
+// ============================================================ SITE DETAIL ==
+// Pass 3 §3.2/§4/§6: an in-page panel over the pitch page, generated from
+// the same source-of-truth arrays s11_explorer.py reads (site_month_dollars,
+// event_ledger, reliability_forecast, inspection_schedule), not a second
+// computation - the caution in §6 is that reimplementing this chart is how
+// the cockpit and the explorer end up disagreeing in front of a customer.
+// It renders into #site-modal-root, a sibling of #main, so opening/closing
+// it never touches #main's DOM and the pitch page's scroll position is
+// simply never disturbed (test 82), rather than saved/restored by hand.
+const SIG_COLOR = {
+  NONE:'#dcd7c9', WATCH_NOT_A_FAULT:'#cbd6c2', UNSCORED:'#b6b0a3',
+  BLOCK_OUTAGE:'#b5433a', OUTAGE_FULL:'#7a1f1f', BOS_INTERMITTENT:'#d98e34',
+  TRACKER:'#7a5a3a', SOILING:'#c9a227', CLIPPING:'#7a5cc9',
+  CURTAILMENT:'#4a7fb5', DEGRADATION:'#c9633f', SNOW:'#7fb3d5', UNATTRIBUTED:'#8a8578',
+};
+// Same D thresholds config.py uses to classify a month (D_NOISE_CEILING=0.03,
+// D_WATCH_BAND_HIGH=0.08, D_OUTAGE_FLOOR=0.70) - not a separate cockpit scale.
+function dBand(d) {
+  if (d == null) return '—';
+  if (d < 0.03) return 'None';
+  if (d < 0.08) return 'Watch';
+  if (d < 0.70) return 'Fault';
+  return 'Outage';
+}
+// MTBF from this site's own event ledger (exposure months / episode count) -
+// not a fleet fit, so it's computable straight from fields already in the
+// payload rather than needing a new backend field.
+function mtbfMonths(detail) {
+  if (!detail || !detail.ledger_exposure_months || !detail.ledger_episodes) return null;
+  const exposure = detail.ledger_exposure_months.reduce((a,b)=>a+(b||0), 0);
+  const episodes = detail.ledger_episodes.reduce((a,b)=>a+(b||0), 0);
+  return episodes > 0 ? exposure / episodes : null;
+}
+function openSiteDetail(rows, idx) { state.siteDetail = {rows, idx: Math.max(0, idx)}; renderSiteModal(); }
+function closeSiteDetail() { state.siteDetail = null; renderSiteModal(); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && state.siteDetail) closeSiteDetail(); });
+
+function siteDetailPerformancePanel(detail, months) {
+  const panel = el('div', {class:'card-panel'});
+  panelHeader(panel, 'PERFORMANCE', 'Monthly actual vs. expected MWh, PI/PRI on secondary axis');
+  const eAct = detail.e_act||[], eExp = detail.e_exp||[], pi = detail.pi||[], pri = detail.pri||[];
+  if (!months.length || !eAct.length) { panel.appendChild(el('div',{class:'small'},['No monthly detail available for this site.'])); return panel; }
+  const W = 900, H = 240, padL = 50, padR = 60, padT = 14, padB = 30;
+  const plotW = W-padL-padR, plotH = H-padT-padB;
+  const maxMwh = Math.max(1, ...eAct.filter(v=>v!=null), ...eExp.filter(v=>v!=null));
+  const piMin = 0.4, piMax = 1.6;
+  const xAt = i => padL + (i/(Math.max(1,months.length-1)))*plotW;
+  const yMwh = v => padT+plotH - (v/maxMwh)*plotH;
+  const yRatio = v => padT+plotH - ((v-piMin)/(piMax-piMin))*plotH;
+  const s = svg('svg', {width:'100%', height:H+26, viewBox:`0 0 ${W} ${H+26}`});
+  s.appendChild(svg('line', {x1:padL, y1:padT, x2:padL, y2:padT+plotH, stroke:'var(--panel-border)'}));
+  s.appendChild(svg('line', {x1:padL, y1:padT+plotH, x2:padL+plotW, y2:padT+plotH, stroke:'var(--panel-border)'}));
+  s.appendChild(svg('line', {x1:padL+plotW, y1:padT, x2:padL+plotW, y2:padT+plotH, stroke:'var(--panel-border)'}));
+  const thY = yRatio(0.92);
+  s.appendChild(svg('line', {x1:padL, y1:thY, x2:padL+plotW, y2:thY, stroke:'var(--warn)', 'stroke-width':1, 'stroke-dasharray':'4,3'}));
+  const thLbl = svg('text', {x:padL+plotW+4, y:thY+3, style:'font:10px Arial; fill:var(--warn)'}); thLbl.textContent = '0.92'; s.appendChild(thLbl);
+  // gaps are gaps, not zeros (test 83): break the polyline at every null
+  // rather than plotting it as 0, by drawing one <polyline> per contiguous
+  // run of non-null values instead of a single line across the whole series.
+  function draw(arr, yfn, color, width) {
+    let cur = [];
+    const flush = () => { if (cur.length>1) s.appendChild(svg('polyline', {points:cur.join(' '), fill:'none', stroke:color, 'stroke-width':width})); cur = []; };
+    arr.forEach((v,i) => { if (v==null) { flush(); return; } cur.push(`${xAt(i)},${yfn(v)}`); });
+    flush();
+  }
+  draw(eExp, yMwh, 'var(--panel-border)', 2);
+  draw(eAct, yMwh, 'var(--accent)', 2);
+  draw(pi, yRatio, '#4a7fb5', 1.3);
+  draw(pri, yRatio, '#c9633f', 1.3);
+  months.forEach((mLbl,i) => { if (i%12===0) { const t = svg('text',{x:xAt(i), y:padT+plotH+16, 'text-anchor':'middle', style:'font:10px Arial; fill:#7a756c'}); t.textContent = mLbl; s.appendChild(t); } });
+  const yl = svg('text', {x:-(padT+plotH/2), y:14, 'text-anchor':'middle', transform:'rotate(-90)', style:'font:11px Arial; fill:#7a756c'}); yl.textContent = 'MWh'; s.appendChild(yl);
+  const yr = svg('text', {x:padL+plotW-4, y:padT-2, 'text-anchor':'end', style:'font:10px Arial; fill:#7a756c'}); yr.textContent = 'PI / PRI (right axis)'; s.appendChild(yr);
+  const xl = svg('text', {x:padL+plotW/2, y:H+20, 'text-anchor':'middle', style:'font:11px Arial; fill:#7a756c'}); xl.textContent = 'Month'; s.appendChild(xl);
+  panel.appendChild(s);
+  panel.appendChild(el('div',{class:'legend', style:'margin-top:6px'},[
+    el('span',{},[el('span',{class:'sw',style:'background:var(--accent)'}),'Actual MWh']),
+    el('span',{},[el('span',{class:'sw',style:'background:var(--panel-border)'}),'Expected MWh']),
+    el('span',{},[el('span',{class:'sw',style:'background:#4a7fb5'}),'PI']),
+    el('span',{},[el('span',{class:'sw',style:'background:#c9633f'}),'PRI']),
+  ]));
+  return panel;
+}
+
+function siteDetailFaultRibbonPanel(detail, months) {
+  const panel = el('div', {class:'card-panel'});
+  panelHeader(panel, 'FAULT HISTORY', 'One cell per month, coloured by signature - grey where not scored');
+  const sigIdx = detail.sig_idx||[], gateIdx = detail.gate_idx||[], dArr = detail.d||[];
+  if (!months.length || !sigIdx.length) { panel.appendChild(el('div',{class:'small'},['No monthly signature history available for this site.'])); return panel; }
+  const sigLookup = DATA.meta.signature_lookup||[], gateLookup = DATA.meta.gate_lookup||[];
+  const ribbon = el('div', {class:'fault-ribbon'});
+  months.forEach((mLbl,i) => {
+    const si = sigIdx[i], sig = si!=null ? sigLookup[si] : null;
+    const gi = gateIdx[i], gate = gi!=null ? gateLookup[gi] : null;
+    const d = dArr[i];
+    const color = sig ? (SIG_COLOR[sig]||'#999') : '#c9c4b8';
+    const title = `${mLbl}: ${sig ? (SIG_LABEL[sig]||sig) : 'Not scored'} · D=${d!=null?d.toFixed(3):'—'} · band ${dBand(d)}${gate?` · gate ${gate}`:''}`;
+    ribbon.appendChild(el('div', {class:'fault-cell', style:`background:${color}`, title}));
+  });
+  panel.appendChild(ribbon);
+  const legendSigs = Object.keys(SIG_COLOR).filter(k => k!=='NONE' && k!=='WATCH_NOT_A_FAULT' && k!=='UNSCORED');
+  panel.appendChild(el('div',{class:'legend', style:'margin-top:8px'},
+    legendSigs.map(k => el('span',{},[el('span',{class:'sw',style:`background:${SIG_COLOR[k]}`}), SIG_LABEL[k]||k]))
+      .concat([el('span',{},[el('span',{class:'sw',style:'background:#c9c4b8'}),'Not scored'])])));
+  return panel;
+}
+
+function siteDetailPeerPanel(detail, months) {
+  const panel = el('div', {class:'card-panel'});
+  panelHeader(panel, 'PEER GROUP', 'Peers used for benchmarking, most recent scored month');
+  const pc = detail.peer_count||[], pr = detail.peer_radius_km||[], ph = detail.peers_healthy||[], bp = detail.benchmark_peer||[];
+  let lastIdx = -1;
+  for (let i = months.length-1; i>=0; i--) { if (pc[i]!=null) { lastIdx = i; break; } }
+  if (lastIdx === -1) { panel.appendChild(el('div',{class:'small'},['No peer-benchmark history available for this site.'])); return panel; }
+  const cards = el('div', {class:'cards'});
+  [['Benchmark mode', bp[lastIdx]===1?'Peer':(bp[lastIdx]===0?'Physical model':'—')],
+   ['Peers used', pc[lastIdx]!=null?fmt.count(pc[lastIdx]):'—'],
+   ['Search radius reached', pr[lastIdx]!=null?`${fmt.raw(pr[lastIdx],1)} km`:'—'],
+   ['Survived health filter', ph[lastIdx]!=null?fmt.count(ph[lastIdx]):'—']]
+    .forEach(([l,v]) => cards.appendChild(el('div',{class:'card'},[el('div',{class:'v'},[v]), el('div',{class:'l'},[l])])));
+  panel.appendChild(cards);
+  panel.appendChild(el('div',{class:'small', style:'margin-top:6px'},[`As of ${months[lastIdx]} - the most recent month with a peer-group evaluation.`]));
+  return panel;
+}
+
+function siteDetailReliabilityPanel(row, detail) {
+  const panel = el('div', {class:'card-panel'});
+  panelHeader(panel, 'RELIABILITY', "This site's dominant fault types, fitted at fleet level and applied at this site's age");
+  const relSigs = DATA.meta.reliability_signatures||[];
+  const p12 = detail.rel_p12||[], p24 = detail.rel_p24||[], credZ = detail.rel_credibility_z||[];
+  const rows = relSigs.map((sig,i) => ({sig, p12:p12[i], p24:p24[i], credZ:credZ[i]})).filter(r => r.p12!=null || r.p24!=null);
+  if (!rows.length) {
+    panel.appendChild(el('div',{class:'small'},['No fitted reliability forecast for this site.']));
+  } else {
+    const t = el('table', {class:'grid'});
+    t.appendChild(el('tr',{},[el('th',{class:'kcol'},['Fault type']),el('th',{},['β']),el('th',{},['η (yrs)']),
+      el('th',{},['MTTR (mo)']),el('th',{},['12mo failure prob.']),el('th',{},['24mo failure prob.']),el('th',{},['Credibility weight'])]));
+    rows.forEach(r => {
+      const fit = DATA.reliability.signatures.find(s2=>s2.signature===r.sig) || {};
+      const mttr = (DATA.reliability.mttr_by_signature.find(m=>m.signature===r.sig)||{}).mttr_months;
+      t.appendChild(el('tr',{},[
+        el('td',{class:'kcol'},[SIG_LABEL[r.sig]||r.sig]),
+        el('td',{},[fit.weibull_beta!=null?fmt.raw(fit.weibull_beta,3):'—']),
+        el('td',{},[fmt.eta(fit.weibull_eta_years)]),
+        el('td',{},[mttr!=null?fmt.raw(mttr,1):'—']),
+        el('td',{},[r.p12!=null?fmt.pct(r.p12):'—']),
+        el('td',{},[r.p24!=null?fmt.pct(r.p24):'—']),
+        el('td',{},[r.credZ!=null?fmt.raw(r.credZ,2):'—']),
+      ]));
+    });
+    panel.appendChild(el('div',{class:'tblscroll'},[t]));
+  }
+  const mtbf = mtbfMonths(detail);
+  const cards = el('div', {class:'cards', style:'margin-top:10px'});
+  [['N_blocks', row.rel_n_blocks!=null?fmt.count(row.rel_n_blocks):'—'],
+   ['MTBF (this site’s own event history)', mtbf!=null?`${fmt.raw(mtbf,1)} mo`:'—'],
+   ['Optimal inspection interval', row.rel_insp_optimal_months!=null?`every ${fmt.count(row.rel_insp_optimal_months)} mo`:'not fitted']]
+    .forEach(([l,v]) => cards.appendChild(el('div',{class:'card'},[el('div',{class:'v'},[v]), el('div',{class:'l'},[l])])));
+  panel.appendChild(cards);
+  if (detail.insp_costs && DATA.meta.inspection_horizons_months) {
+    const ic = el('table', {class:'grid', style:'margin-top:10px'});
+    ic.appendChild(el('tr',{},[el('th',{class:'kcol'},['Inspection cadence']), ...DATA.meta.inspection_horizons_months.map(h=>el('th',{},[`every ${h}mo`]))]));
+    ic.appendChild(el('tr',{},[el('td',{class:'kcol'},['3-yr total cost']), ...detail.insp_costs.map(c=>el('td',{},[fmt.usd(c)]))]));
+    panel.appendChild(el('div',{class:'small', style:'margin-top:8px'},['Cost curve across candidate inspection cadences:']));
+    panel.appendChild(el('div',{class:'tblscroll'},[ic]));
+  }
+  return panel;
+}
+
+function siteDetailLedgerPanel(detail) {
+  const panel = el('div', {class:'card-panel'});
+  panelHeader(panel, 'EVENT LEDGER', 'Year × signature × exposure, from the event ledger');
+  const yrs = detail.ledger_year||[];
+  if (!yrs.length) { panel.appendChild(el('div',{class:'small'},['No ledger events recorded for this site.'])); return panel; }
+  const sigLookup = DATA.meta.signature_lookup||[];
+  const t = el('table', {class:'grid'});
+  t.appendChild(el('tr',{},[el('th',{class:'kcol'},['Year']),el('th',{},['Signature']),el('th',{},['Months']),
+    el('th',{},['Episodes']),el('th',{},['Exposure (mo)']),el('th',{},['MWh lost']),el('th',{},['USD lost'])]));
+  yrs.forEach((yr,i) => {
+    const si = detail.ledger_sig_idx[i], sig = si!=null ? sigLookup[si] : null;
+    t.appendChild(el('tr',{},[
+      el('td',{class:'kcol'},[String(yr)]), el('td',{},[SIG_LABEL[sig]||sig||'—']),
+      el('td',{},[fmt.count(detail.ledger_months[i])]), el('td',{},[fmt.count(detail.ledger_episodes[i])]),
+      el('td',{},[fmt.raw(detail.ledger_exposure_months[i],1)]),
+      el('td',{},[fmt.count(detail.ledger_mwh_lost[i])]), el('td',{},[fmt.usd(detail.ledger_usd_lost[i])]),
+    ]));
+  });
+  panel.appendChild(el('div',{class:'tblscroll'},[t]));
+  return panel;
+}
+
+function renderSiteModal() {
+  const root = document.getElementById('site-modal-root');
+  root.innerHTML = '';
+  const sd = state.siteDetail;
+  if (!sd) return;
+  const row = sd.rows[sd.idx];
+  const detail = row.detail || {};
+  const months = DATA.meta.detail_months || [];
+
+  const overlay = el('div', {class:'site-modal-overlay'});
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeSiteDetail(); });
+  const modal = el('div', {class:'site-modal'});
+
+  const head = el('div', {class:'site-modal-head'});
+  head.appendChild(el('div', {class:'site-modal-nav'}, [
+    el('button', {class:'btn secondary', disabled: sd.idx<=0?true:undefined,
+      onclick:()=>{ sd.idx = Math.max(0, sd.idx-1); renderSiteModal(); }}, ['← Prev']),
+    el('span', {class:'small', style:'margin:0 8px'}, [`${sd.idx+1} of ${sd.rows.length}`]),
+    el('button', {class:'btn secondary', disabled: sd.idx>=sd.rows.length-1?true:undefined,
+      onclick:()=>{ sd.idx = Math.min(sd.rows.length-1, sd.idx+1); renderSiteModal(); }}, ['Next →']),
+  ]));
+  head.appendChild(el('button', {class:'btn secondary', onclick:closeSiteDetail}, ['✕ Close']));
+  modal.appendChild(head);
+
+  const hstrip = el('div', {class:'site-modal-header'});
+  hstrip.appendChild(el('h2', {style:'margin:0 0 6px'},
+    [row.site, row.capacity_suspect ? el('span',{class:'badge suspect'},['capacity under review']) : null].filter(v=>v!==null)));
+  hstrip.appendChild(el('div', {class:'small'}, [
+    `${state.currentAccount||''} · ${row.operator||'—'} · ${row.state||'—'}${row.county?', '+row.county:''} · `+
+    `${fmt.mwdc(row.mwdc)} MWdc · COD ${row.cod||'—'} · ${row.tracking||'—'} · ${row.module||'—'} · `+
+    `${row.conviction_tier||'—'} conviction · latest scored ${row.latest_scored_month||'—'}`]));
+  modal.appendChild(hstrip);
+
+  modal.appendChild(siteDetailPerformancePanel(detail, months));
+  modal.appendChild(siteDetailFaultRibbonPanel(detail, months));
+  modal.appendChild(siteDetailPeerPanel(detail, months));
+  modal.appendChild(siteDetailReliabilityPanel(row, detail));
+  modal.appendChild(siteDetailLedgerPanel(detail));
+
+  overlay.appendChild(modal);
+  root.appendChild(overlay);
+}
 
 // ----------------------------------------------------------- site map (A4) --
 // 6,200 sites is too many for per-circle SVG hover handlers. Every site is
@@ -778,6 +1026,12 @@ function renderPitch(m) {
 
   const sites = (DATA.sites_by_account[a.owner_entity] || []).slice();
   const plays = DATA.plays.filter(p => p.account === a.owner_entity).sort((x,y)=>y.coi_3yr_usd-x.coi_3yr_usd);
+  // Pass 3 §3.2: every site name on this page opens the site detail modal;
+  // back/forward inside it cycles worst-first through the whole account
+  // (not just the visible top-5), same ordering as the underperforming-
+  // assets table so "next" reads the same way a CEO would work the list.
+  const navSites = sites.slice().sort((x,y)=>(y.cost_of_inaction_usd||0)-(x.cost_of_inaction_usd||0));
+  const siteLink = s => el('span', {class:'site-link', onclick:()=>openSiteDetail(navSites, navSites.indexOf(s))}, [s.site]);
 
   const header = el('div', {class:'card-panel'});
   const hh = el('div', {class:'pitch-header'});
@@ -857,7 +1111,7 @@ function renderPitch(m) {
     el('th',{},['β significant?']),el('th',{},['Last scored month']));
   wt.appendChild(el('tr',{},wtHead));
   worst.forEach(s => {
-    const row = [el('td',{class:'kcol'},[s.site]), el('td',{},[fmt.mwdc(s.mwdc)]),
+    const row = [el('td',{class:'kcol'},[siteLink(s)]), el('td',{},[fmt.mwdc(s.mwdc)]),
       el('td',{},[SIG_LABEL[s.top_signature]||s.top_signature||'—']), el('td',{},[s.fault_months!=null?fmt.count(s.fault_months):'—']),
       el('td',{},[fmt.usd(s.recoverable_usd_yr)]), el('td',{},[s.conviction_tier||'—'])];
     if (state.showTechnicalDetail) row.push(
@@ -890,7 +1144,7 @@ function renderPitch(m) {
     const status = rem == null ? 'Not resolved' : rem <= 0 ? 'Expired' : rem <= 1 ? 'Expiring within 1yr' : 'Active';
     const p24 = REPAIR_COST[s.top_signature] ? s['rel_p24_' + s.top_signature] : null;
     wat.appendChild(el('tr',{},[
-      el('td',{class:'kcol'},[s.site]), el('td',{},[fmt.mwdc(s.mwdc)]), el('td',{},[s.cod||'—']),
+      el('td',{class:'kcol'},[siteLink(s)]), el('td',{},[fmt.mwdc(s.mwdc)]), el('td',{},[s.cod||'—']),
       el('td',{},[fmt.raw(rem,1)]), el('td',{},[p24!=null?fmt.pct(p24):'—']),
       el('td',{},[fmt.usd(s.rel_warranty_claim_value_usd)]), el('td',{},[status]),
     ]));
@@ -965,20 +1219,6 @@ function renderPitch(m) {
     forecastPanel.appendChild(el('div',{class:'small'},['No reliability forecast available for this account\'s sites.']));
   }
   m.appendChild(forecastPanel);
-
-  const whyPanel = el('div', {class:'card-panel'});
-  panelHeader(whyPanel, 'WHY THIS OFFERING', 'Plain English, tied to what is actually happening on site');
-  const domSig = a.top_signature;
-  const why = {
-    SOILING: 'Soiling losses are recoverable with a cleaning programme, and the loss accrues every month it goes unaddressed.',
-    BLOCK_OUTAGE: 'Repeat block outages point to a specific, fixable equipment issue, not a systemic design problem.',
-    OUTAGE_FULL: 'A full-site outage is the most expensive minute-by-minute loss in the portfolio, and the one continuous monitoring catches fastest.',
-    TRACKER: 'Tracker misalignment is a controller/mechanical fix, not a capital replacement.',
-    BOS_INTERMITTENT: 'Intermittent balance-of-system faults are hard to see without regular inspection, easy to fix once found.',
-    UNATTRIBUTED: 'The cause is not yet confirmed - the first step is a diagnostic, not a guess at the fix.',
-  }[domSig] || 'Recommended from this portfolio\'s dominant fault pattern.';
-  whyPanel.appendChild(el('div',{class:'interp'},[why]));
-  m.appendChild(whyPanel);
 }
 
 // =============================================================== SCREEN 4 ==

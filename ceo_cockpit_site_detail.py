@@ -16,6 +16,15 @@ import pandas as pd
 
 MONTHLY_SRC = "data/site_month_dollars.parquet"
 LEDGER_SRC = "data/event_ledger.parquet"
+FORECAST_SRC = "data/reliability_forecast.parquet"
+INSPECTION_SRC = "data/inspection_schedule.parquet"
+
+# Same fixed 6-signature order s11_explorer.py uses for its own per-site
+# reliability lookup (RELIABILITY_SIGS_SORTED = sorted(config.RELIABILITY_SIGNATURES))
+# - kept here rather than imported from config to avoid this module reaching
+# past the two parquets it's built around.
+RELIABILITY_SIGS_SORTED = ["BLOCK_OUTAGE", "BOS_INTERMITTENT", "OUTAGE_FULL", "SOILING", "TRACKER", "UNATTRIBUTED"]
+INSPECTION_HORIZONS = [3, 6, 12, 24]
 
 # All 6,203 sites share one identical 89-month calendar grid (2019-01
 # through the latest month with weather data) - verified directly against
@@ -24,6 +33,9 @@ LEDGER_SRC = "data/event_ledger.parquet"
 MONTHLY_COLS = ["site", "month_start", "E_act_mwh", "E_exp_mwh", "PI", "PRI", "D",
                 "signature_final", "gate_fired", "benchmark_mode", "block_fraction",
                 "peer_count", "peer_radius_km", "peers_healthy"]
+FORECAST_COLS = ["site", "signature", "horizon_months", "cond_prob_failure", "credibility_Z"]
+INSPECTION_COLS = ["site", "optimal_interval_months", "total_cost_3mo", "total_cost_6mo",
+                    "total_cost_12mo", "total_cost_24mo"]
 
 
 def _rnd(v, nd):
@@ -75,6 +87,8 @@ def load_site_detail(in_scope_sites: set) -> dict:
         per_site[site] = dict(
             e_act=[_rndint(v) for v in g["E_act_mwh"]],
             e_exp=[_rndint(v) for v in g["E_exp_mwh"]],
+            pi=[_rnd(v, 3) for v in g["PI"]],
+            pri=[_rnd(v, 3) for v in g["PRI"]],
             d=[_rnd(v, 3) for v in g["D"]],
             sig_idx=[sig_index.get(v) for v in g["signature_final"]],
             gate_idx=[gate_index.get(v) for v in g["gate_fired"]],
@@ -99,5 +113,48 @@ def load_site_detail(in_scope_sites: set) -> dict:
         d["ledger_mwh_lost"] = [_rndint(v) for v in g["mwh_lost"]]
         d["ledger_usd_lost"] = [_rndint(v) for v in g["usd_lost"]]
 
+    # Reliability panel (Pass 3 §3.2d): 12/24-month failure probability with
+    # its credibility weight, per fault type, plus the inspection cost
+    # curve - read directly from the same reliability_forecast.parquet and
+    # inspection_schedule.parquet s11_explorer.py reads for its own
+    # per-site reliability lookup (load_reliability_site_lookup), rather
+    # than refitting anything here.
+    rel_sigs_present = [s for s in RELIABILITY_SIGS_SORTED if s in sig_index]
+    n_rel = len(rel_sigs_present)
+    for d in per_site.values():
+        d["rel_p12"] = [None] * n_rel
+        d["rel_p24"] = [None] * n_rel
+        d["rel_credibility_z"] = [None] * n_rel
+        d["insp_costs"] = None
+
+    forecast = pd.read_parquet(FORECAST_SRC, columns=FORECAST_COLS)
+    forecast = forecast[forecast["site"].isin(in_scope_sites) & forecast["signature"].isin(rel_sigs_present)]
+    sig_pos = {s: i for i, s in enumerate(rel_sigs_present)}
+    for (site, sig), g in forecast.groupby(["site", "signature"], sort=False):
+        d = per_site.setdefault(site, {})
+        if "rel_p12" not in d:
+            d["rel_p12"] = [None] * n_rel
+            d["rel_p24"] = [None] * n_rel
+            d["rel_credibility_z"] = [None] * n_rel
+            d["insp_costs"] = None
+        pos = sig_pos[sig]
+        h12 = g[g["horizon_months"] == 12]
+        h24 = g[g["horizon_months"] == 24]
+        if len(h12):
+            d["rel_p12"][pos] = _rnd(h12["cond_prob_failure"].iloc[0], 4)
+            d["rel_credibility_z"][pos] = _rnd(h12["credibility_Z"].iloc[0], 3)
+        if len(h24):
+            d["rel_p24"][pos] = _rnd(h24["cond_prob_failure"].iloc[0], 4)
+            if d["rel_credibility_z"][pos] is None:
+                d["rel_credibility_z"][pos] = _rnd(h24["credibility_Z"].iloc[0], 3)
+
+    inspection = pd.read_parquet(INSPECTION_SRC, columns=INSPECTION_COLS)
+    inspection = inspection[inspection["site"].isin(in_scope_sites)]
+    for row in inspection.itertuples():
+        d = per_site.setdefault(row.site, {})
+        d["insp_costs"] = [_rndint(row.total_cost_3mo), _rndint(row.total_cost_6mo),
+                            _rndint(row.total_cost_12mo), _rndint(row.total_cost_24mo)]
+
     return dict(months=month_labels, signature_lookup=sig_values,
-                gate_lookup=gate_values, per_site=per_site)
+                gate_lookup=gate_values, reliability_signatures=rel_sigs_present,
+                inspection_horizons_months=INSPECTION_HORIZONS, per_site=per_site)

@@ -130,7 +130,7 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
         field: dict(n=int(in_scope_sites[field].notna().sum()), of=n_in_scope_sites)
         for field in ("rel_n_blocks", "rel_insp_optimal_months", "rel_warranty_remaining_years")
     }
-    site_cols = ["site", "state", "county", "operator", "mwdc", "lat", "lon", "cod", "tracking",
+    site_cols = ["site", "state", "county", "operator", "mwdc", "lat", "lon", "cod", "tracking", "module",
                  "conviction_tier", "top_signature", "fault_months", "episode_count",
                  "cost_of_inaction_usd", "recoverable_usd_yr", "recoverable_mwh_yr",
                  "latest_pi", "latest_pri", "latest_scored_month", "beta", "beta_t", "beta_excess",
@@ -243,6 +243,8 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
             detail_months=site_detail["months"] if site_detail else None,
             signature_lookup=site_detail["signature_lookup"] if site_detail else None,
             gate_lookup=site_detail["gate_lookup"] if site_detail else None,
+            reliability_signatures=site_detail["reliability_signatures"] if site_detail else None,
+            inspection_horizons_months=site_detail["inspection_horizons_months"] if site_detail else None,
         ),
         screen1=dict(
             waterfall=dict(
