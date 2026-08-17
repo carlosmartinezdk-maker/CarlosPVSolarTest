@@ -299,19 +299,33 @@ def build_account_table(sites: pd.DataFrame, pricing: dict) -> pd.DataFrame:
 # --------------------------------------------------------------------------
 # Plays (Section 3): account x dominant fault pattern
 # --------------------------------------------------------------------------
+def fmt_usd(v: float) -> str:
+    """A3's money rule (CEO_COCKPIT_REVISIONS_PASS2.md), applied server-side
+    too - pitch_sentence is plain text baked at build time, not re-formatted
+    by the template's JS fmt utility, so it has to follow the same rule."""
+    av = abs(v)
+    if av >= 1e6:
+        return f"${v/1e6:,.1f}M"
+    return f"${v:,.0f}"
+
+
+def fmt_mwdc(v: float) -> str:
+    return f"{v:,.1f}"
+
+
 PITCH_TEMPLATES = {
-    "SOILING": "{n} of your {region} plants ({mwdc:.0f} MWdc) are losing production to soiling. "
-               "A cleaning programme recovers an estimated ${rec:,.0f}/yr against a ${fee:,.0f} inspection fee.",
-    "BLOCK_OUTAGE": "{n} of your {region} plants ({mwdc:.0f} MWdc) are carrying repeat block outages. "
-                    "Recurrent inspection plus coordinated repair recovers an estimated ${rec:,.0f}/yr against a ${fee:,.0f} fee.",
-    "OUTAGE_FULL": "{n} of your {region} plants ({mwdc:.0f} MWdc) have had full-site outages. "
-                   "SCADA monitoring would catch the next one in hours, not months - an estimated ${rec:,.0f}/yr at stake against a ${fee:,.0f} fee.",
-    "TRACKER": "{n} of your {region} plants ({mwdc:.0f} MWdc) show tracker misalignment. "
-               "An inspection and controller check recovers an estimated ${rec:,.0f}/yr against a ${fee:,.0f} fee.",
-    "BOS_INTERMITTENT": "{n} of your {region} plants ({mwdc:.0f} MWdc) show intermittent BOS faults. "
-                        "Aerial IR plus string-level inspection recovers an estimated ${rec:,.0f}/yr against a ${fee:,.0f} fee.",
-    "UNATTRIBUTED": "{n} of your {region} plants ({mwdc:.0f} MWdc) are underperforming without a confirmed cause yet. "
-                    "A full site diagnostic is the first step - an estimated ${rec:,.0f}/yr is unexplained.",
+    "SOILING": "{n} of your {region} plants ({mwdc} MWdc) are losing production to soiling. "
+               "A cleaning programme recovers an estimated {rec}/yr against a {fee} inspection fee.",
+    "BLOCK_OUTAGE": "{n} of your {region} plants ({mwdc} MWdc) are carrying repeat block outages. "
+                    "Recurrent inspection plus coordinated repair recovers an estimated {rec}/yr against a {fee} fee.",
+    "OUTAGE_FULL": "{n} of your {region} plants ({mwdc} MWdc) have had full-site outages. "
+                   "SCADA monitoring would catch the next one in hours, not months - an estimated {rec}/yr at stake against a {fee} fee.",
+    "TRACKER": "{n} of your {region} plants ({mwdc} MWdc) show tracker misalignment. "
+               "An inspection and controller check recovers an estimated {rec}/yr against a {fee} fee.",
+    "BOS_INTERMITTENT": "{n} of your {region} plants ({mwdc} MWdc) show intermittent BOS faults. "
+                        "Aerial IR plus string-level inspection recovers an estimated {rec}/yr against a {fee} fee.",
+    "UNATTRIBUTED": "{n} of your {region} plants ({mwdc} MWdc) are underperforming without a confirmed cause yet. "
+                    "A full site diagnostic is the first step - an estimated {rec}/yr is unexplained.",
 }
 SIGNATURE_OFFERING = {
     "SOILING": "Recurrent Inspection", "BLOCK_OUTAGE": "Recurrent Inspection",
@@ -342,7 +356,7 @@ def build_plays(sites: pd.DataFrame, pricing: dict) -> pd.DataFrame:
         offering = SIGNATURE_OFFERING.get(sig, "Recurrent Inspection")
         fee = corrected_site_fee([offering], mwdc, pricing)
         template = PITCH_TEMPLATES.get(sig, PITCH_TEMPLATES["UNATTRIBUTED"])
-        pitch = template.format(n=len(g), region=region, mwdc=mwdc, rec=rec, fee=max(fee, 1))
+        pitch = template.format(n=len(g), region=region, mwdc=fmt_mwdc(mwdc), rec=fmt_usd(rec), fee=fmt_usd(max(fee, 1)))
         pid += 1
         plays.append(dict(
             play_id=f"P{pid:04d}", account=owner, signature=sig, n_sites=len(g),

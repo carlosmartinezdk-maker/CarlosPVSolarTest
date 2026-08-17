@@ -72,6 +72,15 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
 
     # per-account site detail, in-scope only (keeps payload small - test 63)
     in_scope_owners = set(in_scope["owner_entity"])
+    in_scope_sites = sites[sites["owner_entity"].isin(in_scope_owners)]
+    n_in_scope_sites = len(in_scope_sites)
+    # B2: every section built on rel_* fields needs an explicit "based on X
+    # of Y sites" statement - one coverage count per field, computed once
+    # here against the in-scope site set so every screen agrees.
+    rel_field_coverage = {
+        field: dict(n=int(in_scope_sites[field].notna().sum()), of=n_in_scope_sites)
+        for field in ("rel_n_blocks", "rel_insp_optimal_months", "rel_warranty_remaining_years")
+    }
     site_cols = ["site", "state", "county", "operator", "mwdc", "lat", "lon", "cod", "tracking",
                  "conviction_tier", "top_signature", "fault_months", "episode_count",
                  "cost_of_inaction_usd", "recoverable_usd_yr", "recoverable_mwh_yr",
@@ -132,6 +141,8 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
                             "SCADA $48/MWdc/yr, fixed at source 17 Aug 2026 per "
                             "CEO_COCKPIT_REVISIONS_PASS2.md Part B3). explorer.html and this cockpit "
                             "derive their fee potential from the same pricing.yaml - see tests/test_pricing.py.",
+            data_through_month=sites["latest_scored_month"].dropna().max() if sites["latest_scored_month"].notna().any() else None,
+            rel_field_coverage=rel_field_coverage,
             engagement_floor_mwdc=250,
             total_accounts_all=ri(len(account)),
             total_coi_all_usd=r(total_coi_all),

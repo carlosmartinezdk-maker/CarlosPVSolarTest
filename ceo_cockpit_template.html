@@ -8,6 +8,10 @@
   --ink: #2b2b2b; --accent: #1d4e6f; --card: #f1efec; --bg: #fbfafa;
   --muted: #7a756c; --warn: #b0392f; --good: #2e7d4f; --panel-border: #e2ddd3;
   --stroke: #ffffff; --land: #d8d3c8;
+  /* B5: one relationship palette, used identically everywhere (map, cards,
+     coverage table, every chart) - Whitespace carries the accent colour
+     because it is the opportunity, the thing the eye should land on. */
+  --rel-customer: #2e7d4f; --rel-prospect: #8a5a12; --rel-whitespace: #1d4e6f;
 }
 * { box-sizing: border-box; }
 body { margin:0; background:var(--bg); color:var(--ink); font-family: Georgia, serif; }
@@ -38,9 +42,9 @@ table.grid th.kcol, table.grid td.kcol { text-align:left; }
 .tblscroll { overflow:auto; max-height:520px; }
 .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10.5px; font-weight:bold;
   text-transform:uppercase; letter-spacing:.04em; }
-.badge.Customer { background:#d8ead9; color:#1c5c30; }
-.badge.Prospect { background:#fbe8cf; color:#8a5a12; }
-.badge.Whitespace { background:#e6e1d8; color:var(--muted); }
+.badge.Customer { background:#d8ead9; color:var(--rel-customer); }
+.badge.Prospect { background:#fbe8cf; color:var(--rel-prospect); }
+.badge.Whitespace { background:var(--rel-whitespace); color:#fff; }
 .badge.FOCUS_NOW { background:var(--accent); color:#fff; }
 .badge.EXPAND { background:#2e7d4f; color:#fff; }
 .badge.NEW_LOGO { background:#8a5a12; color:#fff; }
@@ -86,6 +90,7 @@ button.btn.secondary { background:#fff; color:var(--accent); border:1px solid va
   </nav>
   <span class="small" id="scope-note" style="margin-left:auto"></span>
 </header>
+<div class="small" id="vintage-note" style="padding:4px 24px; border-bottom:1px solid var(--panel-border)"></div>
 </div>
 
 <main id="main"></main>
@@ -116,7 +121,9 @@ button.btn.secondary { background:#fff; color:var(--accent); border:1px solid va
 const DATA = JSON.parse(document.getElementById('payload-data').textContent);
 const SIG_LABEL = {OUTAGE_FULL:"Outage",BLOCK_OUTAGE:"Block outage",SOILING:"Soiling",TRACKER:"Tracker",
   BOS_INTERMITTENT:"BOS intermittent",UNATTRIBUTED:"Unattributed"};
-const REL_COLOR = {Customer:"#2e7d4f", Prospect:"#8a5a12", Whitespace:"#1d4e6f", below_floor:"#c9c2b3"};
+const CSS_ROOT = getComputedStyle(document.documentElement);
+const relColor = k => CSS_ROOT.getPropertyValue('--rel-' + k.toLowerCase()).trim();
+const REL_COLOR = {Customer:relColor('Customer'), Prospect:relColor('Prospect'), Whitespace:relColor('Whitespace'), below_floor:"#c9c2b3"};
 
 const US_TOPO = JSON.parse(document.getElementById('us-states-topo').textContent);
 const STATE_FEATURES = topojson.feature(US_TOPO, US_TOPO.objects.states).features;
@@ -145,10 +152,38 @@ function svg(tag, attrs) {
   for (const k in (attrs||{})) e.setAttribute(k, attrs[k]);
   return e;
 }
-function fmtUsd(v) { if (v===null||v===undefined) return '—'; return '$' + Math.round(v).toLocaleString(); }
-function fmtUsdM(v) { if (v===null||v===undefined) return '—'; return '$' + (v/1e6).toFixed(1) + 'M'; }
-function fmtNum(v, nd) { if (v===null||v===undefined) return '—'; return Number(v).toFixed(nd===undefined?1:nd); }
-function fmtPct(v, nd) { if (v===null||v===undefined) return '—'; return (100*v).toFixed(nd===undefined?1:nd) + '%'; }
+// A3: one number format, enforced globally - every rendered number routes
+// through this object. Comma for thousands, dot for decimals, never a bare
+// 0 for missing data (em-dash instead). See CEO_COCKPIT_REVISIONS_PASS2.md
+// Part A3 for the per-type decimal-place rules this implements.
+function missing(v) { return v===null || v===undefined || (typeof v==='number' && Number.isNaN(v)); }
+const fmt = {
+  usd(v) {
+    if (missing(v)) return '—';
+    const sign = v < 0 ? '-' : '', av = Math.abs(v);
+    if (av >= 1e6) return sign + '$' + (av/1e6).toFixed(1) + 'M';
+    return sign + '$' + Math.round(av).toLocaleString('en-US');
+  },
+  mwdc(v) { if (missing(v)) return '—'; return Number(v).toLocaleString('en-US', {minimumFractionDigits:1, maximumFractionDigits:1}); },
+  count(v) { if (missing(v)) return '—'; return Math.round(v).toLocaleString('en-US'); },
+  pct(v) { if (missing(v)) return '—'; return (100*v).toFixed(1) + '%'; },
+  ratio(v) { if (missing(v)) return '—'; return Number(v).toFixed(1) + 'x'; },
+  weeks(v) { if (missing(v)) return '—'; return Math.round(v).toLocaleString('en-US') + ' weeks'; },
+  pi(v) { if (missing(v)) return '—'; return Number(v).toFixed(3); },
+  pri(v) { if (missing(v)) return '—'; return Number(v).toFixed(3); },
+  beta(v) { if (missing(v)) return '—'; return Number(v).toFixed(4); },
+  eta(v) { if (missing(v)) return '—'; return Number(v).toFixed(2); },
+  raw(v, nd) { if (missing(v)) return '—'; return Number(v).toFixed(nd===undefined?1:nd); },
+};
+// B4: a CEO will ask how current this is - EIA publishes 2-3 months in
+// arrears, so this must be on screen, not left implicit.
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function monthLabel(yyyymm) {
+  if (!yyyymm) return 'Production data vintage unknown · EIA-923 publishes 2-3 months in arrears.';
+  const [y, mo] = yyyymm.split('-');
+  const name = MONTH_NAMES[parseInt(mo, 10) - 1] || mo;
+  return `Production data through ${name} ${y} · EIA-923 publishes 2-3 months in arrears.`;
+}
 function panelHeader(panel, eyebrow, title, sub) {
   panel.appendChild(el('div', {class:'eyebrow'}, [eyebrow]));
   panel.appendChild(el('h2', {style:'margin:2px 0 4px'}, [title]));
@@ -160,7 +195,8 @@ function accountByName(name) { return DATA.accounts.find(a => a.owner_entity ===
 function render() {
   document.querySelectorAll('#topbar nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===state.view));
   document.getElementById('scope-note').textContent =
-    `${DATA.meta.in_scope_accounts} accounts ≥250 MWdc · ${DATA.meta.matched_gtm_accounts} GTM accounts matched · generated from the ${DATA.meta.total_accounts_all}-owner fleet`;
+    `${fmt.count(DATA.meta.in_scope_accounts)} accounts ≥250 MWdc · ${fmt.count(DATA.meta.matched_gtm_accounts)} GTM accounts matched · generated from the ${fmt.count(DATA.meta.total_accounts_all)}-owner fleet`;
+  document.getElementById('vintage-note').textContent = monthLabel(DATA.meta.data_through_month);
   const m = document.getElementById('main');
   m.innerHTML = '';
   if (state.view === 'prize') renderPrize(m);
@@ -179,18 +215,18 @@ function renderPrize(m) {
   const w = DATA.screen1.waterfall;
   const headline = el('div', {class:'card-panel'});
   panelHeader(headline, 'THE PRIZE', 'How big, how real, and where',
-    'Denominator: all figures below are the ' + DATA.meta.in_scope_accounts + ' accounts at or above the 250 MWdc engagement floor - the remaining ' +
-    (DATA.meta.total_accounts_all - DATA.meta.in_scope_accounts) + ' owners are below it and out of scope for this tool.');
+    'Denominator: all figures below are the ' + fmt.count(DATA.meta.in_scope_accounts) + ' accounts at or above the 250 MWdc engagement floor - the remaining ' +
+    fmt.count(DATA.meta.total_accounts_all - DATA.meta.in_scope_accounts) + ' owners are below it and out of scope for this tool.');
   const strip = el('div', {class:'cards'});
   [
-    ['3-yr cost of inaction (in scope)', fmtUsdM(w.in_scope_coi)],
-    ['SSI annual fee potential', fmtUsdM(DATA.meta.in_scope_fee_potential_usd)],
-    ['Accounts in scope', DATA.meta.in_scope_accounts],
-    ['Whitespace share of ALL CoI (est.)', fmtPct(DATA.meta.whitespace_share_all_estimate)],
+    ['3-yr cost of inaction (in scope)', fmt.usd(w.in_scope_coi)],
+    ['SSI annual fee potential', fmt.usd(DATA.meta.in_scope_fee_potential_usd)],
+    ['Accounts in scope', fmt.count(DATA.meta.in_scope_accounts)],
+    ['Whitespace share of ALL CoI (est.)', fmt.pct(DATA.meta.whitespace_share_all_estimate)],
   ].forEach(([l,v]) => strip.appendChild(el('div',{class:'card'},[el('div',{class:'v'},[String(v)]), el('div',{class:'l'},[l])])));
   headline.appendChild(strip);
   headline.appendChild(el('div', {class:'small', style:'margin-top:6px'},
-    [`Whitespace share is an estimate bounded by GTM-account matching quality - only ${DATA.meta.matched_gtm_accounts} of ${DATA.meta.total_accounts_all} owners matched to a GTM record. Read it as an upper bound, not a settled figure - it will fall as matching improves.`]));
+    [`Whitespace share is an estimate bounded by GTM-account matching quality - only ${fmt.count(DATA.meta.matched_gtm_accounts)} of ${fmt.count(DATA.meta.total_accounts_all)} owners matched to a GTM record. Read it as an upper bound, not a settled figure - it will fall as matching improves.`]));
   m.appendChild(headline);
 
   const waterfallPanel = el('div', {class:'card-panel'});
@@ -209,7 +245,7 @@ function renderPrize(m) {
     const bh = (val/maxV)*h;
     s.appendChild(svg('rect', {x:i*(bw+gap)+gap/2, y:h+pad-bh, width:bw, height:bh, fill:color, rx:4}));
     const t = svg('text', {x:i*(bw+gap)+gap/2+bw/2, y:h+pad-bh-8, 'text-anchor':'middle', style:'font:bold 13px Arial'});
-    t.textContent = fmtUsdM(val); s.appendChild(t);
+    t.textContent = fmt.usd(val); s.appendChild(t);
     const l = svg('text', {x:i*(bw+gap)+gap/2+bw/2, y:h+pad+16, 'text-anchor':'middle', style:'font:11px Arial; fill:#7a756c'});
     l.textContent = label; s.appendChild(l);
   });
@@ -278,13 +314,13 @@ function renderAccounts(m) {
       a.ownership_unresolved ? el('span',{class:'badge unresolved'},['ownership unresolved']) : '',
     ]);
     card.appendChild(title);
-    card.appendChild(el('div',{class:'meta'},[`${a.n_sites} sites · ${fmtNum(a.mwdc,0)} MWdc · ${(a.states||[]).slice(0,4).join(', ')}${(a.states||[]).length>4?'…':''}`]));
+    card.appendChild(el('div',{class:'meta'},[`${a.n_sites} sites · ${fmt.mwdc(a.mwdc)} MWdc · ${(a.states||[]).slice(0,4).join(', ')}${(a.states||[]).length>4?'…':''}`]));
     card.appendChild(el('div',{class:'interp'},[
       a.top_signature ? `Dominant issue: ${SIG_LABEL[a.top_signature]||a.top_signature}.` : 'No dominant fault pattern identified.',
       ' ', a.focus_reason]));
     const three = el('div', {class:'three'});
-    [['Their annual loss', fmtUsdM(a.recoverable_usd_yr)], ['Our annual fee', fmtUsdM(a.fee_annual_usd)],
-     ['Payback (weeks)', a.payback_weeks!==null?fmtNum(a.payback_weeks,1):'—']]
+    [['Their annual loss', fmt.usd(a.recoverable_usd_yr)], ['Our annual fee', fmt.usd(a.fee_annual_usd)],
+     ['Payback', fmt.weeks(a.payback_weeks)]]
       .forEach(([l,v]) => three.appendChild(el('div',{class:'num'},[el('div',{class:'v'},[v]),el('div',{class:'l'},[l])])));
     card.appendChild(three);
     grid.appendChild(card);
@@ -322,7 +358,7 @@ function renderPitch(m) {
   const hh = el('div', {class:'pitch-header'});
   hh.appendChild(el('div',{},[
     el('h2',{style:'margin:0 0 4px'},[a.owner_entity]),
-    el('div',{class:'small'},[`${a.n_sites} sites · ${fmtNum(a.mwdc,0)} MWdc · ${(a.states||[]).join(', ')}`]),
+    el('div',{class:'small'},[`${a.n_sites} sites · ${fmt.mwdc(a.mwdc)} MWdc · ${(a.states||[]).join(', ')}`]),
     el('div',{class:'small'},[`Relationship: `, el('span',{class:'badge '+a.relationship},[a.relationship]),
       a.gtm_matched_account?` (matched as "${a.gtm_matched_account}")`:'']),
     el('div',{class:'small'},[`Account owner: ${a.account_owner||'unassigned'}`]),
@@ -340,7 +376,7 @@ function renderPitch(m) {
   plays.forEach(p => {
     const box = el('div', {style:'border:1px solid var(--panel-border); border-radius:6px; padding:12px 14px; margin-bottom:10px'});
     box.appendChild(el('div',{class:'interp'},[p.pitch_sentence]));
-    box.appendChild(el('div',{class:'small'},[`${p.n_sites} sites · ${fmtNum(p.mwdc,0)} MWdc · offering: ${p.offering} · fee ${fmtUsd(p.annual_fee_usd)}/yr · payback ${p.payback_weeks!==null?fmtNum(p.payback_weeks,1)+' wks':'—'}`]));
+    box.appendChild(el('div',{class:'small'},[`${p.n_sites} sites · ${fmt.mwdc(p.mwdc)} MWdc · offering: ${p.offering} · fee ${fmt.usd(p.annual_fee_usd)}/yr · payback ${fmt.weeks(p.payback_weeks)}`]));
     playsPanel.appendChild(box);
   });
   m.appendChild(playsPanel);
@@ -376,8 +412,8 @@ function renderPitch(m) {
   wt.appendChild(el('tr',{},[el('th',{class:'kcol'},['Site']),el('th',{},['State']),el('th',{},['MWdc']),
     el('th',{},['Issue']),el('th',{},['3-yr CoI']),el('th',{},['Tier'])]));
   worst.forEach(s => wt.appendChild(el('tr',{},[
-    el('td',{class:'kcol'},[s.site]), el('td',{},[s.state||'—']), el('td',{},[fmtNum(s.mwdc,1)]),
-    el('td',{},[SIG_LABEL[s.top_signature]||s.top_signature||'—']), el('td',{},[fmtUsd(s.cost_of_inaction_usd)]),
+    el('td',{class:'kcol'},[s.site]), el('td',{},[s.state||'—']), el('td',{},[fmt.mwdc(s.mwdc)]),
+    el('td',{},[SIG_LABEL[s.top_signature]||s.top_signature||'—']), el('td',{},[fmt.usd(s.cost_of_inaction_usd)]),
     el('td',{},[s.conviction_tier||'—']),
   ])));
   worstPanel.appendChild(wt);
@@ -387,18 +423,19 @@ function renderPitch(m) {
   if (warrantyN > 0) {
     const wp = el('div', {class:'card-panel'});
     panelHeader(wp, 'WARRANTY', `${warrantyN} site(s) still within the reliability-relevant warranty term`,
-      'A third party paying for the repair changes the conversation entirely.');
+      `Based on ${warrantyN} of ${sites.length} sites with a warranty-remaining figure on record. A third party paying for the repair changes the conversation entirely.`);
     m.appendChild(wp);
   }
 
   const forecastPanel = el('div', {class:'card-panel'});
-  panelHeader(forecastPanel, 'WHAT BREAKS NEXT', '24-month failure risk and inspection economics, from the reliability model');
   const insp = sites.filter(s=>s.rel_insp_optimal_months).map(s=>s.rel_insp_optimal_months);
+  panelHeader(forecastPanel, 'WHAT BREAKS NEXT', '24-month failure risk and inspection economics, from the reliability model',
+    `Based on ${insp.length} of ${sites.length} sites with a fitted reliability model.`);
   if (insp.length) {
     const modeMonths = insp.sort((x,y)=>insp.filter(v=>v===x).length - insp.filter(v=>v===y).length).pop();
     forecastPanel.appendChild(el('div',{class:'interp'},[
       `Recommended inspection cadence across this portfolio clusters around every ${modeMonths} months. `,
-      `Total SCADA monitoring value across these sites: ${fmtUsd(sites.reduce((acc,s)=>acc+(s.rel_insp_scada_value_usd||0),0))}/yr.`]));
+      `Total SCADA monitoring value across these sites: ${fmt.usd(sites.reduce((acc,s)=>acc+(s.rel_insp_scada_value_usd||0),0))}/yr.`]));
   } else {
     forecastPanel.appendChild(el('div',{class:'small'},['No reliability forecast available for this account\'s sites.']));
   }
@@ -422,7 +459,13 @@ function renderPitch(m) {
 // =============================================================== SCREEN 4 ==
 function renderEvidence(m) {
   const panel = el('div', {class:'card-panel no-print'});
-  panelHeader(panel, 'EVIDENCE', 'Everything the customer\'s engineer will ask about');
+  const relCov = DATA.meta.rel_field_coverage || {};
+  const covLine = ['rel_n_blocks', 'rel_insp_optimal_months', 'rel_warranty_remaining_years']
+    .filter(f => relCov[f])
+    .map(f => `${f} ${fmt.count(relCov[f].n)} of ${fmt.count(relCov[f].of)} sites`)
+    .join(' · ');
+  panelHeader(panel, 'EVIDENCE', 'Everything the customer\'s engineer will ask about',
+    covLine ? `Reliability field coverage across in-scope sites: ${covLine}. Gaps render as "—", not 0.` : undefined);
   const sel = el('select', {class:'sel', style:'min-width:320px', onchange:e=>{state.currentAccount=e.target.value; render();}});
   sel.appendChild(el('option',{value:''},['— pick an account —']));
   DATA.accounts.slice().sort((a,b)=>b.coi_3yr_usd-a.coi_3yr_usd).forEach(a =>
@@ -438,7 +481,7 @@ function renderEvidence(m) {
     el('th',{},['Classification']),el('th',{},['Eta (yr)']),el('th',{},['RVM eligible'])]));
   DATA.reliability.signatures.forEach(s => ft.appendChild(el('tr',{},[
     el('td',{class:'kcol'},[SIG_LABEL[s.signature]||s.signature]), el('td',{},[s.best_fit_family]),
-    el('td',{},[fmtNum(s.weibull_beta,3)]), el('td',{},[s.beta_classification]), el('td',{},[fmtNum(s.weibull_eta_years,2)]),
+    el('td',{},[fmt.raw(s.weibull_beta,3)]), el('td',{},[s.beta_classification]), el('td',{},[fmt.eta(s.weibull_eta_years)]),
     el('td',{},[s.rvm_eligible?'Yes':'No']),
   ])));
   fitPanel.appendChild(ft);
@@ -457,9 +500,9 @@ function renderEvidence(m) {
     el('th',{},['beta']),el('th',{},['t-stat']),el('th',{},['Decision-grade']),el('th',{},['N_blocks']),el('th',{},['Age (yr)'])]));
   sites.forEach(s => st.appendChild(el('tr',{},[
     el('td',{class:'kcol'},[s.site, s.capacity_suspect?el('span',{class:'badge suspect', title:'12-month median PI exceeded 1.35 - capacity (MWdc) figure is under review, PI suppressed'},['capacity under review']):null].filter(v=>v!==null)),
-    el('td',{},[s.capacity_suspect?'—':fmtNum(s.latest_pi,3)]), el('td',{},[fmtNum(s.latest_pri,3)]),
-    el('td',{},[s.beta!==null?(s.beta*100).toFixed(2)+'%':'—']), el('td',{},[fmtNum(s.beta_t,1)]),
-    el('td',{},[s.decision_grade?'Yes':'No']), el('td',{},[s.rel_n_blocks??'—']), el('td',{},[fmtNum(s.rel_age_years,1)]),
+    el('td',{},[s.capacity_suspect?'—':fmt.pi(s.latest_pi)]), el('td',{},[fmt.pri(s.latest_pri)]),
+    el('td',{},[fmt.beta(s.beta)]), el('td',{},[fmt.raw(s.beta_t,1)]),
+    el('td',{},[s.decision_grade?'Yes':'No']), el('td',{},[s.rel_n_blocks!==null&&s.rel_n_blocks!==undefined?fmt.count(s.rel_n_blocks):'—']), el('td',{},[fmt.raw(s.rel_age_years,1)]),
   ])));
   sitesPanel.appendChild(el('div',{class:'tblscroll'},[st]));
   m.appendChild(sitesPanel);
@@ -483,8 +526,8 @@ function renderCoverage(m) {
   panelHeader(headline, 'COVERAGE', 'Assigned vs. unassigned vs. whitespace',
     `${cov.n_reps_named} named reps with in-scope accounts (NAM/mixed only - EU-only reps are out of scope for this US fleet and shown separately, not at zero). ${cov.matched_gtm_accounts} of 109 GTM accounts matched anything in the US solar fleet.`);
   const strip = el('div', {class:'cards'});
-  [['Assigned to a named rep', fmtUsdM(cov.assigned)], ['Account exists, unassigned', fmtUsdM(cov.unassigned)],
-   ['Whitespace (no account)', fmtUsdM(cov.whitespace)], ['Total in-scope CoI', fmtUsdM(cov.total_coi)]]
+  [['Assigned to a named rep', fmt.usd(cov.assigned)], ['Account exists, unassigned', fmt.usd(cov.unassigned)],
+   ['Whitespace (no account)', fmt.usd(cov.whitespace)], ['Total in-scope CoI', fmt.usd(cov.total_coi)]]
     .forEach(([l,v]) => strip.appendChild(el('div',{class:'card'},[el('div',{class:'v'},[v]), el('div',{class:'l'},[l])])));
   headline.appendChild(strip);
   m.appendChild(headline);
@@ -497,8 +540,8 @@ function renderCoverage(m) {
     el('th',{},['MWdc']),el('th',{},['Recoverable/yr']),el('th',{},['3-yr CoI']),el('th',{},['Concentration'])]));
   cov.book.forEach(b => {
     const tr = el('tr',{});
-    [b.rep, b.n_accounts, b.n_customer, b.n_prospect, fmtNum(b.mwdc,0), fmtUsd(b.recoverable_usd_yr), fmtUsd(b.coi_3yr_usd),
-     b.book_concentration!==null?fmtPct(b.book_concentration,0):'—']
+    [b.rep, fmt.count(b.n_accounts), fmt.count(b.n_customer), fmt.count(b.n_prospect), fmt.mwdc(b.mwdc), fmt.usd(b.recoverable_usd_yr), fmt.usd(b.coi_3yr_usd),
+     b.book_concentration!==null?fmt.pct(b.book_concentration):'—']
       .forEach((v,i)=>tr.appendChild(el('td',{class:i===0?'kcol':''},[String(v)])));
     if (b.single_logo) tr.appendChild(el('td',{},[el('span',{class:'badge unresolved'},['single-logo book'])]));
     bt.appendChild(tr);
@@ -513,9 +556,9 @@ function renderCoverage(m) {
   ct.appendChild(el('tr',{},[el('th',{class:'kcol'},['Account']),el('th',{},['Observed MWdc']),el('th',{},['GTM MWdc']),
     el('th',{},['Ratio']),el('th',{},['Reading'])]));
   cov.crm_rows.forEach(c => ct.appendChild(el('tr',{},[
-    el('td',{class:'kcol'},[c.account]), el('td',{},[fmtNum(c.observed_mwdc,0)]),
-    el('td',{},[c.gtm_solar_mw!==null?fmtNum(c.gtm_solar_mw,0):'—']),
-    el('td',{},[c.coverage_ratio!==null?fmtPct(c.coverage_ratio,0):'—']), el('td',{},[c.reading]),
+    el('td',{class:'kcol'},[c.account]), el('td',{},[fmt.mwdc(c.observed_mwdc)]),
+    el('td',{},[c.gtm_solar_mw!==null?fmt.mwdc(c.gtm_solar_mw):'—']),
+    el('td',{},[c.coverage_ratio!==null?fmt.pct(c.coverage_ratio):'—']), el('td',{},[c.reading]),
   ])));
   crmPanel.appendChild(el('div',{class:'tblscroll', style:'max-height:340px'},[ct]));
   m.appendChild(crmPanel);
@@ -526,7 +569,7 @@ function renderCoverage(m) {
   DATA.accounts.forEach(a => bandCounts[a.focus_band] = (bandCounts[a.focus_band]||0)+1);
   const bandStrip = el('div', {class:'cards'});
   ['FOCUS_NOW','EXPAND','NEW_LOGO','NURTURE','PARK'].forEach(band => bandStrip.appendChild(
-    el('div',{class:'card'},[el('div',{class:'v'},[String(bandCounts[band]||0)]), el('div',{class:'l'},[band.replace('_',' ')])])));
+    el('div',{class:'card'},[el('div',{class:'v'},[fmt.count(bandCounts[band]||0)]), el('div',{class:'l'},[band.replace('_',' ')])])));
   focusPanel.appendChild(bandStrip);
   m.appendChild(focusPanel);
 }
