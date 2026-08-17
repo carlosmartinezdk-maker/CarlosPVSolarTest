@@ -120,10 +120,10 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
 
     payload = dict(
         meta=dict(
-            generated_note="CEO Cockpit - pricing corrected locally per spec Section 1.1 "
-                            "(SaaS $120/MWdc/yr, SCADA $48/MWdc/yr, both x12 from pricing.yaml's "
-                            "uncorrected rate - see ceo_cockpit/README.md). pricing.yaml itself and "
-                            "explorer.html are NOT yet updated - that is a separate pending decision.",
+            generated_note="CEO Cockpit - pricing read from pricing.yaml (SaaS $120/MWdc/yr, "
+                            "SCADA $48/MWdc/yr, fixed at source 17 Aug 2026 per "
+                            "CEO_COCKPIT_REVISIONS_PASS2.md Part B3). explorer.html and this cockpit "
+                            "derive their fee potential from the same pricing.yaml - see tests/test_pricing.py.",
             engagement_floor_mwdc=250,
             total_accounts_all=ri(len(account)),
             total_coi_all_usd=r(total_coi_all),

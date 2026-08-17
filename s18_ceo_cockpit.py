@@ -8,15 +8,15 @@ SPV-to-parent-company mapping. Builds account/owner rollups, a "plays"
 table (account x dominant fault pattern), GTM relationship matching, rep
 coverage, and CRM reconciliation, then renders ceo_cockpit.html.
 
-PRICING: the spec's Section 1.1 fix (SaaS/SCADA are per MWdc per MONTH,
-not per year - pricing.yaml is off by 12x) is applied HERE ONLY, as a
-local recomputation from raw components (mwdc x offering flags). Carlos
-chose not to touch the shared pricing.yaml or re-run the main pipeline
-yet (see ceo_cockpit/README.md) - explorer.html and
-SSI_Solar_Reliability_Metrics.xlsx still use the uncorrected rate until
-that separate decision is made. Every corrected dollar figure in this
-tool is computed from mwdc and recommended_offerings, not from the
-site-level annual_fee_usd column (which carries the old, wrong rate).
+PRICING: pricing.yaml is the single source of truth for SaaS/SCADA rates
+(CEO_COCKPIT_REVISIONS_PASS2.md Part B3 - the earlier "fix it locally in
+the cockpit only" approach was explicitly reversed once explorer.html and
+this tool started reporting different fee potential for the same fleet).
+Fee is still recomputed from mwdc x recommended_offerings rather than
+read off the site-level annual_fee_usd column, because that column's
+fee mix (which offerings, at what severity-driven RVM add-ons) can differ
+from what this tool wants to show - but the RATE CONSTANTS themselves
+come from pricing.yaml, not a local copy. See tests/test_pricing.py.
 """
 import csv
 import json
@@ -25,31 +25,31 @@ import re
 
 import numpy as np
 import pandas as pd
+import yaml
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s S18 %(message)s")
 log = logging.getLogger("s18")
 
 DATA_DIR = "ceo_cockpit/data"
 SPEC_DIR = "ceo_cockpit/spec"
-
-# --------------------------------------------------------------------------
-# Corrected pricing (Section 1.1) - LOCAL to this build, see module docstring
-# --------------------------------------------------------------------------
-CORRECTED_SAAS_USD_PER_MWDC_YR = 120.0     # was 10 in pricing.yaml (x12 fix)
-CORRECTED_SCADA_USD_PER_MWDC_YR = 48.0     # was 4 in pricing.yaml (x12 fix)
-INSPECTION_USD_PER_MWDC = 150.0            # unchanged - per visit, not annualised
 HORIZON_YEARS = 3                          # matches pricing.yaml's horizon_years
 ENGAGEMENT_FLOOR_MWDC = 250.0
 
 
-def corrected_site_fee(offerings: list, mwdc: float) -> float:
+def load_pricing(path: str = "pricing.yaml") -> dict:
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+def corrected_site_fee(offerings: list, mwdc: float, pricing: dict) -> float:
+    off = pricing["offerings"]
     fee = 0.0
     if "Solar SaaS" in offerings:
-        fee += CORRECTED_SAAS_USD_PER_MWDC_YR * (mwdc or 0)
+        fee += off["solar_saas"]["usd_per_mwdc_year"] * (mwdc or 0)
     if "SCADA Monitoring" in offerings:
-        fee += CORRECTED_SCADA_USD_PER_MWDC_YR * (mwdc or 0)
+        fee += off["scada_monitoring"]["usd_per_mwdc_year"] * (mwdc or 0)
     if "Recurrent Inspection" in offerings:
-        fee += INSPECTION_USD_PER_MWDC * (mwdc or 0)
+        fee += off["solar_inspection"]["usd_per_mwdc_inspected"] * off["solar_inspection"]["inspections_per_year"] * (mwdc or 0)
     return fee
 
 
@@ -220,12 +220,12 @@ def match_all_owners(account_df: pd.DataFrame, gtm: pd.DataFrame) -> pd.DataFram
 # --------------------------------------------------------------------------
 # Account rollup
 # --------------------------------------------------------------------------
-def build_account_table(sites: pd.DataFrame) -> pd.DataFrame:
+def build_account_table(sites: pd.DataFrame, pricing: dict) -> pd.DataFrame:
     sites = sites.copy()
     sites["_offerings_list"] = sites["recommended_offerings"].fillna("").apply(
         lambda s: [x for x in s.split(";") if x])
     sites["_fee_corrected"] = sites.apply(
-        lambda r: corrected_site_fee(r["_offerings_list"], r["mwdc"]), axis=1)
+        lambda r: corrected_site_fee(r["_offerings_list"], r["mwdc"], pricing), axis=1)
 
     g = sites.groupby("owner_entity")
     acct = g.agg(
@@ -284,12 +284,12 @@ SIGNATURE_OFFERING = {
 }
 
 
-def build_plays(sites: pd.DataFrame) -> pd.DataFrame:
+def build_plays(sites: pd.DataFrame, pricing: dict) -> pd.DataFrame:
     sites = sites.copy()
     sites["_offerings_list"] = sites["recommended_offerings"].fillna("").apply(
         lambda s: [x for x in s.split(";") if x])
     sites["_fee_corrected"] = sites.apply(
-        lambda r: corrected_site_fee(r["_offerings_list"], r["mwdc"]), axis=1)
+        lambda r: corrected_site_fee(r["_offerings_list"], r["mwdc"], pricing), axis=1)
 
     plays = []
     pid = 0
@@ -304,7 +304,7 @@ def build_plays(sites: pd.DataFrame) -> pd.DataFrame:
         mwdc = g["mwdc"].fillna(0).sum()
         rec = g["recoverable_usd_yr"].fillna(0).sum()
         offering = SIGNATURE_OFFERING.get(sig, "Recurrent Inspection")
-        fee = corrected_site_fee([offering], mwdc)
+        fee = corrected_site_fee([offering], mwdc, pricing)
         template = PITCH_TEMPLATES.get(sig, PITCH_TEMPLATES["UNATTRIBUTED"])
         pitch = template.format(n=len(g), region=region, mwdc=mwdc, rec=rec, fee=max(fee, 1))
         pid += 1
@@ -412,6 +412,7 @@ def r(v, nd=0):
 
 
 def main():
+    pricing = load_pricing()
     sites = pd.read_parquet(f"{DATA_DIR}/site_summary.parquet")
     gtm = pd.read_csv(f"{SPEC_DIR}/gtm_accounts.csv")
     parent_map = load_parent_map(f"{SPEC_DIR}/parent_mapping.csv")
@@ -420,7 +421,7 @@ def main():
     log.info("owner rollup: %d sites -> %d owner_entities (%d resolved via parent_mapping)",
               len(sites), sites["owner_entity"].nunique(), (sites["owner_source"] == "parent_mapping").sum())
 
-    account = build_account_table(sites)
+    account = build_account_table(sites, pricing)
     account = match_all_owners(account, gtm)
     n_matched = account["gtm_matched_account"].notna().sum()
     log.info("GTM match: %d/%d owner_entities matched (%.1f%%)", n_matched, len(account),
@@ -439,7 +440,7 @@ def main():
     bands = in_scope.apply(lambda r_: pd.Series(assign_focus_band(r_), index=["focus_band", "focus_reason"]), axis=1)
     in_scope = pd.concat([in_scope, bands], axis=1)
 
-    plays_all = build_plays(sites)
+    plays_all = build_plays(sites, pricing)
     in_scope_owners = set(in_scope["owner_entity"])
     plays = plays_all[plays_all["account"].isin(in_scope_owners)].sort_values("coi_3yr_usd", ascending=False)
     log.info("plays: %d generated across %d in-scope accounts", len(plays), plays["account"].nunique())

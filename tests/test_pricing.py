@@ -58,6 +58,39 @@ def test_74_explorer_uses_corrected_rates():
     print(f"test 74b (explorer uses corrected rates): passed - {checked} single-offering sites verified against pricing.yaml")
 
 
+def test_74_cockpit_agrees_with_explorer_rates():
+    """Same spot-check as test_74b, but against ceo_cockpit.html's payload -
+    the two artefacts must derive fee potential from the same pricing.yaml
+    rates, not drift apart (CEO_COCKPIT_REVISIONS_PASS2.md Part B3's build
+    assertion)."""
+    path = os.path.join(REPO_ROOT, "ceo_cockpit.html")
+    if not os.path.exists(path):
+        print("test 74c (cockpit agrees with explorer rates): skipped, ceo_cockpit.html not built")
+        return
+    with open(path) as f:
+        html = f.read()
+    marker = '<script type="application/json" id="payload-data">'
+    start = html.index(marker) + len(marker)
+    end = html.index("</script>", start)
+    payload = json.loads(html[start:end])
+    checked = 0
+    for play in payload.get("plays", []):
+        offering = play.get("offering")
+        mwdc = play.get("mwdc")
+        fee = play.get("annual_fee_usd")
+        rate = {"Solar SaaS": 120.0, "SCADA Monitoring": 48.0}.get(offering)
+        if rate is None or not mwdc or not fee:
+            continue
+        expected = rate * mwdc
+        assert abs(fee - expected) < max(1.0, 0.01 * expected), (
+            f"play {play.get('play_id')}: {offering} fee {fee} doesn't match "
+            f"corrected rate {rate}*{mwdc}={expected} - cockpit and explorer disagree on price")
+        checked += 1
+    assert checked > 0, "no single-offering plays found to spot-check - widen the search if this fires"
+    print(f"test 74c (cockpit agrees with explorer rates): passed - {checked} plays verified against pricing.yaml")
+
+
 if __name__ == "__main__":
     test_74_pricing_yaml_corrected()
     test_74_explorer_uses_corrected_rates()
+    test_74_cockpit_agrees_with_explorer_rates()

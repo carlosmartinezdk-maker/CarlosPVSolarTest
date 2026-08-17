@@ -22,16 +22,17 @@ def _load_payload():
 
 def test_50_pricing_units():
     """SaaS and SCADA annualise to $120 and $48 per MWdc (spec Section 1.1's
-    x12 fix). Verified as a worked example, not against the reference
-    fleet's dollar totals (this run's site set differs from the spec's)."""
+    x12 fix), read from pricing.yaml (the single source of truth per
+    CEO_COCKPIT_REVISIONS_PASS2.md Part B3) rather than a local copy."""
     import s18_ceo_cockpit as s18
-    assert s18.CORRECTED_SAAS_USD_PER_MWDC_YR == 120.0
-    assert s18.CORRECTED_SCADA_USD_PER_MWDC_YR == 48.0
-    fee = s18.corrected_site_fee(["Solar SaaS"], 100.0)
+    pricing = s18.load_pricing(os.path.join(REPO_ROOT, "pricing.yaml"))
+    assert pricing["offerings"]["solar_saas"]["usd_per_mwdc_year"] == 120.0
+    assert pricing["offerings"]["scada_monitoring"]["usd_per_mwdc_year"] == 48.0
+    fee = s18.corrected_site_fee(["Solar SaaS"], 100.0, pricing)
     assert abs(fee - 12000.0) < 1e-6, f"100 MWdc SaaS should be $12,000/yr, got {fee}"
-    fee2 = s18.corrected_site_fee(["SCADA Monitoring"], 100.0)
+    fee2 = s18.corrected_site_fee(["SCADA Monitoring"], 100.0, pricing)
     assert abs(fee2 - 4800.0) < 1e-6, f"100 MWdc SCADA should be $4,800/yr, got {fee2}"
-    print("test 50 (pricing units): passed - SaaS $120/MWdc/yr, SCADA $48/MWdc/yr")
+    print("test 50 (pricing units): passed - SaaS $120/MWdc/yr, SCADA $48/MWdc/yr (from pricing.yaml)")
 
 
 def test_51_no_bare_roi_multiple():
