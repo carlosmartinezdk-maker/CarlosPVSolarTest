@@ -246,6 +246,14 @@ function panelHeader(panel, eyebrow, title, sub) {
   if (sub) panel.appendChild(el('div', {class:'small'}, [sub]));
 }
 function accountByName(name) { return DATA.accounts.find(a => a.owner_entity === name); }
+// Pass 3 §5 test 81: a small flag next to any inspection-revenue figure
+// that includes at least one site falling back to the 1-visit/yr default
+// because rel_insp_optimal_months wasn't fitted for it.
+function inspFlag(fitted, total) {
+  if (fitted == null || total == null || fitted >= total) return null;
+  return el('span', {class:'small', style:'color:var(--warn); margin-left:4px; cursor:default',
+    title:`${fmt.count(total-fitted)} of ${fmt.count(total)} site(s) here have no fitted inspection interval - assumed 1 visit/yr.`}, ['*']);
+}
 
 // ============================================================ SITE DETAIL ==
 // Pass 3 §3.2/§4/§6: an in-page panel over the pitch page, generated from
@@ -829,7 +837,7 @@ function renderGeoAccountTable(accounts) {
     tr.appendChild(el('td',{},[a._offering||'—']));
     tr.appendChild(el('td',{},[fmt.usd(a.coi_3yr_usd)]));
     tr.appendChild(el('td',{},[fmt.usd(a.software_revenue_usd_yr)]));
-    tr.appendChild(el('td',{},[fmt.usd(a.inspection_revenue_usd_yr)]));
+    tr.appendChild(el('td',{},[fmt.usd(a.inspection_revenue_usd_yr), inspFlag(a.n_sites_insp_fitted, a.n_sites)].filter(v=>v!==null)));
     tr.appendChild(el('td',{},[fmt.usd(a.total_ssi_potential_usd_yr)]));
     tr.appendChild(el('td',{},[fmt.weeks(a.payback_weeks)]));
     tr.appendChild(el('td',{},[a.confidence||'—']));
@@ -1384,7 +1392,7 @@ function renderCoverage(m) {
     tr.appendChild(el('td',{},[fmt.count(b.n_accounts)]));
     tr.appendChild(el('td',{},[fmt.mwdc(b.mwdc)]));
     tr.appendChild(el('td',{},[fmt.usd(b.software_revenue_usd_yr)]));
-    tr.appendChild(el('td',{},[fmt.usd(b.inspection_revenue_usd_yr)]));
+    tr.appendChild(el('td',{},[fmt.usd(b.inspection_revenue_usd_yr), inspFlag(b.n_sites_insp_fitted, b.n_sites)].filter(v=>v!==null)));
     tr.appendChild(el('td',{},[fmt.usd(b.total_ssi_potential_usd_yr)]));
     tr.appendChild(el('td',{},[fmt.usd(b.already_contracted_usd_yr)]));
     tr.appendChild(el('td',{class:'still-avail'},[fmt.usd(b.still_available_usd_yr)]));
@@ -1398,7 +1406,7 @@ function renderCoverage(m) {
         atr.appendChild(el('td',{},['—']));
         atr.appendChild(el('td',{},[fmt.mwdc(a.mwdc)]));
         atr.appendChild(el('td',{},[fmt.usd(a.software_revenue_usd_yr)]));
-        atr.appendChild(el('td',{},[fmt.usd(a.inspection_revenue_usd_yr)]));
+        atr.appendChild(el('td',{},[fmt.usd(a.inspection_revenue_usd_yr), inspFlag(a.n_sites_insp_fitted, a.n_sites)].filter(v=>v!==null)));
         atr.appendChild(el('td',{},[fmt.usd(a.total_ssi_potential_usd_yr)]));
         atr.appendChild(el('td',{},[fmt.usd(a.already_contracted_usd_yr)]));
         atr.appendChild(el('td',{class:'still-avail'},[fmt.usd(a.still_available_usd_yr)]));

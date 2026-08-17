@@ -463,6 +463,7 @@ def build_rep_coverage(account_df: pd.DataFrame, gtm: pd.DataFrame, n_matched_gt
             n_accounts_managed=int(n_managed.get(book, 0)) if book not in ("WHITESPACE", "UNASSIGNED") else None,
             n_accounts=len(g), n_customer=int((g["relationship"] == "Customer").sum()),
             n_prospect=int((g["relationship"] == "Prospect").sum()),
+            n_sites=int(g["n_sites"].sum()),
             mwdc=round(g["mwdc"].sum(), 1), recoverable_usd_yr=round(g["recoverable_usd_yr"].sum(), 0),
             coi_3yr_usd=round(g["coi_3yr_usd"].sum(), 0),
             software_revenue_usd_yr=round(g["software_revenue_usd_yr"].sum(), 0),
@@ -470,6 +471,11 @@ def build_rep_coverage(account_df: pd.DataFrame, gtm: pd.DataFrame, n_matched_gt
             total_ssi_potential_usd_yr=round(g["total_ssi_potential_usd_yr"].sum(), 0),
             already_contracted_usd_yr=round(g["_contracted"].sum(), 0),
             still_available_usd_yr=round(g["_available"].sum(), 0),
+            # Pass 3 §5 test 81: "unfitted rows are flagged" - carry the
+            # fitted-vs-total site count through so the UI can mark any
+            # rep/account whose inspection figure includes a 1-visit/yr
+            # fallback rather than a fitted interval.
+            n_sites_insp_fitted=int(g["n_sites_insp_fitted"].sum()),
         ))
         accounts_by_book[book] = [
             dict(owner_entity=row["owner_entity"], n_sites=int(row["n_sites"]), mwdc=round(row["mwdc"], 1),
@@ -477,7 +483,8 @@ def build_rep_coverage(account_df: pd.DataFrame, gtm: pd.DataFrame, n_matched_gt
                  inspection_revenue_usd_yr=round(row["inspection_revenue_usd_yr"], 0),
                  total_ssi_potential_usd_yr=round(row["total_ssi_potential_usd_yr"], 0),
                  already_contracted_usd_yr=round(row["_contracted"], 0),
-                 still_available_usd_yr=round(row["_available"], 0))
+                 still_available_usd_yr=round(row["_available"], 0),
+                 n_sites_insp_fitted=int(row["n_sites_insp_fitted"]))
             for _, row in g.sort_values("_available", ascending=False).iterrows()
         ]
     book_df = pd.DataFrame(book_rows).sort_values("coi_3yr_usd", ascending=False)

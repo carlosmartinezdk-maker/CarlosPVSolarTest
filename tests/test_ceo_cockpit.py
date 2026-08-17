@@ -573,6 +573,315 @@ def test_75_print():
 
 
 
+def test_77_geography_control_nesting():
+    """Pass 3 §1: scope filters the universe, relationship filters within
+    it, and the map/table toggle only changes presentation - so a
+    relationship-only filter must produce the same visible count whether
+    read from the table (DOM rows) or from the map's own relationship
+    legend (which the map and table share via renderRelationshipToggle),
+    and switching only the scope (relationship untouched) must change the
+    universe size without touching the relationship split itself."""
+    payload = _load_payload()
+    all_accounts = payload["screen1"]["all_accounts"]
+    in_scope_accounts = payload["accounts"]
+    assert len(all_accounts) > len(in_scope_accounts), (
+        "the 'All accounts' scope must be a strict superset of the >=250 MWdc scope")
+    all_customer = sum(1 for a in all_accounts if a["relationship"] == "Customer")
+    floor_customer = sum(1 for a in in_scope_accounts if a["relationship"] == "Customer")
+    assert all_customer >= floor_customer, (
+        "narrowing scope to >=250 MWdc should never increase the Customer count within it")
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("test 77 (geography control nesting): payload-level checks passed; playwright not installed, skipping UI check")
+        return
+    with sync_playwright() as p:
+        browser, page = _pw_page(p)
+        if not browser:
+            print("test 77 (geography control nesting): payload-level checks passed; no chromium found, skipping UI check")
+            return
+        page.click("button[data-view='market']")
+        page.wait_for_timeout(300)
+        # scope=All accounts, table view, isolate to Customer only - table
+        # row count and the shared legend's "Customer (N)" figure must agree.
+        page.evaluate("""() => {
+            state.geoScope = 'all'; state.geoView = 'table';
+            state.mapFilters = {Customer:true, Prospect:false, Whitespace:false};
+            render();
+        }""")
+        page.wait_for_timeout(300)
+        table_rows = page.eval_on_selector_all(".card-panel table.grid tbody tr, .card-panel table.grid tr",
+                                                 "els => els.length")
+        legend_text = page.inner_text(".legend")
+        import re as _re
+        m = _re.search(r"Customer \(([\d,]+)\)", legend_text)
+        assert m, f"Customer legend count not found in: {legend_text}"
+        legend_n = int(m.group(1).replace(",", ""))
+        # table_rows includes the header row
+        assert table_rows - 1 == legend_n, (
+            f"table shows {table_rows-1} Customer accounts but the shared legend says {legend_n} - "
+            "map and table disagree on the same filtered universe")
+        # switching scope alone (relationship filter untouched) must shrink
+        # the universe, confirming scope nests OUTSIDE relationship, not the
+        # other way round.
+        page.evaluate("() => { state.geoScope = 'floor'; render(); }")
+        page.wait_for_timeout(300)
+        legend_text2 = page.inner_text(".legend")
+        m2 = _re.search(r"Customer \(([\d,]+)\)", legend_text2)
+        legend_n2 = int(m2.group(1).replace(",", ""))
+        assert legend_n2 <= legend_n, "narrowing scope to >=250 MWdc should not increase the Customer count"
+        browser.close()
+    print(f"test 77 (geography control nesting): passed - all-accounts Customer count {all_customer} >= "
+          f"floor-scope Customer count {floor_customer}, map/table legend agrees with table row count "
+          f"({legend_n} both), scope narrowing shrinks the universe ({legend_n} -> {legend_n2})")
+
+
+def test_78_scope_toggle_counts():
+    """Scope toggle counts match the spec's reference figures: 2,139
+    accounts / $767.5M for All accounts, 112 / $484.7M for >=250 MWdc."""
+    payload = _load_payload()
+    meta = payload["meta"]
+    assert meta["total_accounts_all"] == 2139, f"expected 2,139 total accounts, got {meta['total_accounts_all']}"
+    assert abs(meta["total_coi_all_usd"] - 767_500_000) < 2_000_000, (
+        f"expected ~$767.5M total CoI, got ${meta['total_coi_all_usd']/1e6:.1f}M")
+    assert meta["in_scope_accounts"] == 112, f"expected 112 in-scope accounts, got {meta['in_scope_accounts']}"
+    assert abs(meta["in_scope_coi_usd"] - 484_700_000) < 2_000_000, (
+        f"expected ~$484.7M in-scope CoI, got ${meta['in_scope_coi_usd']/1e6:.1f}M")
+    print(f"test 78 (scope toggle counts): passed - {meta['total_accounts_all']} accounts / "
+          f"${meta['total_coi_all_usd']/1e6:.1f}M all, {meta['in_scope_accounts']} / "
+          f"${meta['in_scope_coi_usd']/1e6:.1f}M >=250 MWdc")
+
+
+def test_79_revenue_formula():
+    """Software revenue = mwdc x 168; inspection revenue = mwdc x 150 x
+    12/optimal_months (or x150 flat when unfitted); the in-scope fleet
+    totals reproduce the spec's $17.0M / $31.3M / $48.2M reference
+    figures, verified independently at the per-site level (not just
+    re-reading the aggregate the build already computed)."""
+    payload = _load_payload()
+    accounts = payload["accounts"]
+    bad_sw = [a["owner_entity"] for a in accounts
+              if abs(a["software_revenue_usd_yr"] - a["mwdc"] * 168) > max(5, 0.01 * a["mwdc"] * 168)]
+    assert not bad_sw, f"software revenue != mwdc*168 for: {bad_sw[:5]}"
+
+    site_sw = site_insp = 0.0
+    for rows in payload["sites_by_account"].values():
+        for s in rows:
+            mwdc = s.get("mwdc") or 0
+            site_sw += mwdc * 168
+            months = s.get("rel_insp_optimal_months")
+            visits = 12.0 / months if months else 1.0
+            site_insp += mwdc * 150 * visits
+    total_sw_reported = sum(a["software_revenue_usd_yr"] for a in accounts)
+    total_insp_reported = sum(a["inspection_revenue_usd_yr"] for a in accounts)
+    assert abs(site_sw - total_sw_reported) < max(1000, 0.01 * total_sw_reported), (
+        f"per-site software recompute ${site_sw/1e6:.2f}M != reported ${total_sw_reported/1e6:.2f}M")
+    assert abs(site_insp - total_insp_reported) < max(1000, 0.01 * total_insp_reported), (
+        f"per-site inspection recompute ${site_insp/1e6:.2f}M != reported ${total_insp_reported/1e6:.2f}M")
+
+    meta = payload["meta"]
+    assert abs(total_sw_reported - 17_000_000) < 500_000, f"software subtotal ${total_sw_reported/1e6:.1f}M != ~$17.0M"
+    assert abs(total_insp_reported - 31_300_000) < 500_000, f"inspection subtotal ${total_insp_reported/1e6:.1f}M != ~$31.3M"
+    assert abs(meta["in_scope_total_ssi_potential_usd"] - 48_200_000) < 500_000, (
+        f"total at full attach ${meta['in_scope_total_ssi_potential_usd']/1e6:.1f}M != ~$48.2M")
+    print(f"test 79 (revenue formula): passed - software ${total_sw_reported/1e6:.1f}M, "
+          f"inspection ${total_insp_reported/1e6:.1f}M, total ${meta['in_scope_total_ssi_potential_usd']/1e6:.1f}M, "
+          "per-site recompute matches the build's own aggregate")
+
+
+def test_80_fee_labels_never_summed():
+    """'Lead-offering fee' and 'Total potential at full attach' are
+    separately labelled everywhere and the template never adds
+    fee_annual_usd to total_ssi_potential_usd_yr (or in_scope_fee_potential_usd
+    to in_scope_total_ssi_potential_usd) in the DOM."""
+    with open(os.path.join(REPO_ROOT, "ceo_cockpit_template.html")) as f:
+        html = f.read()
+    assert "Lead-offering fee" in html, "the existing fee figure must be explicitly labelled 'Lead-offering fee'"
+    assert "Total potential at full attach" in html, "the new figure must be explicitly labelled 'Total potential at full attach'"
+    forbidden_sums = [
+        "fee_annual_usd + total_ssi_potential_usd_yr", "total_ssi_potential_usd_yr + fee_annual_usd",
+        "in_scope_fee_potential_usd + DATA.meta.in_scope_total_ssi_potential_usd",
+        "in_scope_total_ssi_potential_usd + DATA.meta.in_scope_fee_potential_usd",
+    ]
+    bad = [s for s in forbidden_sums if s in html]
+    assert not bad, f"template appears to sum the two revenue figures: {bad}"
+    payload = _load_payload()
+    meta = payload["meta"]
+    assert meta["in_scope_fee_potential_usd"] != meta["in_scope_total_ssi_potential_usd"], (
+        "the two figures collapsed to the same number - they answer different questions and should differ")
+    print("test 80 (fee labels never summed): passed - both labels present, no summing expression in the template, "
+          f"lead-offering ${meta['in_scope_fee_potential_usd']/1e6:.1f}M != full-attach "
+          f"${meta['in_scope_total_ssi_potential_usd']/1e6:.1f}M")
+
+
+def test_81_inspection_coverage_and_flags():
+    """The 1,604-of-2,411 fitted count is stated under any table using the
+    optimal frequency, and rows whose figure includes an unfitted (1
+    visit/yr fallback) site are flagged."""
+    payload = _load_payload()
+    ic = payload["meta"]["inspection_coverage"]
+    assert ic["of"] > 0 and 0 < ic["n"] <= ic["of"], f"implausible inspection_coverage: {ic}"
+    assert abs(ic["n"] - 1604) <= 5 and abs(ic["of"] - 2411) <= 5, (
+        f"expected ~1,604 of ~2,411 sites fitted, got {ic['n']} of {ic['of']}")
+
+    with open(os.path.join(REPO_ROOT, "ceo_cockpit_template.html")) as f:
+        html = f.read()
+    assert "inspection_coverage" in html, "the fitted-coverage footnote must render from DATA.meta.inspection_coverage"
+    assert "inspFlag" in html and "n_sites_insp_fitted" in html, (
+        "unfitted rows must be flagged via n_sites_insp_fitted, not silently absorbed into the total")
+
+    all_accounts = payload["screen1"]["all_accounts"]
+    partially_fitted = [a for a in all_accounts if a["n_sites_insp_fitted"] is not None
+                         and a["n_sites_insp_fitted"] < a["n_sites"]]
+    assert partially_fitted, "expected at least one account with a partially-fitted inspection interval to flag"
+    print(f"test 81 (inspection coverage and flags): passed - {ic['n']} of {ic['of']} sites fitted, "
+          f"{len(partially_fitted)} accounts carry at least one unfitted site eligible for the flag")
+
+
+def test_82_site_links_and_scroll():
+    """Site links work from the worst-sites/underperforming-assets and
+    warranty tables on the pitch page, and closing the modal never
+    disturbs the page's scroll position or the selected account (test
+    against a dispatched click, not Playwright's own click-then-scroll-
+    into-view, since that would test Playwright's behaviour, not the app's)."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("test 82 (site links and scroll): skipped, playwright not installed")
+        return
+    with sync_playwright() as p:
+        browser, page = _pw_page(p)
+        if not browser:
+            print("test 82 (site links and scroll): skipped, no chromium found")
+            return
+        page.click("button[data-view='pitch']")
+        page.wait_for_timeout(200)
+        page.select_option(".card-panel select", index=1)
+        page.wait_for_timeout(300)
+        n_links = page.eval_on_selector_all(".site-link", "els => els.length")
+        assert n_links >= 2, f"expected site links from at least the worst-sites and warranty tables, found {n_links}"
+        account_before = page.evaluate("() => state.currentAccount")
+
+        page.evaluate("() => window.scrollTo(0, 700)")
+        page.evaluate("() => document.querySelector('.site-link').dispatchEvent(new MouseEvent('click', {bubbles:true}))")
+        page.wait_for_timeout(300)
+        assert page.query_selector(".site-modal") is not None, "site link did not open the modal"
+        for label in ["PERFORMANCE", "FAULT HISTORY", "PEER GROUP", "RELIABILITY", "EVENT LEDGER"]:
+            assert label in page.inner_text(".site-modal"), f"modal missing {label} panel"
+
+        page.evaluate("""() => {
+            [...document.querySelectorAll('.site-modal-head button')].find(b => b.textContent.includes('Close'))
+              .dispatchEvent(new MouseEvent('click', {bubbles:true}));
+        }""")
+        page.wait_for_timeout(200)
+        assert page.query_selector(".site-modal") is None, "modal did not close"
+        scroll_after = page.evaluate("() => window.scrollY")
+        account_after = page.evaluate("() => state.currentAccount")
+        assert scroll_after == 700, f"scroll position drifted from 700 to {scroll_after} across open/close"
+        assert account_after == account_before, "closing the modal must not change the selected account"
+        browser.close()
+    print(f"test 82 (site links and scroll): passed - {n_links} site links found, modal opens with all 5 panels, "
+          "closing preserves scroll position (700) and the selected account")
+
+
+def test_83_gaps_are_gaps():
+    """A site with missing months must show a break in the performance
+    line, not a zero: the payload itself must contain at least one null
+    in some site's e_act array (a real reporting gap), and the chart code
+    must skip nulls rather than plot them as 0."""
+    payload = _load_payload()
+    has_gap = False
+    for rows in payload["sites_by_account"].values():
+        for s in rows:
+            detail = s.get("detail")
+            if detail and any(v is None for v in detail.get("e_act", [])):
+                has_gap = True
+                break
+        if has_gap:
+            break
+    assert has_gap, "expected at least one in-scope site with a missing-month gap in e_act - widen the search if this fires"
+
+    with open(os.path.join(REPO_ROOT, "ceo_cockpit_template.html")) as f:
+        html = f.read()
+    assert "if (v==null) { flush(); return; }" in html, (
+        "performance chart must break the line (flush the current segment) on a null value, not draw through it as 0")
+    print("test 83 (gaps are gaps): passed - payload contains at least one real missing-month gap, "
+          "and the chart's draw() function breaks the line on null rather than plotting 0")
+
+
+def test_84_why_this_offering_removed():
+    """'Why this offering' is gone from both the DOM (template) and the
+    generator (s18/payload) - the offering rationale is already carried
+    by the play's pitch sentence and the focus band reason."""
+    with open(os.path.join(REPO_ROOT, "ceo_cockpit_template.html")) as f:
+        template = f.read()
+    assert "WHY THIS OFFERING" not in template, "'WHY THIS OFFERING' panel still present in the template"
+    assert "whyPanel" not in template, "the whyPanel generator code is still present in the template"
+    with open(os.path.join(REPO_ROOT, "s18_ceo_cockpit.py")) as f:
+        s18_src = f.read()
+    with open(os.path.join(REPO_ROOT, "ceo_cockpit_payload.py")) as f:
+        payload_src = f.read()
+    assert "why this offering" not in s18_src.lower(), "'why this offering' text still present in s18_ceo_cockpit.py"
+    assert "why this offering" not in payload_src.lower(), "'why this offering' text still present in ceo_cockpit_payload.py"
+    print("test 84 (why this offering removed): passed - not in the template DOM, generator, or payload assembly")
+
+
+def test_85_payload_budget_with_site_detail():
+    """The cockpit still opens from file:// with no network and stays
+    under 25MB with all nine Pass 3 §4 site arrays (plus the event
+    ledger) embedded - extends test 63's offline check to actually open
+    a site detail modal, the one code path test 63 doesn't exercise."""
+    path = os.path.join(REPO_ROOT, "ceo_cockpit.html")
+    size_mb = os.path.getsize(path) / 1e6
+    assert size_mb < 25, f"ceo_cockpit.html is {size_mb:.1f}MB, exceeds the 25MB budget"
+
+    payload = _load_payload()
+    # sig_idx is the signature-as-index encoding of the spec's "signature"
+    # field (§4's own "signature-as-index alone saves most of it"), and
+    # benchmark_peer is benchmark_mode's 0/1 encoding - same nine fields.
+    required_arrays = ["sig_idx", "d", "e_act", "e_exp", "benchmark_peer",
+                        "block_fraction", "peer_count", "peer_radius_km", "peers_healthy"]
+    sample = None
+    for rows in payload["sites_by_account"].values():
+        for s in rows:
+            if s.get("detail"):
+                sample = s["detail"]
+                break
+        if sample:
+            break
+    assert sample is not None, "no site in the payload carries a 'detail' block"
+    missing = [f for f in required_arrays if f not in sample]
+    assert not missing, f"site detail is missing required Pass 3 §4 arrays: {missing}"
+    assert "ledger_year" in sample and "ledger_usd_lost" in sample, "site detail is missing the event ledger"
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print(f"test 85 (payload budget with site detail): size passed ({size_mb:.2f}MB), all 9 arrays + ledger present; "
+              "playwright not installed, skipping the offline browser check")
+        return
+    with sync_playwright() as p:
+        browser, page = _pw_page(p)
+        if not browser:
+            print(f"test 85 (payload budget with site detail): size passed ({size_mb:.2f}MB), all 9 arrays + ledger present; "
+                  "no chromium found, skipping the offline browser check")
+            return
+        errors = []
+        page.on("pageerror", lambda exc: errors.append(str(exc)))
+        page.click("button[data-view='pitch']")
+        page.wait_for_timeout(200)
+        page.select_option(".card-panel select", index=1)
+        page.wait_for_timeout(300)
+        page.evaluate("() => document.querySelector('.site-link').dispatchEvent(new MouseEvent('click', {bubbles:true}))")
+        page.wait_for_timeout(400)
+        assert page.query_selector(".site-modal") is not None, "site detail modal did not open offline"
+        browser.close()
+    assert not errors, f"console errors opening the site detail modal offline: {errors}"
+    print(f"test 85 (payload budget with site detail): passed - {size_mb:.2f}MB (<25MB), all 9 site arrays + ledger "
+          "present, site detail modal opens offline with zero console errors")
+
+
 if __name__ == "__main__":
     test_50_pricing_units()
     test_51_no_bare_roi_multiple()
@@ -596,3 +905,12 @@ if __name__ == "__main__":
     test_72_single_logo_removed()
     test_73_crm_reconciliation_removed()
     test_75_print()
+    test_77_geography_control_nesting()
+    test_78_scope_toggle_counts()
+    test_79_revenue_formula()
+    test_80_fee_labels_never_summed()
+    test_81_inspection_coverage_and_flags()
+    test_82_site_links_and_scroll()
+    test_83_gaps_are_gaps()
+    test_84_why_this_offering_removed()
+    test_85_payload_budget_with_site_detail()

@@ -74,6 +74,9 @@ def build_all_accounts(account):
             software_revenue_usd_yr=r(a["software_revenue_usd_yr"]),
             inspection_revenue_usd_yr=r(a["inspection_revenue_usd_yr"]),
             total_ssi_potential_usd_yr=r(a["total_ssi_potential_usd_yr"]),
+            # Pass 3 §5 test 81: lets the Geography table flag any account
+            # whose inspection figure includes a 1-visit/yr fallback.
+            n_sites_insp_fitted=ri(a["n_sites_insp_fitted"]),
             payback_weeks=r(a["payback_weeks"], 1), confidence=a["confidence"],
             ownership_unresolved=bool(a["ownership_unresolved"]), top_signature=a["top_signature_mode"],
         ))
@@ -196,7 +199,7 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
             rep=b["rep"], market_status=b["market_status"],
             n_accounts_managed=ri(b["n_accounts_managed"]) if pd.notna(b["n_accounts_managed"]) else None,
             n_accounts=ri(b["n_accounts"]),
-            n_customer=ri(b["n_customer"]), n_prospect=ri(b["n_prospect"]), mwdc=r(b["mwdc"], 1),
+            n_customer=ri(b["n_customer"]), n_prospect=ri(b["n_prospect"]), n_sites=ri(b["n_sites"]), mwdc=r(b["mwdc"], 1),
             recoverable_usd_yr=r(b["recoverable_usd_yr"]), coi_3yr_usd=r(b["coi_3yr_usd"]),
             # Pass 3 §2.1: the rep revenue subsection - software/inspection
             # at full attach, already contracted (from GTM product flags),
@@ -206,13 +209,15 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
             total_ssi_potential_usd_yr=r(b["total_ssi_potential_usd_yr"]),
             already_contracted_usd_yr=r(b["already_contracted_usd_yr"]),
             still_available_usd_yr=r(b["still_available_usd_yr"]),
+            n_sites_insp_fitted=ri(b["n_sites_insp_fitted"]),
         ))
     accounts_by_book = {book: [dict(owner_entity=a["owner_entity"], n_sites=ri(a["n_sites"]), mwdc=r(a["mwdc"], 1),
                                      software_revenue_usd_yr=r(a["software_revenue_usd_yr"]),
                                      inspection_revenue_usd_yr=r(a["inspection_revenue_usd_yr"]),
                                      total_ssi_potential_usd_yr=r(a["total_ssi_potential_usd_yr"]),
                                      already_contracted_usd_yr=r(a["already_contracted_usd_yr"]),
-                                     still_available_usd_yr=r(a["still_available_usd_yr"]))
+                                     still_available_usd_yr=r(a["still_available_usd_yr"]),
+                                     n_sites_insp_fitted=ri(a["n_sites_insp_fitted"]))
                                 for a in accts]
                          for book, accts in coverage["accounts_by_book"].items()}
 
