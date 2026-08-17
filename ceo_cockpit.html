@@ -148,7 +148,8 @@ const ALBERS_PROJ = d3.geoAlbersUsa().scale(1300).translate([975/2, 610/2]);
 // A10: FOCUS_NOW starts selected so Priority Accounts is never empty on load.
 const state = { view: 'market', currentAccount: null, sortCol: 'coi_3yr_usd', sortDir: -1,
   filters: {relationship:'', region:'', focus:'FOCUS_NOW'},
-  showTechnicalDetail: false }; // A6c: persists across account navigation, not reset per render
+  showTechnicalDetail: false, // A6c: persists across account navigation, not reset per render
+  evSortCol: 'cost_of_inaction_usd', evSortDir: -1 }; // A8: Evidence's own site table sort (separate from Priority Accounts')
 
 function el(tag, attrs, children) {
   const e = document.createElement(tag);
@@ -794,33 +795,65 @@ function renderEvidence(m) {
   panel.appendChild(sel);
   m.appendChild(panel);
 
+  // A7: plain-English explanation before the fit table - what a lifetime
+  // distribution fit is and how to read beta/eta, in the spec's own words,
+  // with this run's actual eta figures substituted into the example.
   const fitPanel = el('div', {class:'card-panel'});
-  panelHeader(fitPanel, 'FLEET-WIDE LIFE DATA FIT', 'Pooled Weibull fit per fault signature, not decomposable by account',
-    'beta > 1 = wear-out (age-driven). beta < 1 = infant mortality (a warranty conversation, not a repair one).');
+  panelHeader(fitPanel, 'FLEET-WIDE LIFE DATA FIT', 'Pooled Weibull fit per fault signature, not decomposable by account');
+  const blockEta = (DATA.reliability.signatures.find(s=>s.signature==='BLOCK_OUTAGE')||{}).weibull_eta_years;
+  const trackerEta = (DATA.reliability.signatures.find(s=>s.signature==='TRACKER')||{}).weibull_eta_years;
+  fitPanel.appendChild(el('div',{class:'interp'},[
+    'We fit a lifetime distribution to each fault type across the whole fleet - the same method wind operators use for gearboxes. It answers how does the chance of this fault change as a plant ages.']));
+  fitPanel.appendChild(el('div',{class:'interp'},[
+    el('b',{},['β (beta)']), ' is the shape. Below 1 the fault gets less likely with age - an early-life defect, which is a warranty and commissioning conversation. Around 1 it is random. Above 1 it gets more likely with age - wear-out, which is what justifies scheduled replacement. Every fault type here fits above 1.']));
+  fitPanel.appendChild(el('div',{class:'interp'},[
+    el('b',{},['η (eta)']), ` is the characteristic life, in years - roughly the age by which about 63% of plants have experienced that fault at least once. A larger η means the fault arrives later.${
+      blockEta!=null && trackerEta!=null ? ` Block outage at η = ${fmt.eta(blockEta)} years arrives earlier in a plant's life than tracker faults at η = ${fmt.eta(trackerEta)} years.` : ''}`]));
   const ft = el('table', {class:'grid'});
   ft.appendChild(el('tr',{},[el('th',{class:'kcol'},['Signature']),el('th',{},['Best fit']),el('th',{},['Weibull beta']),
-    el('th',{},['Classification']),el('th',{},['Eta (yr)']),el('th',{},['RVM eligible'])]));
+    el('th',{},['Classification']),el('th',{},['η (characteristic life, years)']),el('th',{},['RVM eligible'])]));
   DATA.reliability.signatures.forEach(s => ft.appendChild(el('tr',{},[
     el('td',{class:'kcol'},[SIG_LABEL[s.signature]||s.signature]), el('td',{},[s.best_fit_family]),
     el('td',{},[fmt.raw(s.weibull_beta,3)]), el('td',{},[s.beta_classification]), el('td',{},[fmt.eta(s.weibull_eta_years)]),
     el('td',{},[s.rvm_eligible?'Yes':'No']),
   ])));
-  fitPanel.appendChild(ft);
+  fitPanel.appendChild(el('div',{class:'tblscroll', style:'margin-top:10px'},[ft]));
   m.appendChild(fitPanel);
 
   const a = state.currentAccount ? accountByName(state.currentAccount) : null;
   if (!a) { m.appendChild(el('div',{class:'card-panel'},['Pick an account above to see its site-level evidence (PI/PRI, D-band, degradation fit).'])); return; }
-  const sites = (DATA.sites_by_account[a.owner_entity] || []).slice().sort((x,y)=>(y.cost_of_inaction_usd||0)-(x.cost_of_inaction_usd||0));
-
+  const sites = (DATA.sites_by_account[a.owner_entity] || []).slice();
+  // A8: MWdc as the 2nd column, sortable on every column both directions
+  // (numeric-aware - reuses the same sortRows/sortIndicator helpers as
+  // Priority Accounts' table, but its own sort state so the two screens
+  // don't fight over one sort column).
+  const EV_COLS = [
+    ['site', 'Site', false], ['mwdc', 'MWdc', true], ['latest_pi', 'Latest PI', true],
+    ['latest_pri', 'Latest PRI', true], ['beta', 'β', true], ['beta_t', 't-stat', true],
+    ['decision_grade', 'Decision-grade', false], ['rel_n_blocks', 'N_blocks', true],
+    ['rel_age_years', 'Age (yr)', true],
+  ];
   const nSuspectEv = sites.filter(s=>s.capacity_suspect).length;
   const sitesPanel = el('div', {class:'card-panel'});
   panelHeader(sitesPanel, 'SITE-LEVEL EVIDENCE', `${a.owner_entity} - ${sites.length} sites`,
     nSuspectEv ? `${nSuspectEv} site(s) show "capacity under review" - a PI computed from a capacity denominator we don't trust, suppressed rather than shown as a number.` : undefined);
+  // evSortCol defaults to 'cost_of_inaction_usd' (worst-first) which isn't
+  // one of the displayed/sortable columns, hence the fallback - no header
+  // shows as "active" until the user clicks one, same as before.
+  const evSortNumeric = (EV_COLS.find(c=>c[0]===state.evSortCol) || [,,true])[2];
+  const sitesSorted = sortRows(sites, state.evSortCol, evSortNumeric, state.evSortDir);
   const st = el('table', {class:'grid'});
-  st.appendChild(el('tr',{},[el('th',{class:'kcol'},['Site']),el('th',{},['Latest PI']),el('th',{},['Latest PRI']),
-    el('th',{},['beta']),el('th',{},['t-stat']),el('th',{},['Decision-grade']),el('th',{},['N_blocks']),el('th',{},['Age (yr)'])]));
-  sites.forEach(s => st.appendChild(el('tr',{},[
+  const evHead = el('tr', {});
+  EV_COLS.forEach(([col,label,numeric]) => {
+    const active = state.evSortCol === col;
+    evHead.appendChild(el('th', {class:numeric?'':'kcol', style:'cursor:pointer',
+      onclick:()=>{ state.evSortDir = (state.evSortCol===col) ? -state.evSortDir : -1; state.evSortCol = col; render(); }},
+      [label + sortIndicator(active, state.evSortDir)]));
+  });
+  st.appendChild(evHead);
+  sitesSorted.forEach(s => st.appendChild(el('tr',{},[
     el('td',{class:'kcol'},[s.site, s.capacity_suspect?el('span',{class:'badge suspect', title:'12-month median PI exceeded 1.35 - capacity (MWdc) figure is under review, PI suppressed'},['capacity under review']):null].filter(v=>v!==null)),
+    el('td',{},[fmt.mwdc(s.mwdc)]),
     el('td',{},[s.capacity_suspect?'—':fmt.pi(s.latest_pi)]), el('td',{},[fmt.pri(s.latest_pri)]),
     el('td',{},[fmt.beta(s.beta)]), el('td',{},[fmt.raw(s.beta_t,1)]),
     el('td',{},[s.decision_grade?'Yes':'No']), el('td',{},[s.rel_n_blocks!==null&&s.rel_n_blocks!==undefined?fmt.count(s.rel_n_blocks):'—']), el('td',{},[fmt.raw(s.rel_age_years,1)]),
@@ -828,16 +861,21 @@ function renderEvidence(m) {
   sitesPanel.appendChild(el('div',{class:'tblscroll'},[st]));
   m.appendChild(sitesPanel);
 
-  const assumptionsPanel = el('div', {class:'card-panel'});
-  panelHeader(assumptionsPanel, 'ASSUMPTIONS', 'What is measured vs. assumed in this build');
+  // A8: the Assumptions subsection is gone from this screen - a single
+  // collapsed drawer keeps the information reachable without it always
+  // occupying space.
+  const assumptionsDrawer = el('details', {class:'defs-panel'});
+  assumptionsDrawer.appendChild(el('summary', {}, ['Assumptions - what is measured vs. assumed in this build']));
+  const adBody = el('div', {class:'defs-body'});
   [
-    'Pricing: SaaS $120/MWdc/yr and SCADA $48/MWdc/yr are CORRECTED rates (spec Section 1.1), computed locally in this tool from MWdc x offering flags - pricing.yaml itself and explorer.html still carry the uncorrected (12x too low) annual rate pending a separate decision.',
+    'Pricing: SaaS $120/MWdc/yr, SCADA $48/MWdc/yr and Inspection $150/MWdc/visit are MEASURED - read from pricing.yaml, the single source of truth this cockpit and explorer.html both derive from (see tests/test_pricing.py).',
     'cost_of_inaction_usd, recoverable_usd_yr, PI/PRI/beta: measured, inherited unchanged from the analyst tool (explorer.html) - ranking signals, not vendor quotes.',
     'Parent/owner rollup: MEASURED for 14 SPVs via parent_mapping.csv (researched from public sources); ASSUMED (rolled up on the raw utility name) for everything else.',
     'GTM relationship match: a conservative, precision-first text matcher - ambiguous/generic tokens are deliberately excluded rather than risk a false customer-relationship claim, so recall is lower than a looser matcher would give. Owners above 250 MWdc that did not match are in ceo_cockpit/data/unmatched_owners.csv for manual review.',
-    'Reliability forecast (rel_* fields): fleet-level pooled Weibull fit, no per-site or per-account refit.',
-  ].forEach(t => assumptionsPanel.appendChild(el('div',{class:'interp'},[t])));
-  m.appendChild(assumptionsPanel);
+    'Reliability forecast (rel_* fields, Weibull fits, MTTR): fleet-level pooled, no per-site or per-account refit. Repair-cost estimates in pricing.yaml are ESTIMATES pending vendor quotes.',
+  ].forEach(t => adBody.appendChild(el('div',{class:'interp'},[t])));
+  assumptionsDrawer.appendChild(adBody);
+  m.appendChild(assumptionsDrawer);
 }
 
 // =============================================================== SCREEN 5 ==

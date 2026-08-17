@@ -230,6 +230,11 @@ def test_63_offline_and_payload_budget():
         for v in ["accounts", "pitch", "evidence", "coverage", "market"]:
             page.click(f"button[data-view='{v}']")
             page.wait_for_timeout(300)
+            # pitch/evidence render almost nothing until an account is picked -
+            # select one so their account-scoped code paths actually run
+            if v in ("pitch", "evidence") and page.query_selector(".card-panel select"):
+                page.select_option(".card-panel select", index=1)
+                page.wait_for_timeout(300)
         browser.close()
     assert not errors, f"console errors while rendering offline: {errors}"
     print(f"test 63 (offline + payload budget): passed - {size_mb:.2f}MB, zero console errors across all 5 screens, "
