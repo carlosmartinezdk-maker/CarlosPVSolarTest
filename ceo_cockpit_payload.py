@@ -198,7 +198,23 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
             n_accounts=ri(b["n_accounts"]),
             n_customer=ri(b["n_customer"]), n_prospect=ri(b["n_prospect"]), mwdc=r(b["mwdc"], 1),
             recoverable_usd_yr=r(b["recoverable_usd_yr"]), coi_3yr_usd=r(b["coi_3yr_usd"]),
+            # Pass 3 §2.1: the rep revenue subsection - software/inspection
+            # at full attach, already contracted (from GTM product flags),
+            # and what's left. "Still available" is what a CEO reads first.
+            software_revenue_usd_yr=r(b["software_revenue_usd_yr"]),
+            inspection_revenue_usd_yr=r(b["inspection_revenue_usd_yr"]),
+            total_ssi_potential_usd_yr=r(b["total_ssi_potential_usd_yr"]),
+            already_contracted_usd_yr=r(b["already_contracted_usd_yr"]),
+            still_available_usd_yr=r(b["still_available_usd_yr"]),
         ))
+    accounts_by_book = {book: [dict(owner_entity=a["owner_entity"], n_sites=ri(a["n_sites"]), mwdc=r(a["mwdc"], 1),
+                                     software_revenue_usd_yr=r(a["software_revenue_usd_yr"]),
+                                     inspection_revenue_usd_yr=r(a["inspection_revenue_usd_yr"]),
+                                     total_ssi_potential_usd_yr=r(a["total_ssi_potential_usd_yr"]),
+                                     already_contracted_usd_yr=r(a["already_contracted_usd_yr"]),
+                                     still_available_usd_yr=r(a["still_available_usd_yr"]))
+                                for a in accts]
+                         for book, accts in coverage["accounts_by_book"].items()}
 
     payload = dict(
         meta=dict(
@@ -267,6 +283,7 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
             book=book_out, total_coi=r(coverage["total_coi"]), assigned=r(coverage["assigned"]),
             unassigned=r(coverage["unassigned"]), whitespace=r(coverage["whitespace"]),
             n_reps_named=coverage["n_reps_named"], matched_gtm_accounts=coverage["matched_gtm_accounts"],
+            accounts_by_book=accounts_by_book,
         ),
     )
     return sanitize(payload)

@@ -82,6 +82,8 @@ button.btn.secondary { background:#fff; color:var(--accent); border:1px solid va
 tr.kb-focus td { background:var(--card); box-shadow: inset 2px 0 0 var(--accent); }
 .play-box { border:1px solid var(--panel-border); border-radius:6px; padding:12px 14px; margin-bottom:10px; }
 table.grid th:hover { color:var(--ink); }
+table.grid td.still-avail, table.grid th.still-avail { font-weight:bold; color:var(--accent); }
+tr.rep-account-row td { color:var(--muted); font-size:12.5px; }
 .print-btn { display:inline-block; }
 @page { size: A4; margin: 10mm; }
 @media print {
@@ -1119,6 +1121,56 @@ function renderCoverage(m) {
     cov.book, 'ceo_cockpit_book.csv'));
   bookPanel.appendChild(el('div',{class:'tblscroll'},[bt]));
   m.appendChild(bookPanel);
+
+  // Pass 3 §2: rep revenue subsection. One row per named rep, expandable
+  // to the accounts underneath - "still available" (total potential minus
+  // already-contracted, from the GTM product flags) is what a CEO reads
+  // first, so it's the rightmost, weighted column.
+  if (!state.expandedReps) state.expandedReps = {};
+  const REV_COLS_HEAD = ['Rep','Accounts managed','Accounts with US solar data','Solar MWdc',
+    'Software revenue/yr','Inspection revenue/yr','Total SSI potential/yr','Already contracted','Still available'];
+  const revPanel = el('div', {class:'card-panel'});
+  const ic = DATA.meta.inspection_coverage;
+  panelHeader(revPanel, 'REVENUE', 'Software + inspection potential by rep - click a rep to expand its accounts',
+    `Inspection frequency fitted on ${fmt.count(ic.n)} of ${fmt.count(ic.of)} sites; the remainder assume one visit per year. "Lead-offering fee" (Priority Accounts) and "Total SSI potential" (here) answer different questions and are never summed.`);
+  const rt = el('table', {class:'grid'});
+  rt.appendChild(el('tr',{}, REV_COLS_HEAD.map((h,i)=>el('th',{class:i===0?'kcol':(i===8?'still-avail':'')},[h]))));
+  const repsSorted = cov.book.slice().sort((a,b)=>b.still_available_usd_yr-a.still_available_usd_yr);
+  repsSorted.forEach(b => {
+    const expanded = !!state.expandedReps[b.rep];
+    const tr = el('tr', {style:'cursor:pointer', onclick:()=>{state.expandedReps[b.rep]=!expanded; render();}});
+    tr.appendChild(el('td',{class:'kcol'},[(expanded?'▾ ':'▸ ')+b.rep]));
+    tr.appendChild(el('td',{},[b.n_accounts_managed!=null?fmt.count(b.n_accounts_managed):'—']));
+    tr.appendChild(el('td',{},[fmt.count(b.n_accounts)]));
+    tr.appendChild(el('td',{},[fmt.mwdc(b.mwdc)]));
+    tr.appendChild(el('td',{},[fmt.usd(b.software_revenue_usd_yr)]));
+    tr.appendChild(el('td',{},[fmt.usd(b.inspection_revenue_usd_yr)]));
+    tr.appendChild(el('td',{},[fmt.usd(b.total_ssi_potential_usd_yr)]));
+    tr.appendChild(el('td',{},[fmt.usd(b.already_contracted_usd_yr)]));
+    tr.appendChild(el('td',{class:'still-avail'},[fmt.usd(b.still_available_usd_yr)]));
+    rt.appendChild(tr);
+    if (expanded) {
+      (cov.accounts_by_book[b.rep]||[]).forEach(a => {
+        const atr = el('tr', {class:'rep-account-row', style:'cursor:pointer',
+          onclick:(e)=>{e.stopPropagation(); if(accountByName(a.owner_entity)){state.currentAccount=a.owner_entity; state.view='pitch'; render();}}});
+        atr.appendChild(el('td',{class:'kcol', style:'padding-left:24px'},[a.owner_entity]));
+        atr.appendChild(el('td',{},['—']));
+        atr.appendChild(el('td',{},['—']));
+        atr.appendChild(el('td',{},[fmt.mwdc(a.mwdc)]));
+        atr.appendChild(el('td',{},[fmt.usd(a.software_revenue_usd_yr)]));
+        atr.appendChild(el('td',{},[fmt.usd(a.inspection_revenue_usd_yr)]));
+        atr.appendChild(el('td',{},[fmt.usd(a.total_ssi_potential_usd_yr)]));
+        atr.appendChild(el('td',{},[fmt.usd(a.already_contracted_usd_yr)]));
+        atr.appendChild(el('td',{class:'still-avail'},[fmt.usd(a.still_available_usd_yr)]));
+        rt.appendChild(atr);
+      });
+    }
+  });
+  revPanel.appendChild(exportBtn(['rep','n_accounts_managed','n_accounts','mwdc','software_revenue_usd_yr',
+    'inspection_revenue_usd_yr','total_ssi_potential_usd_yr','already_contracted_usd_yr','still_available_usd_yr'],
+    cov.book, 'ceo_cockpit_rep_revenue.csv'));
+  revPanel.appendChild(el('div',{class:'tblscroll'},[rt]));
+  m.appendChild(revPanel);
 
   const focusPanel = el('div', {class:'card-panel'});
   panelHeader(focusPanel, 'FOCUS BANDS', 'Every in-scope account, one band, one reason');
