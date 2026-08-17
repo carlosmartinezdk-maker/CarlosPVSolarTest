@@ -695,6 +695,53 @@ document.addEventListener('keydown', e => {
 // =============================================================== SCREEN 1 ==
 function renderMarket(m) {
   const w = DATA.screen1.waterfall;
+
+  // Pass 3 Part 1: Geography subsection - placed first on this screen (per
+  // Carlos's request), above both the Addressable Market summary and the
+  // Strategy waterfall below it, since "where" is what a CEO orients on
+  // before "how big". Three independent controls, coarse to fine. Control
+  // hierarchy matters: scope filters the universe, relationship filters
+  // within it, map/table only changes presentation - nesting them in any
+  // other order "produces a control panel nobody trusts" (spec's own words).
+  ensureGeoState();
+  const geoPanel = el('div', {class:'card-panel'});
+  panelHeader(geoPanel, 'GEOGRAPHY', 'Every US solar site and account - map shows the shape, table answers "show me the list"');
+
+  // §1.1 Map | Table
+  const viewSeg = el('div', {class:'seg', style:'margin-bottom:12px; width:fit-content'});
+  [['map','Map'],['table','Table']].forEach(([v,l]) =>
+    viewSeg.appendChild(el('button', {class: state.geoView===v?'active':'', onclick:()=>{state.geoView=v; render();}}, [l])));
+  geoPanel.appendChild(viewSeg);
+
+  // §1.2 Scope - labelled as granularity, not a filter
+  const scopeWrap = el('div', {class:'cards', style:'margin-bottom:10px'});
+  const scopeOpts = [
+    ['all', 'All accounts', `${fmt.count(DATA.meta.total_accounts_all)} entities, ${fmt.usd(DATA.meta.total_coi_all_usd)} cost of inaction. Most are single-site project vehicles.`],
+    ['floor', '≥ 250 MWdc', `${fmt.count(DATA.meta.in_scope_accounts)} accounts, ${fmt.usd(DATA.meta.in_scope_coi_usd)}. ${fmt.pct(DATA.meta.in_scope_accounts/DATA.meta.total_accounts_all)} of the entities hold ${fmt.pct(DATA.meta.in_scope_coi_usd/DATA.meta.total_coi_all_usd)} of the value.`],
+  ];
+  scopeOpts.forEach(([v,label,copy]) => {
+    const active = state.geoScope === v;
+    scopeWrap.appendChild(el('div', {class:'card'+(active?' band-tile active':''), style:'cursor:pointer; flex:1; min-width:260px',
+      onclick:()=>{state.geoScope=v; render();}},
+      [el('div',{class:'v', style:'font-size:15px'},[label]), el('div',{class:'l', style:'white-space:normal; margin-top:4px'},[copy])]));
+  });
+  geoPanel.appendChild(scopeWrap);
+
+  // §1.3 Relationship - beneath scope, above the map/table itself
+  const geoScopedSites = state.geoScope === 'floor' ? DATA.screen1.map_sites.filter(s=>s.in_scope) : DATA.screen1.map_sites;
+  const geoScopedAccounts = state.geoScope === 'floor' ? DATA.accounts : DATA.screen1.all_accounts;
+  geoPanel.appendChild(renderRelationshipToggle(state.geoView === 'map' ? geoScopedSites : geoScopedAccounts));
+
+  if (state.geoView === 'map') {
+    geoPanel.appendChild(el('div', {class:'small', style:'margin-bottom:8px'},
+      ['Colour = relationship, size = MWdc (square-root scaled).' +
+       (state.geoScope==='all' ? ' Out-of-scope sites (below the 250 MWdc floor) render at lower opacity for context, not as opportunity.' : '')]));
+    geoPanel.appendChild(renderSiteMap(geoScopedSites));
+  } else {
+    geoPanel.appendChild(renderGeoAccountTable(geoScopedAccounts));
+  }
+  m.appendChild(geoPanel);
+
   const headline = el('div', {class:'card-panel'});
   panelHeader(headline, 'ADDRESSABLE MARKET', 'How big, how real, and where',
     'Denominator: all figures below are the ' + fmt.count(DATA.meta.in_scope_accounts) + ' accounts at or above the 250 MWdc engagement floor - the remaining ' +
@@ -744,68 +791,24 @@ function renderMarket(m) {
   xTitle.textContent = 'Segment'; s.appendChild(xTitle);
   waterfallPanel.appendChild(s);
   m.appendChild(waterfallPanel);
-
-  // Pass 3 Part 1: Geography subsection - three independent controls,
-  // coarse to fine. Control hierarchy matters: scope filters the universe,
-  // relationship filters within it, map/table only changes presentation -
-  // nesting them in any other order "produces a control panel nobody
-  // trusts" (spec's own words).
-  ensureGeoState();
-  const geoPanel = el('div', {class:'card-panel'});
-  panelHeader(geoPanel, 'GEOGRAPHY', 'Every US solar site and account - map shows the shape, table answers "show me the list"');
-
-  // §1.1 Map | Table
-  const viewSeg = el('div', {class:'seg', style:'margin-bottom:12px; width:fit-content'});
-  [['map','Map'],['table','Table']].forEach(([v,l]) =>
-    viewSeg.appendChild(el('button', {class: state.geoView===v?'active':'', onclick:()=>{state.geoView=v; render();}}, [l])));
-  geoPanel.appendChild(viewSeg);
-
-  // §1.2 Scope - labelled as granularity, not a filter
-  const scopeWrap = el('div', {class:'cards', style:'margin-bottom:10px'});
-  const scopeOpts = [
-    ['all', 'All accounts', `${fmt.count(DATA.meta.total_accounts_all)} entities, ${fmt.usd(DATA.meta.total_coi_all_usd)} cost of inaction. Most are single-site project vehicles.`],
-    ['floor', '≥ 250 MWdc', `${fmt.count(DATA.meta.in_scope_accounts)} accounts, ${fmt.usd(DATA.meta.in_scope_coi_usd)}. ${fmt.pct(DATA.meta.in_scope_accounts/DATA.meta.total_accounts_all)} of the entities hold ${fmt.pct(DATA.meta.in_scope_coi_usd/DATA.meta.total_coi_all_usd)} of the value.`],
-  ];
-  scopeOpts.forEach(([v,label,copy]) => {
-    const active = state.geoScope === v;
-    scopeWrap.appendChild(el('div', {class:'card'+(active?' band-tile active':''), style:'cursor:pointer; flex:1; min-width:260px',
-      onclick:()=>{state.geoScope=v; render();}},
-      [el('div',{class:'v', style:'font-size:15px'},[label]), el('div',{class:'l', style:'white-space:normal; margin-top:4px'},[copy])]));
-  });
-  geoPanel.appendChild(scopeWrap);
-
-  // §1.3 Relationship - beneath scope, above the map/table itself
-  const geoScopedSites = state.geoScope === 'floor' ? DATA.screen1.map_sites.filter(s=>s.in_scope) : DATA.screen1.map_sites;
-  const geoScopedAccounts = state.geoScope === 'floor' ? DATA.accounts : DATA.screen1.all_accounts;
-  geoPanel.appendChild(renderRelationshipToggle(state.geoView === 'map' ? geoScopedSites : geoScopedAccounts));
-
-  if (state.geoView === 'map') {
-    geoPanel.appendChild(el('div', {class:'small', style:'margin-bottom:8px'},
-      ['Colour = relationship, size = MWdc (square-root scaled).' +
-       (state.geoScope==='all' ? ' Out-of-scope sites (below the 250 MWdc floor) render at lower opacity for context, not as opportunity.' : '')]));
-    geoPanel.appendChild(renderSiteMap(geoScopedSites));
-  } else {
-    geoPanel.appendChild(renderGeoAccountTable(geoScopedAccounts));
-  }
-  m.appendChild(geoPanel);
 }
 
 // Pass 3 §1.1: account-level table presentation of the Geography subsection.
 const GEO_COLS = [
   ['owner_entity', 'Account', false], ['relationship', 'Relationship', false],
-  ['n_sites', 'Sites', true], ['mwdc', 'MWdc', true], ['_states', 'States', false],
+  ['n_sites', 'Sites', true], ['mwdc', 'MWdc', true], ['_states', 'States', true],
   ['_top_issue', 'Top issue', false], ['_offering', 'Recommended offering', false],
   ['coi_3yr_usd', 'Their loss (3-yr)', true],
   ['software_revenue_usd_yr', 'Software revenue/yr', true],
   ['inspection_revenue_usd_yr', 'Inspection revenue/yr', true],
   ['total_ssi_potential_usd_yr', 'Total SSI potential/yr', true],
-  ['payback_weeks', 'Payback', true], ['confidence', 'Confidence', false],
+  ['payback_weeks', 'Payback', true],
 ];
 function renderGeoAccountTable(accounts) {
   const wrap = el('div', {});
   let list = accounts.filter(a => state.mapFilters[a.relationship]);
   list = list.map(a => ({...a, _top_issue: SIG_LABEL[a.top_signature]||a.top_signature||'',
-    _offering: SIGNATURE_OFFERING[a.top_signature]||'', _states: (a.states||[]).join(', ')}));
+    _offering: SIGNATURE_OFFERING[a.top_signature]||'', _states: (a.states||[]).length}));
   const numericCol = Object.fromEntries(GEO_COLS.map(([c,,n])=>[c,n]));
   list = sortRows(list, state.geoSortCol, !!numericCol[state.geoSortCol], state.geoSortDir);
 
@@ -827,12 +830,11 @@ function renderGeoAccountTable(accounts) {
     const linkable = !!accountByName(a.owner_entity);
     const tr = el('tr', {style: linkable?'cursor:pointer':'', onclick: linkable?()=>{state.currentAccount=a.owner_entity; state.view='pitch'; render();}:undefined});
     const statesFull = (a.states||[]).join(', ');
-    const statesShown = (a.states||[]).slice(0,4).join(', ') + ((a.states||[]).length>4?'…':'');
     tr.appendChild(el('td',{class:'kcol'},[a.owner_entity, a.ownership_unresolved?el('span',{class:'badge unresolved'},['unresolved']):null].filter(v=>v!==null)));
     tr.appendChild(el('td',{},[el('span',{class:'badge '+a.relationship},[a.relationship])]));
     tr.appendChild(el('td',{},[fmt.count(a.n_sites)]));
     tr.appendChild(el('td',{},[fmt.mwdc(a.mwdc)]));
-    tr.appendChild(el('td',{title:statesFull},[statesShown||'—']));
+    tr.appendChild(el('td',{title:statesFull},[fmt.count(a._states)]));
     tr.appendChild(el('td',{},[a._top_issue||'—']));
     tr.appendChild(el('td',{},[a._offering||'—']));
     tr.appendChild(el('td',{},[fmt.usd(a.coi_3yr_usd)]));
@@ -840,7 +842,6 @@ function renderGeoAccountTable(accounts) {
     tr.appendChild(el('td',{},[fmt.usd(a.inspection_revenue_usd_yr), inspFlag(a.n_sites_insp_fitted, a.n_sites)].filter(v=>v!==null)));
     tr.appendChild(el('td',{},[fmt.usd(a.total_ssi_potential_usd_yr)]));
     tr.appendChild(el('td',{},[fmt.weeks(a.payback_weeks)]));
-    tr.appendChild(el('td',{},[a.confidence||'—']));
     table.appendChild(tr);
   });
   wrap.appendChild(el('div',{class:'tblscroll'},[table]));
