@@ -891,36 +891,27 @@ function renderCoverage(m) {
   headline.appendChild(strip);
   m.appendChild(headline);
 
+  // A9: the concentration flag is removed - a rep's solar book looking
+  // single-account isn't a real risk when they carry wind accounts too.
+  // The account count is split instead: the rep's full book (all
+  // technologies, from gtm_accounts.csv) vs. the subset with US solar
+  // production data in this fleet - the gap is the honest statement, "we
+  // can only see part of what they manage".
   const bookPanel = el('div', {class:'card-panel'});
-  panelHeader(bookPanel, 'THE BOOK', 'By account owner, in-scope accounts only',
-    'Any single-logo book (one account = the whole book) is flagged - it is both a revenue and a succession risk.');
+  panelHeader(bookPanel, 'THE BOOK', 'By account owner, in-scope accounts only');
   const bt = el('table', {class:'grid'});
-  bt.appendChild(el('tr',{},[el('th',{class:'kcol'},['Rep']),el('th',{},['Accounts']),el('th',{},['Cust']),el('th',{},['Prosp']),
-    el('th',{},['MWdc']),el('th',{},['Recoverable/yr']),el('th',{},['3-yr CoI']),el('th',{},['Concentration'])]));
+  bt.appendChild(el('tr',{},[el('th',{class:'kcol'},['Rep']),el('th',{},['Accounts managed (all technologies)']),
+    el('th',{},['Accounts with US solar production data']),el('th',{},['Solar MWdc']),
+    el('th',{},['Recoverable/yr']),el('th',{},['3-yr CoI'])]));
   cov.book.forEach(b => {
     const tr = el('tr',{});
-    [b.rep, fmt.count(b.n_accounts), fmt.count(b.n_customer), fmt.count(b.n_prospect), fmt.mwdc(b.mwdc), fmt.usd(b.recoverable_usd_yr), fmt.usd(b.coi_3yr_usd),
-     b.book_concentration!==null?fmt.pct(b.book_concentration):'—']
+    [b.rep, b.n_accounts_managed!=null?fmt.count(b.n_accounts_managed):'—', fmt.count(b.n_accounts),
+     fmt.mwdc(b.mwdc), fmt.usd(b.recoverable_usd_yr), fmt.usd(b.coi_3yr_usd)]
       .forEach((v,i)=>tr.appendChild(el('td',{class:i===0?'kcol':''},[String(v)])));
-    if (b.single_logo) tr.appendChild(el('td',{},[el('span',{class:'badge unresolved'},['single-logo book'])]));
     bt.appendChild(tr);
   });
   bookPanel.appendChild(el('div',{class:'tblscroll'},[bt]));
   m.appendChild(bookPanel);
-
-  const crmPanel = el('div', {class:'card-panel'});
-  panelHeader(crmPanel, 'CRM RECONCILIATION', 'Observed MWdc vs. gtm_solar_mw for matched accounts',
-    'Part of every gap is unit mismatch - the CRM figure is likely MWac or a global total, ours is US MWdc from EIA-reporting sites only. A ~1.3x difference is expected and not an error. Only ratios beyond 150%/below 80% are flagged.');
-  const ct = el('table', {class:'grid'});
-  ct.appendChild(el('tr',{},[el('th',{class:'kcol'},['Account']),el('th',{},['Observed MWdc']),el('th',{},['GTM MWdc']),
-    el('th',{},['Ratio']),el('th',{},['Reading'])]));
-  cov.crm_rows.forEach(c => ct.appendChild(el('tr',{},[
-    el('td',{class:'kcol'},[c.account]), el('td',{},[fmt.mwdc(c.observed_mwdc)]),
-    el('td',{},[c.gtm_solar_mw!==null?fmt.mwdc(c.gtm_solar_mw):'—']),
-    el('td',{},[c.coverage_ratio!==null?fmt.pct(c.coverage_ratio):'—']), el('td',{},[c.reading]),
-  ])));
-  crmPanel.appendChild(el('div',{class:'tblscroll', style:'max-height:340px'},[ct]));
-  m.appendChild(crmPanel);
 
   const focusPanel = el('div', {class:'card-panel'});
   panelHeader(focusPanel, 'FOCUS BANDS', 'Every in-scope account, one band, one reason');

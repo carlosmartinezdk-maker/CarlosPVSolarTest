@@ -131,29 +131,17 @@ def test_58_focus_bands():
     print(f"test 58 (focus bands): passed - {len(payload['accounts'])} accounts, each in exactly one band")
 
 
-def test_59_crm_reconciliation():
-    """The unit-mismatch caveat renders wherever a coverage ratio does
-    (checked at the template level), and ratios only flag outside 80-150%."""
+def test_73_crm_reconciliation_removed():
+    """A9: CRM reconciliation is gone from both the payload and the screen -
+    it read a unit mismatch (MWac vs MWdc) as a data-quality signal, which
+    was misleading."""
+    payload = _load_payload()
+    assert "crm_rows" not in payload["coverage"], "coverage.crm_rows should be removed from the payload"
     with open(os.path.join(REPO_ROOT, "ceo_cockpit_template.html")) as f:
         html = f.read()
-    assert "unit mismatch" in html.lower(), "CRM reconciliation panel is missing the unit-mismatch caveat"
-    payload = _load_payload()
-    bad = []
-    for row in payload["coverage"]["crm_rows"]:
-        if row["coverage_ratio"] is None:
-            continue
-        r = row["coverage_ratio"]
-        expect_undercounts = r > 1.5
-        expect_cannot_see = r < 0.8
-        expect_consistent = 0.8 <= r <= 1.5
-        if expect_undercounts and "undercount" not in row["reading"]:
-            bad.append(row)
-        elif expect_cannot_see and "cannot see" not in row["reading"]:
-            bad.append(row)
-        elif expect_consistent and row["reading"] != "broadly consistent":
-            bad.append(row)
-    assert not bad, f"CRM reading doesn't match its ratio: {bad}"
-    print(f"test 59 (CRM reconciliation): passed - {len(payload['coverage']['crm_rows'])} rows checked")
+    assert "CRM RECONCILIATION" not in html and "crm_rows" not in html, \
+        "CRM reconciliation subsection should be removed from the template"
+    print("test 73 (CRM reconciliation removed): passed - not in payload or template")
 
 
 def test_60_book_reconciliation():
@@ -182,17 +170,24 @@ def test_61_eu_reps_not_zero():
     print(f"test 61 (EU reps not shown as zero): passed - {len(book_reps)} book rows, none with zero metrics")
 
 
-def test_62_book_concentration_flagged():
-    """Any rep with book_concentration above 0.8 is visibly flagged as a
-    single-logo book."""
+def test_72_single_logo_removed():
+    """A9: single_logo and book_concentration are removed entirely - these
+    reps carry non-solar accounts too, so a book that looks single-account
+    in solar isn't a real concentration risk. n_accounts_managed (the rep's
+    full book, all technologies) is reported instead."""
     payload = _load_payload()
-    high_conc = [b for b in payload["coverage"]["book"] if b["book_concentration"] and b["book_concentration"] > 0.8]
-    for b in high_conc:
-        assert b.get("single_logo") is True or b["book_concentration"] > 0.8, b
+    for b in payload["coverage"]["book"]:
+        assert "book_concentration" not in b, f"book_concentration should be removed: {b}"
+        assert "single_logo" not in b, f"single_logo should be removed: {b}"
+    named_reps = [b for b in payload["coverage"]["book"] if b["rep"] not in ("WHITESPACE", "UNASSIGNED")]
+    assert named_reps and all(b.get("n_accounts_managed") is not None for b in named_reps), \
+        "named reps should carry n_accounts_managed (their full book from gtm_accounts.csv)"
     with open(os.path.join(REPO_ROOT, "ceo_cockpit_template.html")) as f:
         html = f.read()
-    assert "single_logo" in html and "single-logo book" in html
-    print(f"test 62 (book concentration flagged): passed - {len(high_conc)} single-logo books found and rendered")
+    assert "single_logo" not in html and "book_concentration" not in html, \
+        "single_logo/book_concentration should not appear in the template"
+    print(f"test 72 (single-logo removed): passed - {len(named_reps)} named reps carry n_accounts_managed, "
+          f"no single_logo/book_concentration anywhere")
 
 
 def test_63_offline_and_payload_budget():
@@ -338,11 +333,11 @@ if __name__ == "__main__":
     test_55_plays_reconcile()
     test_57_coverage_arithmetic()
     test_58_focus_bands()
-    test_59_crm_reconciliation()
     test_60_book_reconciliation()
     test_61_eu_reps_not_zero()
-    test_62_book_concentration_flagged()
     test_63_offline_and_payload_budget()
     test_66_site_map()
     test_68_pi_quarantine()
     test_71_band_filter()
+    test_72_single_logo_removed()
+    test_73_crm_reconciliation_removed()

@@ -148,14 +148,20 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
                         hazard_rate=r(row["hazard_rate"], 4) if pd.notna(row["hazard_rate"]) else None,
                         exposure_years=r(row["exposure_years"], 1)) for _, row in hazard.iterrows()]
 
+    # A9: single_logo/book_concentration removed entirely - these reps carry
+    # non-solar (e.g. wind) accounts too, so a book that looks single-account
+    # in solar isn't a real concentration risk; a visible-but-wrong metric is
+    # worse than an absent one. n_accounts_managed (all technologies, from
+    # gtm_accounts.csv) is reported alongside n_accounts (the US solar
+    # subset) instead - the gap between them is the honest statement.
     book_out = []
     for _, b in coverage["book_df"].iterrows():
         book_out.append(dict(
-            rep=b["rep"], market_status=b["market_status"], n_accounts=ri(b["n_accounts"]),
+            rep=b["rep"], market_status=b["market_status"],
+            n_accounts_managed=ri(b["n_accounts_managed"]) if pd.notna(b["n_accounts_managed"]) else None,
+            n_accounts=ri(b["n_accounts"]),
             n_customer=ri(b["n_customer"]), n_prospect=ri(b["n_prospect"]), mwdc=r(b["mwdc"], 1),
             recoverable_usd_yr=r(b["recoverable_usd_yr"]), coi_3yr_usd=r(b["coi_3yr_usd"]),
-            book_concentration=r(b["book_concentration"], 3),
-            single_logo=bool(b["book_concentration"] and b["book_concentration"] > 0.8),
         ))
 
     payload = dict(
@@ -206,11 +212,11 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
                                      median_months=r(m["median_months"], 1), n=ri(m["n"]))
                                 for m in fits.get("mttr_diagnostic", [])],
         ),
+        # A9: CRM reconciliation removed entirely - not in the payload.
         coverage=dict(
             book=book_out, total_coi=r(coverage["total_coi"]), assigned=r(coverage["assigned"]),
             unassigned=r(coverage["unassigned"]), whitespace=r(coverage["whitespace"]),
             n_reps_named=coverage["n_reps_named"], matched_gtm_accounts=coverage["matched_gtm_accounts"],
-            crm_rows=coverage["crm_rows"],
         ),
     )
     return sanitize(payload)

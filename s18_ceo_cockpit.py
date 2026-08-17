@@ -405,6 +405,10 @@ def build_rep_coverage(account_df: pd.DataFrame, gtm: pd.DataFrame, n_matched_gt
 
     reps_all = gtm["account_owner"].dropna().unique().tolist()
     rep_market = {}
+    # A9: "accounts managed" is the rep's full book across all technologies,
+    # not just the US solar fleet - counted from gtm_accounts.csv directly,
+    # not from anything derived here.
+    n_managed = gtm["account_owner"].value_counts()
     for rep in reps_all:
         markets = set(gtm.loc[gtm["account_owner"] == rep, "market"].dropna())
         rep_market[rep] = "EU_ONLY" if markets and markets == {"EU"} else "NAM_OR_MIXED"
@@ -416,11 +420,11 @@ def build_rep_coverage(account_df: pd.DataFrame, gtm: pd.DataFrame, n_matched_gt
     for book, g in in_scope.groupby("book"):
         book_rows.append(dict(
             rep=book, market_status=rep_market.get(book, "NAM_OR_MIXED" if book not in ("WHITESPACE", "UNASSIGNED") else None),
+            n_accounts_managed=int(n_managed.get(book, 0)) if book not in ("WHITESPACE", "UNASSIGNED") else None,
             n_accounts=len(g), n_customer=int((g["relationship"] == "Customer").sum()),
             n_prospect=int((g["relationship"] == "Prospect").sum()),
             mwdc=round(g["mwdc"].sum(), 1), recoverable_usd_yr=round(g["recoverable_usd_yr"].sum(), 0),
             coi_3yr_usd=round(g["coi_3yr_usd"].sum(), 0),
-            book_concentration=round(g["coi_3yr_usd"].max() / g["coi_3yr_usd"].sum(), 3) if g["coi_3yr_usd"].sum() > 0 else None,
         ))
     book_df = pd.DataFrame(book_rows).sort_values("coi_3yr_usd", ascending=False)
 
@@ -429,29 +433,10 @@ def build_rep_coverage(account_df: pd.DataFrame, gtm: pd.DataFrame, n_matched_gt
     unassigned = in_scope.loc[(in_scope["relationship"] != "Whitespace") & in_scope["account_owner"].isna(), "coi_3yr_usd"].sum()
     whitespace = in_scope.loc[in_scope["relationship"] == "Whitespace", "coi_3yr_usd"].sum()
 
-    crm_rows = []
-    for _, row in in_scope[in_scope["relationship"].isin(["Customer", "Prospect"])].iterrows():
-        if pd.isna(row.get("gtm_solar_mw")) or not row.get("gtm_solar_mw"):
-            crm_rows.append(dict(account=row["owner_entity"], observed_mwdc=round(row["mwdc"], 1),
-                                  gtm_solar_mw=None, coverage_ratio=None, reading="no CRM figure - flagged"))
-            continue
-        ratio = row["mwdc"] / row["gtm_solar_mw"] if row["gtm_solar_mw"] else None
-        if ratio is None:
-            reading = "no CRM figure - flagged"
-        elif ratio > 1.5:
-            reading = "CRM materially undercounts the account"
-        elif ratio < 0.8:
-            reading = "we cannot see part of their fleet"
-        else:
-            reading = "broadly consistent"
-        crm_rows.append(dict(account=row["owner_entity"], observed_mwdc=round(row["mwdc"], 1),
-                              gtm_solar_mw=row["gtm_solar_mw"], coverage_ratio=round(ratio, 2) if ratio else None,
-                              reading=reading))
-
     return dict(
         book_df=book_df, total_coi=total_coi, assigned=assigned, unassigned=unassigned,
         whitespace=whitespace, matched_gtm_accounts=n_matched_gtm_accounts,
-        crm_rows=crm_rows, n_reps_named=len([r for r in reps_all if rep_market.get(r) != "EU_ONLY"]),
+        n_reps_named=len([r for r in reps_all if rep_market.get(r) != "EU_ONLY"]),
     )
 
 
