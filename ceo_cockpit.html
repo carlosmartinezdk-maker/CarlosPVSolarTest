@@ -71,6 +71,15 @@ button.btn.secondary { background:#fff; color:var(--accent); border:1px solid va
 .map-tooltip { position:absolute; pointer-events:none; background:#fff; border:1px solid var(--panel-border);
   border-radius:6px; padding:8px 10px; font-size:12px; box-shadow:0 2px 8px rgba(0,0,0,.12); z-index:10; max-width:240px; }
 .pitch-header { display:flex; justify-content:space-between; align-items:flex-start; }
+.defs-panel { margin-bottom:14px; }
+.defs-panel summary { cursor:pointer; font-size:13px; font-weight:bold; color:var(--accent); font-family:Arial,Helvetica,sans-serif; }
+.defs-body { margin-top:10px; padding-top:8px; border-top:1px solid var(--panel-border); }
+.defs-body h3 { font-size:13px; margin:12px 0 6px; }
+.defs-body h3:first-child { margin-top:0; }
+.defs-pre { font-family:'Courier New',monospace; font-size:11.5px; line-height:1.5; white-space:pre-wrap;
+  background:var(--card); padding:10px 12px; border-radius:6px; }
+.band-tile.active { outline:2px solid var(--accent); }
+table.grid th:hover { color:var(--ink); }
 .print-btn { display:inline-block; }
 @media print {
   #topbar-wrap, #header-controls, .no-print { display:none !important; }
@@ -136,16 +145,21 @@ const STATE_MESH_PATH = GEO_PATH(STATE_MESH);
 const ALBERS_PROJ = d3.geoAlbersUsa().scale(1300).translate([975/2, 610/2]);
 
 // ---------------------------------------------------------------- state ----
+// A10: FOCUS_NOW starts selected so Priority Accounts is never empty on load.
 const state = { view: 'market', currentAccount: null, sortCol: 'coi_3yr_usd', sortDir: -1,
-  filters: {relationship:'', region:'', focus:''} };
+  filters: {relationship:'', region:'', focus:'FOCUS_NOW'} };
 
 function el(tag, attrs, children) {
   const e = document.createElement(tag);
   for (const k in (attrs||{})) {
-    if (k === 'class') e.className = attrs[k];
-    else if (k === 'html') e.innerHTML = attrs[k];
-    else if (k.startsWith('on')) e.addEventListener(k.slice(2), attrs[k]);
-    else e.setAttribute(k, attrs[k]);
+    const v = attrs[k];
+    if (v === undefined) continue; // e.g. {selected: cond?true:undefined} - a present-but-undefined
+                                    // attribute would still setAttribute('selected','undefined'),
+                                    // which HTML treats as "selected" regardless of the string value
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
   }
   (children||[]).forEach(c => e.appendChild(c instanceof Node ? c : document.createTextNode(String(c))));
   return e;
@@ -393,64 +407,152 @@ function renderMarket(m) {
 }
 
 // =============================================================== SCREEN 2 ==
+const SIGNATURE_OFFERING = {SOILING:'Recurrent Inspection', BLOCK_OUTAGE:'Recurrent Inspection',
+  OUTAGE_FULL:'SCADA Monitoring', TRACKER:'Recurrent Inspection', BOS_INTERMITTENT:'Recurrent Inspection',
+  UNATTRIBUTED:'Recurrent Inspection'};
+const FOCUS_BANDS = ['FOCUS_NOW','EXPAND','NEW_LOGO','NURTURE','PARK'];
+const FOCUS_BAND_INFO = {
+  FOCUS_NOW: 'Large 3-yr loss (≥$10M), fast payback (<8 weeks), and confidence is not low.',
+  EXPAND: 'An existing customer missing the product their dominant fault pattern calls for.',
+  NEW_LOGO: 'A whitespace account (no relationship on record) with ≥$5M of 3-yr loss.',
+  NURTURE: 'Real loss, but slow payback (>26 weeks) or confidence is low - worth a conversation, not a sprint.',
+  PARK: 'Below the 250 MWdc floor or ownership is unresolved - not callable yet.',
+};
+
+// A8: reusable numeric-aware sortable table header, shared with the Evidence
+// screen's site table.
+function sortIndicator(active, dir) { return active ? (dir === 1 ? ' ▲' : ' ▼') : ''; }
+function sortRows(rows, col, numeric, dir) {
+  return rows.slice().sort((a, b) => {
+    let av = a[col], bv = b[col];
+    if (numeric) {
+      av = (av === null || av === undefined) ? -Infinity : Number(av);
+      bv = (bv === null || bv === undefined) ? -Infinity : Number(bv);
+      return dir * (av - bv);
+    }
+    av = (av ?? '').toString(); bv = (bv ?? '').toString();
+    return dir * av.localeCompare(bv);
+  });
+}
+
 function renderAccounts(m) {
   const panel = el('div', {class:'card-panel'});
-  panelHeader(panel, 'PRIORITY ACCOUNTS', `${DATA.accounts.length} accounts ≥250 MWdc`, 'Click a card to open its pitch page.');
+  panelHeader(panel, 'PRIORITY ACCOUNTS', `${fmt.count(DATA.accounts.length)} accounts ≥250 MWdc`, 'Click a row to open its pitch page.');
+
+  // A5: collapsible "how to read this" - collapsed by default, never pushes
+  // the table below the fold.
+  const details = el('details', {class:'defs-panel'});
+  details.appendChild(el('summary', {}, ['How to read this']));
+  const defBody = el('div', {class:'defs-body'});
+  defBody.appendChild(el('h3', {}, ['The five focus bands']));
+  FOCUS_BANDS.forEach(b => defBody.appendChild(el('div', {class:'small', style:'margin-bottom:4px'},
+    [el('span', {class:'badge '+b}, [b.replace('_',' ')]), ' ', FOCUS_BAND_INFO[b]])));
+  defBody.appendChild(el('h3', {}, ['How the three numbers are calculated']));
+  defBody.appendChild(el('pre', {class:'defs-pre'}, [
+`Their loss (3-yr cost of inaction)
+  = Σ over their sites of [ current annual gap, compounding at the site's
+    degradation rate where statistically significant, plus expected losses
+    from faults forecast but not yet occurred ], discounted at 8% over 3 years
+
+SSI revenue (annual fee)
+  = MWdc × the rate for the recommended offering
+    Solar SaaS $120/MWdc/yr · SCADA $48/MWdc/yr · Inspection $150/MWdc/visit
+    RVM is priced at 20% of repair spend and is not in the annual fee
+
+Payback (weeks)
+  = 52 × annual fee ÷ (annual recoverable value × 0.85)
+    The 0.85 is the assumed share of detected loss actually recovered —
+    a repair improves the asset, it does not make it new`]));
+  defBody.appendChild(el('h3', {}, ['What "confidence" means']));
+  defBody.appendChild(el('div', {class:'small'}, [
+    'High: ownership resolved, ≥60% of sites PI-benchmarked, and ≥4 years of median history. ',
+    'Medium: two of those three hold. Low: fewer than two hold - the underlying loss may be real, but the number is soft.']));
+  details.appendChild(defBody);
+  panel.appendChild(details);
+
+  // A10: focus bands as clickable filters, not a static statistic. FOCUS_NOW
+  // starts selected (see the global `state` init) so the table is never
+  // empty on load; click again clears it.
+  const bandStrip = el('div', {class:'cards', style:'margin-bottom:10px'});
+  FOCUS_BANDS.forEach(b => {
+    const n = DATA.accounts.filter(a => a.focus_band === b).length;
+    const active = state.filters.focus === b;
+    const tile = el('div', {class:'card band-tile'+(active?' active':''), style:'cursor:pointer',
+      onclick:()=>{ state.filters.focus = active ? '' : b; render(); }},
+      [el('div',{class:'v'},[fmt.count(n)]), el('div',{class:'l'},[b.replace('_',' ')])]);
+    bandStrip.appendChild(tile);
+  });
+  panel.appendChild(bandStrip);
 
   const bar = el('div', {class:'filterbar'});
-  const sortSel = el('select', {class:'sel', onchange:e=>{state.sortCol=e.target.value; renderAccounts(m.parentNode?m:m);}}, );
-  [['coi_3yr_usd','Their loss'],['fee_annual_usd','Our revenue'],['payback_weeks','Payback']].forEach(([v,l])=>
-    sortSel.appendChild(el('option',{value:v, selected:state.sortCol===v?true:undefined},[l])));
   const relSel = el('select', {class:'sel', onchange:e=>{state.filters.relationship=e.target.value; render();}});
   [['','All relationships'],['Customer','Customer'],['Prospect','Prospect'],['Whitespace','Whitespace']].forEach(([v,l])=>
-    relSel.appendChild(el('option',{value:v},[l])));
-  const focusSel = el('select', {class:'sel', onchange:e=>{state.filters.focus=e.target.value; render();}});
-  [['','All focus bands'],['FOCUS_NOW','Focus now'],['EXPAND','Expand'],['NEW_LOGO','New logo'],['NURTURE','Nurture'],['PARK','Park']].forEach(([v,l])=>
-    focusSel.appendChild(el('option',{value:v},[l])));
-  const exportBtn = el('button', {class:'btn', onclick:exportCallList}, ['Export call list']);
-  bar.appendChild(el('span',{class:'small'},['Sort by'])); bar.appendChild(sortSel);
-  bar.appendChild(relSel); bar.appendChild(focusSel); bar.appendChild(exportBtn);
+    relSel.appendChild(el('option',{value:v, selected:state.filters.relationship===v?true:undefined},[l])));
+  const exportBtn = el('button', {class:'btn', onclick:()=>exportAccountsCsv(list)}, ['Export CSV']);
+  bar.appendChild(el('span',{class:'small'},['Relationship'])); bar.appendChild(relSel); bar.appendChild(exportBtn);
   panel.appendChild(bar);
+
+  const COLS = [
+    ['owner_entity', 'Account', false],
+    ['relationship', 'Relationship', false],
+    ['n_sites', 'Sites', true],
+    ['mwdc', 'MWdc', true],
+    ['_top_issue', 'Top issue', false],
+    ['_offering', 'Recommended offering', false],
+    ['coi_3yr_usd', 'Their loss (3-yr)', true],
+    ['fee_annual_usd', 'SSI fee/yr', true],
+    ['payback_weeks', 'Payback', true],
+  ];
+  const NUMERIC_COL = Object.fromEntries(COLS.map(([col,,numeric]) => [col, numeric]));
 
   let list = DATA.accounts.slice();
   if (state.filters.relationship) list = list.filter(a=>a.relationship===state.filters.relationship);
   if (state.filters.focus) list = list.filter(a=>a.focus_band===state.filters.focus);
-  list.sort((a,b) => (b[state.sortCol]||0) - (a[state.sortCol]||0));
-  if (state.sortCol==='payback_weeks') list.sort((a,b)=> (a.payback_weeks??1e9) - (b.payback_weeks??1e9));
+  // synthetic display-only columns need to be real properties before a
+  // header click can sort on them
+  list = list.map(a => ({...a, _top_issue: SIG_LABEL[a.top_signature]||a.top_signature||'',
+    _offering: SIGNATURE_OFFERING[a.top_signature]||''}));
+  list = sortRows(list, state.sortCol, !!NUMERIC_COL[state.sortCol], state.sortDir);
 
-  panel.appendChild(el('div',{class:'small', style:'margin-bottom:10px'},[`${list.length} accounts shown.`]));
+  panel.appendChild(el('div',{class:'small', style:'margin:10px 0'},
+    [list.length ? `${fmt.count(list.length)} accounts shown.` :
+      `No accounts match this filter combination${state.filters.focus?` (${state.filters.focus.replace('_',' ')})`:''}${state.filters.relationship?` × ${state.filters.relationship}`:''}.`]));
   m.appendChild(panel);
+  if (!list.length) return;
 
-  const grid = el('div', {});
-  list.forEach(a => {
-    const card = el('div', {class:'acct-card', onclick:()=>{state.currentAccount=a.owner_entity; state.view='pitch'; render();}});
-    const title = el('div', {class:'title'}, [
-      a.owner_entity,
-      el('span',{class:'badge '+a.relationship},[a.relationship]),
-      el('span',{class:'badge '+a.focus_band},[a.focus_band.replace('_',' ')]),
-      a.ownership_unresolved ? el('span',{class:'badge unresolved'},['ownership unresolved']) : '',
-    ]);
-    card.appendChild(title);
-    card.appendChild(el('div',{class:'meta'},[`${a.n_sites} sites · ${fmt.mwdc(a.mwdc)} MWdc · ${(a.states||[]).slice(0,4).join(', ')}${(a.states||[]).length>4?'…':''}`]));
-    card.appendChild(el('div',{class:'interp'},[
-      a.top_signature ? `Dominant issue: ${SIG_LABEL[a.top_signature]||a.top_signature}.` : 'No dominant fault pattern identified.',
-      ' ', a.focus_reason]));
-    const three = el('div', {class:'three'});
-    [['Their annual loss', fmt.usd(a.recoverable_usd_yr)], ['Our annual fee', fmt.usd(a.fee_annual_usd)],
-     ['Payback', fmt.weeks(a.payback_weeks)]]
-      .forEach(([l,v]) => three.appendChild(el('div',{class:'num'},[el('div',{class:'v'},[v]),el('div',{class:'l'},[l])])));
-    card.appendChild(three);
-    grid.appendChild(card);
+  const tablePanel = el('div', {class:'card-panel'});
+  const table = el('table', {class:'grid'});
+  const headRow = el('tr', {});
+  COLS.forEach(([col, label, numeric]) => {
+    const active = state.sortCol === col;
+    headRow.appendChild(el('th', {class: numeric?'':'kcol', style:'cursor:pointer',
+      onclick:()=>{ state.sortDir = (state.sortCol===col) ? -state.sortDir : -1; state.sortCol = col; render(); }},
+      [label + sortIndicator(active, state.sortDir)]));
   });
-  m.appendChild(grid);
+  table.appendChild(headRow);
+  list.forEach(a => {
+    const tr = el('tr', {style:'cursor:pointer', onclick:()=>{state.currentAccount=a.owner_entity; state.view='pitch'; render();}});
+    tr.appendChild(el('td',{class:'kcol'},[a.owner_entity, a.ownership_unresolved?el('span',{class:'badge unresolved'},['unresolved']):null].filter(v=>v!==null)));
+    tr.appendChild(el('td',{},[el('span',{class:'badge '+a.relationship},[a.relationship])]));
+    tr.appendChild(el('td',{},[fmt.count(a.n_sites)]));
+    tr.appendChild(el('td',{},[fmt.mwdc(a.mwdc)]));
+    tr.appendChild(el('td',{},[a._top_issue||'—']));
+    tr.appendChild(el('td',{},[a._offering||'—']));
+    tr.appendChild(el('td',{},[fmt.usd(a.coi_3yr_usd)]));
+    tr.appendChild(el('td',{},[fmt.usd(a.fee_annual_usd)]));
+    tr.appendChild(el('td',{},[fmt.weeks(a.payback_weeks)]));
+    table.appendChild(tr);
+  });
+  tablePanel.appendChild(el('div',{class:'tblscroll'},[table]));
+  m.appendChild(tablePanel);
 }
 
-function exportCallList() {
+function exportAccountsCsv(list) {
   const cols = ['owner_entity','relationship','focus_band','n_sites','mwdc','coi_3yr_usd','recoverable_usd_yr',
     'fee_annual_usd','payback_weeks','confidence','top_signature','account_owner','ownership_unresolved'];
-  const rows = [cols.join(',')].concat(DATA.accounts.map(a => cols.map(c => JSON.stringify(a[c]===undefined?'':a[c])).join(',')));
+  const rows = [cols.join(',')].concat(list.map(a => cols.map(c => JSON.stringify(a[c]===undefined?'':a[c])).join(',')));
   const blob = new Blob([rows.join('\n')], {type:'text/csv'});
-  const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'ceo_cockpit_call_list.csv'; link.click();
+  const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'ceo_cockpit_priority_accounts.csv'; link.click();
 }
 
 // =============================================================== SCREEN 3 ==

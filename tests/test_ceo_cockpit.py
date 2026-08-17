@@ -279,6 +279,51 @@ def test_66_site_map():
           f"relationships: {sorted(rels)}")
 
 
+def test_71_band_filter():
+    """A10: FOCUS_NOW is selected by default (Priority Accounts is never
+    empty on load); clicking the active tile again clears the filter and
+    the table grows back to all accounts. Also guards against the el()
+    helper regression where {selected: cond?true:undefined} marked every
+    <option> selected regardless of cond, because setAttribute('selected',
+    'undefined') is still a present (thus "selected") attribute."""
+    path = os.path.join(REPO_ROOT, "ceo_cockpit.html")
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("test 71 (band filter): skipped, playwright not installed")
+        return
+    import glob
+    candidates = glob.glob("/opt/pw-browsers/chromium*/chrome-linux/chrome")
+    if not candidates:
+        print("test 71 (band filter): skipped, no chromium found")
+        return
+    with sync_playwright() as p:
+        browser = p.chromium.launch(executable_path=candidates[0], headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 1000})
+        page.goto("file://" + path, timeout=60000)
+        page.wait_for_timeout(400)
+        page.click("button[data-view='accounts']")
+        page.wait_for_timeout(300)
+
+        rel_value = page.eval_on_selector(".filterbar select", "el => el.value")
+        assert rel_value == "", f"relationship select should default to '' (All relationships), got {rel_value!r}"
+
+        default_active = page.eval_on_selector(".band-tile.active .l", "el => el.innerText")
+        assert default_active == "FOCUS NOW", f"expected FOCUS NOW selected on load, got {default_active!r}"
+        n_focus_now = int(page.eval_on_selector("table.grid", "el => el.rows.length - 1"))
+        assert n_focus_now > 0, "FOCUS_NOW table is empty on load"
+
+        page.eval_on_selector(".band-tile.active", "el => el.click()")
+        page.wait_for_timeout(200)
+        active_after = page.query_selector(".band-tile.active")
+        assert active_after is None, "clicking the active tile again should clear the filter"
+        n_all = int(page.eval_on_selector("table.grid", "el => el.rows.length - 1"))
+        assert n_all > n_focus_now, f"expected more rows after clearing the filter ({n_focus_now} -> {n_all})"
+        browser.close()
+    print(f"test 71 (band filter): passed - FOCUS NOW default ({n_focus_now} accounts), "
+          f"click-again clears to {n_all} accounts, relationship select defaults correctly")
+
+
 if __name__ == "__main__":
     test_50_pricing_units()
     test_51_no_bare_roi_multiple()
@@ -295,3 +340,4 @@ if __name__ == "__main__":
     test_63_offline_and_payload_budget()
     test_66_site_map()
     test_68_pi_quarantine()
+    test_71_band_filter()
