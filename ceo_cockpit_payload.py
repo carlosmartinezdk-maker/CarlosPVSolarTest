@@ -60,6 +60,26 @@ def build_map_sites(sites, account):
     return out
 
 
+def build_all_accounts(account):
+    """Pass 3 §1.2: the "All accounts" scope needs every one of the 2,139
+    owner_entities, not just the 112 in-scope ones - a lighter-weight
+    sibling to accounts_out (no focus_band/focus_reason, only computed for
+    in-scope rows) carrying the fields the Geography table/map need."""
+    out = []
+    for _, a in account.iterrows():
+        out.append(dict(
+            owner_entity=a["owner_entity"], relationship=a["relationship"],
+            above_floor=bool(a["above_floor"]), n_sites=ri(a["n_sites"]), mwdc=r(a["mwdc"], 1),
+            states=a["states"], coi_3yr_usd=r(a["coi_3yr_usd"]),
+            software_revenue_usd_yr=r(a["software_revenue_usd_yr"]),
+            inspection_revenue_usd_yr=r(a["inspection_revenue_usd_yr"]),
+            total_ssi_potential_usd_yr=r(a["total_ssi_potential_usd_yr"]),
+            payback_weeks=r(a["payback_weeks"], 1), confidence=a["confidence"],
+            ownership_unresolved=bool(a["ownership_unresolved"]), top_signature=a["top_signature_mode"],
+        ))
+    return out
+
+
 def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all_pct, total_coi_all,
                    site_detail=None):
     in_scope = in_scope.sort_values("coi_3yr_usd", ascending=False)
@@ -221,6 +241,9 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
             # included too so the map reads as the whole fleet, not just the
             # engaged slice. ~6,200 rows x 7 small fields, well inside budget.
             map_sites=build_map_sites(sites, account),
+            # Pass 3 §1.2: the Geography table's "All accounts" scope needs
+            # every owner_entity, not just the 112 in-scope ones.
+            all_accounts=build_all_accounts(account),
         ),
         accounts=accounts_out,
         plays=plays_out,

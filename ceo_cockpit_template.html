@@ -153,6 +153,7 @@ const SIG_LABEL = {OUTAGE_FULL:"Outage",BLOCK_OUTAGE:"Block outage",SOILING:"Soi
 const CSS_ROOT = getComputedStyle(document.documentElement);
 const relColor = k => CSS_ROOT.getPropertyValue('--rel-' + k.toLowerCase()).trim();
 const REL_COLOR = {Customer:relColor('Customer'), Prospect:relColor('Prospect'), Whitespace:relColor('Whitespace'), below_floor:"#c9c2b3"};
+const REL_KEYS = ['Customer', 'Prospect', 'Whitespace'];
 
 const US_TOPO = JSON.parse(document.getElementById('us-states-topo').textContent);
 const STATE_FEATURES = topojson.feature(US_TOPO, US_TOPO.objects.states).features;
@@ -259,6 +260,32 @@ function nearestSite(index, points, x, y) {
   }
   return best;
 }
+// Pass 3 §1: Geography subsection state - separate from the rest of
+// `state` only in that these four are read/written from several render
+// functions (renderMarket, renderSiteMap, the geo table), so they're
+// lazily initialised once here rather than duplicated at each call site.
+function ensureGeoState() {
+  if (!state.mapFilters) state.mapFilters = {Customer:true, Prospect:true, Whitespace:true};
+  if (!state.geoView) state.geoView = 'map';
+  if (!state.geoScope) state.geoScope = 'floor';
+  if (!state.geoSortCol) { state.geoSortCol = 'total_ssi_potential_usd_yr'; state.geoSortDir = -1; }
+}
+
+// Pass 3 §1.3: one relationship toggle, shared between the map and table
+// presentations - `items` is whatever's currently in view (sites for the
+// map, accounts for the table) so the counts always match what's visible.
+function renderRelationshipToggle(items) {
+  const legend = el('div', {class:'legend', style:'margin-bottom:12px'});
+  REL_KEYS.forEach(k => {
+    const n = items.filter(x => x.relationship === k).length;
+    const on = state.mapFilters[k];
+    legend.appendChild(el('span', {style:`cursor:pointer; opacity:${on?1:0.4}`,
+      onclick:()=>{ state.mapFilters[k] = !state.mapFilters[k]; render(); }},
+      [el('span',{class:'sw',style:`background:${REL_COLOR[k]}`}), `${k} (${fmt.count(n)})`]));
+  });
+  return legend;
+}
+
 function renderSiteMap(sites) {
   const wrap = el('div', {style:'position:relative'});
   const canvas = document.createElement('canvas');
@@ -267,12 +294,11 @@ function renderSiteMap(sites) {
   const tooltip = el('div', {class:'map-tooltip', style:'display:none'});
   wrap.appendChild(tooltip);
 
-  const REL_KEYS = ['Customer', 'Prospect', 'Whitespace'];
-  if (!state.mapFilters) state.mapFilters = {Customer:true, Prospect:true, Whitespace:true};
+  ensureGeoState();
   // B6: empty state - every class toggled off shouldn't just read as a
   // blank map with no explanation.
   const emptyNote = el('div', {class:'small', style:'position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); display:none'},
-    ['All relationship classes are hidden - click a legend entry below to show sites.']);
+    ['All relationship classes are hidden - click a legend entry above to show sites.']);
   wrap.appendChild(emptyNote);
 
   const maxMwdc = Math.max(1, ...sites.map(s => s.mwdc || 0));
@@ -347,15 +373,8 @@ function renderSiteMap(sites) {
     state.currentAccount = s.owner; state.view = 'pitch'; render();
   });
 
-  const legend = el('div', {class:'legend'});
-  REL_KEYS.forEach(k => {
-    const n = sites.filter(s => s.relationship === k).length;
-    const on = state.mapFilters[k];
-    const item = el('span', {style:`cursor:pointer; opacity:${on?1:0.4}`, onclick:()=>{ state.mapFilters[k]=!state.mapFilters[k]; draw(); item.style.opacity = state.mapFilters[k]?1:0.4; }},
-      [el('span',{class:'sw',style:`background:${REL_COLOR[k]}`}), `${k} (${fmt.count(n)})`]);
-    legend.appendChild(item);
-  });
-  wrap.appendChild(legend);
+  // Pass 3 §1.3: the relationship toggle now lives once, shared between
+  // map and table, in the Geography subsection - not duplicated here.
   return wrap;
 }
 
@@ -372,10 +391,14 @@ function render() {
   else if (state.view === 'pitch') renderPitch(m);
   else if (state.view === 'evidence') renderEvidence(m);
   else if (state.view === 'coverage') renderCoverage(m);
-  // B6: deep links - the pitch page is the artefact people share, so its
-  // URL always reflects the selected account. replaceState (not pushState)
-  // so browsing accounts doesn't spam the back-button history.
-  const hash = (state.view === 'pitch' && state.currentAccount) ? '#account=' + encodeURIComponent(state.currentAccount) : '';
+  // B6 / Pass 3 §1.1: deep links - the pitch page is the artefact people
+  // share, so its URL always reflects the selected account; the
+  // Addressable Market screen's URL reflects the active Map|Table
+  // presentation, so a link opens on the view the sender was looking at.
+  // replaceState (not pushState) so browsing doesn't spam back-button history.
+  let hash = '';
+  if (state.view === 'pitch' && state.currentAccount) hash = '#account=' + encodeURIComponent(state.currentAccount);
+  else if (state.view === 'market') hash = '#geo=' + state.geoView;
   if (location.hash !== hash) history.replaceState(null, '', location.pathname + location.search + hash);
 }
 
@@ -421,13 +444,18 @@ function renderMarket(m) {
   const strip = el('div', {class:'cards'});
   [
     ['3-yr cost of inaction (in scope)', fmt.usd(w.in_scope_coi)],
-    ['SSI annual fee potential', fmt.usd(DATA.meta.in_scope_fee_potential_usd)],
+    // Pass 3 §2.2: these answer two different questions ("what would we
+    // charge for the one product we lead with" vs "what is this fleet
+    // worth at full attach") and must never be confused for one another -
+    // shown side by side, separately labelled, never summed.
+    ['Lead-offering fee/yr', fmt.usd(DATA.meta.in_scope_fee_potential_usd)],
+    ['Total potential at full attach/yr', fmt.usd(DATA.meta.in_scope_total_ssi_potential_usd)],
     ['Accounts in scope', fmt.count(DATA.meta.in_scope_accounts)],
     ['Whitespace share of ALL CoI (est.)', fmt.pct(DATA.meta.whitespace_share_all_estimate)],
   ].forEach(([l,v]) => strip.appendChild(el('div',{class:'card'},[el('div',{class:'v'},[String(v)]), el('div',{class:'l'},[l])])));
   headline.appendChild(strip);
   headline.appendChild(el('div', {class:'small', style:'margin-top:6px'},
-    [`Whitespace share is an estimate bounded by GTM-account matching quality - only ${fmt.count(DATA.meta.matched_gtm_accounts)} of ${fmt.count(DATA.meta.total_accounts_all)} owners matched to a GTM record. Read it as an upper bound, not a settled figure - it will fall as matching improves.`]));
+    [`Whitespace share is an estimate bounded by GTM-account matching quality - only ${fmt.count(DATA.meta.matched_gtm_accounts)} of ${fmt.count(DATA.meta.total_accounts_all)} owners matched to a GTM record. Read it as an upper bound, not a settled figure - it will fall as matching improves. "Total potential at full attach" assumes every offering at every site, software (SaaS+SCADA) plus inspection at its reliability-optimal frequency - see Coverage & Books for the per-rep breakdown.`]));
   m.appendChild(headline);
 
   const waterfallPanel = el('div', {class:'card-panel'});
@@ -459,11 +487,106 @@ function renderMarket(m) {
   waterfallPanel.appendChild(s);
   m.appendChild(waterfallPanel);
 
-  const mapPanel = el('div', {class:'card-panel'});
-  panelHeader(mapPanel, 'GEOGRAPHY', `Every US solar site - ${fmt.count(DATA.screen1.map_sites.length)} sites`,
-    'Colour = relationship, size = MWdc (square-root scaled). Out-of-scope sites (below the 250 MWdc floor) render at lower opacity for context, not as opportunity.');
-  mapPanel.appendChild(renderSiteMap(DATA.screen1.map_sites));
-  m.appendChild(mapPanel);
+  // Pass 3 Part 1: Geography subsection - three independent controls,
+  // coarse to fine. Control hierarchy matters: scope filters the universe,
+  // relationship filters within it, map/table only changes presentation -
+  // nesting them in any other order "produces a control panel nobody
+  // trusts" (spec's own words).
+  ensureGeoState();
+  const geoPanel = el('div', {class:'card-panel'});
+  panelHeader(geoPanel, 'GEOGRAPHY', 'Every US solar site and account - map shows the shape, table answers "show me the list"');
+
+  // §1.1 Map | Table
+  const viewSeg = el('div', {class:'seg', style:'margin-bottom:12px; width:fit-content'});
+  [['map','Map'],['table','Table']].forEach(([v,l]) =>
+    viewSeg.appendChild(el('button', {class: state.geoView===v?'active':'', onclick:()=>{state.geoView=v; render();}}, [l])));
+  geoPanel.appendChild(viewSeg);
+
+  // §1.2 Scope - labelled as granularity, not a filter
+  const scopeWrap = el('div', {class:'cards', style:'margin-bottom:10px'});
+  const scopeOpts = [
+    ['all', 'All accounts', `${fmt.count(DATA.meta.total_accounts_all)} entities, ${fmt.usd(DATA.meta.total_coi_all_usd)} cost of inaction. Most are single-site project vehicles.`],
+    ['floor', '≥ 250 MWdc', `${fmt.count(DATA.meta.in_scope_accounts)} accounts, ${fmt.usd(DATA.meta.in_scope_coi_usd)}. ${fmt.pct(DATA.meta.in_scope_accounts/DATA.meta.total_accounts_all)} of the entities hold ${fmt.pct(DATA.meta.in_scope_coi_usd/DATA.meta.total_coi_all_usd)} of the value.`],
+  ];
+  scopeOpts.forEach(([v,label,copy]) => {
+    const active = state.geoScope === v;
+    scopeWrap.appendChild(el('div', {class:'card'+(active?' band-tile active':''), style:'cursor:pointer; flex:1; min-width:260px',
+      onclick:()=>{state.geoScope=v; render();}},
+      [el('div',{class:'v', style:'font-size:15px'},[label]), el('div',{class:'l', style:'white-space:normal; margin-top:4px'},[copy])]));
+  });
+  geoPanel.appendChild(scopeWrap);
+
+  // §1.3 Relationship - beneath scope, above the map/table itself
+  const geoScopedSites = state.geoScope === 'floor' ? DATA.screen1.map_sites.filter(s=>s.in_scope) : DATA.screen1.map_sites;
+  const geoScopedAccounts = state.geoScope === 'floor' ? DATA.accounts : DATA.screen1.all_accounts;
+  geoPanel.appendChild(renderRelationshipToggle(state.geoView === 'map' ? geoScopedSites : geoScopedAccounts));
+
+  if (state.geoView === 'map') {
+    geoPanel.appendChild(el('div', {class:'small', style:'margin-bottom:8px'},
+      ['Colour = relationship, size = MWdc (square-root scaled).' +
+       (state.geoScope==='all' ? ' Out-of-scope sites (below the 250 MWdc floor) render at lower opacity for context, not as opportunity.' : '')]));
+    geoPanel.appendChild(renderSiteMap(geoScopedSites));
+  } else {
+    geoPanel.appendChild(renderGeoAccountTable(geoScopedAccounts));
+  }
+  m.appendChild(geoPanel);
+}
+
+// Pass 3 §1.1: account-level table presentation of the Geography subsection.
+const GEO_COLS = [
+  ['owner_entity', 'Account', false], ['relationship', 'Relationship', false],
+  ['n_sites', 'Sites', true], ['mwdc', 'MWdc', true], ['_states', 'States', false],
+  ['_top_issue', 'Top issue', false], ['_offering', 'Recommended offering', false],
+  ['coi_3yr_usd', 'Their loss (3-yr)', true],
+  ['software_revenue_usd_yr', 'Software revenue/yr', true],
+  ['inspection_revenue_usd_yr', 'Inspection revenue/yr', true],
+  ['total_ssi_potential_usd_yr', 'Total SSI potential/yr', true],
+  ['payback_weeks', 'Payback', true], ['confidence', 'Confidence', false],
+];
+function renderGeoAccountTable(accounts) {
+  const wrap = el('div', {});
+  let list = accounts.filter(a => state.mapFilters[a.relationship]);
+  list = list.map(a => ({...a, _top_issue: SIG_LABEL[a.top_signature]||a.top_signature||'',
+    _offering: SIGNATURE_OFFERING[a.top_signature]||'', _states: (a.states||[]).join(', ')}));
+  const numericCol = Object.fromEntries(GEO_COLS.map(([c,,n])=>[c,n]));
+  list = sortRows(list, state.geoSortCol, !!numericCol[state.geoSortCol], state.geoSortDir);
+
+  wrap.appendChild(el('div', {class:'small', style:'margin-bottom:8px'},
+    [list.length ? `${fmt.count(list.length)} accounts shown.` : 'No accounts match this filter combination.']));
+  if (!list.length) return wrap;
+
+  wrap.appendChild(exportBtn(GEO_COLS.map(c=>c[0]), list, 'ceo_cockpit_geography.csv'));
+  const table = el('table', {class:'grid'});
+  const head = el('tr', {});
+  GEO_COLS.forEach(([col,label,numeric]) => {
+    const active = state.geoSortCol === col;
+    head.appendChild(el('th', {class:numeric?'':'kcol', style:'cursor:pointer',
+      onclick:()=>{ state.geoSortDir = (state.geoSortCol===col) ? -state.geoSortDir : -1; state.geoSortCol = col; render(); }},
+      [label + sortIndicator(active, state.geoSortDir)]));
+  });
+  table.appendChild(head);
+  list.forEach(a => {
+    const linkable = !!accountByName(a.owner_entity);
+    const tr = el('tr', {style: linkable?'cursor:pointer':'', onclick: linkable?()=>{state.currentAccount=a.owner_entity; state.view='pitch'; render();}:undefined});
+    const statesFull = (a.states||[]).join(', ');
+    const statesShown = (a.states||[]).slice(0,4).join(', ') + ((a.states||[]).length>4?'…':'');
+    tr.appendChild(el('td',{class:'kcol'},[a.owner_entity, a.ownership_unresolved?el('span',{class:'badge unresolved'},['unresolved']):null].filter(v=>v!==null)));
+    tr.appendChild(el('td',{},[el('span',{class:'badge '+a.relationship},[a.relationship])]));
+    tr.appendChild(el('td',{},[fmt.count(a.n_sites)]));
+    tr.appendChild(el('td',{},[fmt.mwdc(a.mwdc)]));
+    tr.appendChild(el('td',{title:statesFull},[statesShown||'—']));
+    tr.appendChild(el('td',{},[a._top_issue||'—']));
+    tr.appendChild(el('td',{},[a._offering||'—']));
+    tr.appendChild(el('td',{},[fmt.usd(a.coi_3yr_usd)]));
+    tr.appendChild(el('td',{},[fmt.usd(a.software_revenue_usd_yr)]));
+    tr.appendChild(el('td',{},[fmt.usd(a.inspection_revenue_usd_yr)]));
+    tr.appendChild(el('td',{},[fmt.usd(a.total_ssi_potential_usd_yr)]));
+    tr.appendChild(el('td',{},[fmt.weeks(a.payback_weeks)]));
+    tr.appendChild(el('td',{},[a.confidence||'—']));
+    table.appendChild(tr);
+  });
+  wrap.appendChild(el('div',{class:'tblscroll'},[table]));
+  return wrap;
 }
 
 // =============================================================== SCREEN 2 ==
@@ -1008,11 +1131,14 @@ function renderCoverage(m) {
   m.appendChild(focusPanel);
 }
 
-// B6: deep links - a URL of the form #account=<owner> opens straight to
-// that account's pitch page (so a link can be pasted into an email).
+// B6 / Pass 3 §1.1: deep links - #account=<owner> opens straight to that
+// account's pitch page; #geo=map|table opens Addressable Market on that
+// presentation (so a link opens on the view the sender was looking at).
 (function applyInitialHash() {
-  const m = /^#account=(.+)$/.exec(location.hash);
-  if (m) { state.currentAccount = decodeURIComponent(m[1]); state.view = 'pitch'; }
+  const acctMatch = /^#account=(.+)$/.exec(location.hash);
+  const geoMatch = /^#geo=(map|table)$/.exec(location.hash);
+  if (acctMatch) { state.currentAccount = decodeURIComponent(acctMatch[1]); state.view = 'pitch'; }
+  else if (geoMatch) { state.view = 'market'; state.geoView = geoMatch[1]; }
 })();
 render();
 </script>
