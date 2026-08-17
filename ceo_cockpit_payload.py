@@ -110,7 +110,9 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
                  "months", "pi", "pri", "capacity_suspect",
                  "rel_n_blocks", "rel_age_years", "rel_insp_optimal_months", "rel_insp_optimal_cost_usd",
                  "rel_insp_saving_usd", "rel_insp_scada_value_usd", "rel_warranty_remaining_years",
-                 "rel_warranty_claim_value_usd"]
+                 "rel_warranty_claim_value_usd",
+                 "rel_p24_BLOCK_OUTAGE", "rel_p24_BOS_INTERMITTENT", "rel_p24_OUTAGE_FULL",
+                 "rel_p24_SOILING", "rel_p24_TRACKER", "rel_p24_UNATTRIBUTED"]
     # B1: a capacity_suspect site's PI is physically impossible (bad MWdc
     # denominator, not real performance) - null the PI-derived fields so no
     # chart/table can render them, but keep the site row (mwdc, CoI, etc
@@ -197,6 +199,12 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
                               n_failures=s["n_failures"], n_suspensions=s["n_suspensions"])
                         for s in fits["signatures"]],
             hazard_by_age=hazard_out,
+            # A6b "what breaks next": mean time to repair per fault type,
+            # fleet-wide pooled (same caveat as the Weibull fits - not
+            # decomposable by account).
+            mttr_by_signature=[dict(signature=m["signature"], mttr_months=r(m["mttr_months"], 1),
+                                     median_months=r(m["median_months"], 1), n=ri(m["n"]))
+                                for m in fits.get("mttr_diagnostic", [])],
         ),
         coverage=dict(
             book=book_out, total_coi=r(coverage["total_coi"]), assigned=r(coverage["assigned"]),

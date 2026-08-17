@@ -147,7 +147,8 @@ const ALBERS_PROJ = d3.geoAlbersUsa().scale(1300).translate([975/2, 610/2]);
 // ---------------------------------------------------------------- state ----
 // A10: FOCUS_NOW starts selected so Priority Accounts is never empty on load.
 const state = { view: 'market', currentAccount: null, sortCol: 'coi_3yr_usd', sortDir: -1,
-  filters: {relationship:'', region:'', focus:'FOCUS_NOW'} };
+  filters: {relationship:'', region:'', focus:'FOCUS_NOW'},
+  showTechnicalDetail: false }; // A6c: persists across account navigation, not reset per render
 
 function el(tag, attrs, children) {
   const e = document.createElement(tag);
@@ -410,6 +411,16 @@ function renderMarket(m) {
 const SIGNATURE_OFFERING = {SOILING:'Recurrent Inspection', BLOCK_OUTAGE:'Recurrent Inspection',
   OUTAGE_FULL:'SCADA Monitoring', TRACKER:'Recurrent Inspection', BOS_INTERMITTENT:'Recurrent Inspection',
   UNATTRIBUTED:'Recurrent Inspection'};
+// A6b "estimated loss if it happens" - mirrors pricing.yaml's repair_costs.by_signature
+// (ESTIMATE pending vendor quotes, see pricing.yaml's repair_cost_source note).
+const REPAIR_COST = {
+  OUTAGE_FULL: {usd_per_mwdc_affected: 10000, mobilisation_usd: 8000},
+  BLOCK_OUTAGE: {usd_per_mwdc_affected: 10000, mobilisation_usd: 5000},
+  TRACKER: {usd_per_mwdc_affected: 5000, mobilisation_usd: 5000},
+  BOS_INTERMITTENT: {usd_per_mwdc_affected: 4000, mobilisation_usd: 4000},
+  SOILING: {usd_per_mwdc_affected: 1200, mobilisation_usd: 2000},
+  UNATTRIBUTED: {usd_per_mwdc_affected: 6000, mobilisation_usd: 6000},
+};
 const FOCUS_BANDS = ['FOCUS_NOW','EXPAND','NEW_LOGO','NURTURE','PARK'];
 const FOCUS_BAND_INFO = {
   FOCUS_NOW: 'Large 3-yr loss (≥$10M), fast payback (<8 weeks), and confidence is not low.',
@@ -627,39 +638,125 @@ function renderPitch(m) {
   grid2.appendChild(el('div',{class:'small', style:'margin-top:6px'},['Illustrative, not a contractual projection - "engage" assumes 85% of the physical gap recovers per Part 8\'s recovery-fraction convention, residual 15% continues as ongoing loss.']));
   m.appendChild(grid2);
 
+  // A6c: plain language leads, PI/PRI/beta/significance/last-scored-month
+  // behind a "show technical detail" toggle - a CFO doesn't read PI, their
+  // asset manager does, and that person will be in the room.
   const worst = sites.filter(s=>!s.capacity_suspect).sort((x,y)=>(y.cost_of_inaction_usd||0)-(x.cost_of_inaction_usd||0)).slice(0,5);
   const worstPanel = el('div', {class:'card-panel'});
   const nSuspect = sites.filter(s=>s.capacity_suspect).length;
-  panelHeader(worstPanel, 'THEIR WORST FIVE SITES', 'Because the CFO will ask',
-    nSuspect ? `${nSuspect} site(s) excluded - capacity under review, see the Evidence screen.` : undefined);
+  const worstHeader = el('div', {style:'display:flex; justify-content:space-between; align-items:flex-start'});
+  const worstHeaderText = el('div', {});
+  worstHeaderText.appendChild(el('div', {class:'eyebrow'}, ['UNDERPERFORMING ASSETS']));
+  worstHeaderText.appendChild(el('h2', {style:'margin:2px 0 4px'}, ['Their five worst sites, ranked by 3-yr cost of inaction']));
+  if (nSuspect) worstHeaderText.appendChild(el('div', {class:'small'}, [`${nSuspect} site(s) excluded - capacity under review, see the Evidence screen.`]));
+  worstHeader.appendChild(worstHeaderText);
+  worstHeader.appendChild(el('label', {class:'small', style:'white-space:nowrap; cursor:pointer'}, [
+    el('input', {type:'checkbox', checked: state.showTechnicalDetail?true:undefined, class:'no-print',
+      onchange:e=>{state.showTechnicalDetail=e.target.checked; render();}}),
+    ' Show technical detail']));
+  worstPanel.appendChild(worstHeader);
   const wt = el('table', {class:'grid'});
-  wt.appendChild(el('tr',{},[el('th',{class:'kcol'},['Site']),el('th',{},['State']),el('th',{},['MWdc']),
-    el('th',{},['Issue']),el('th',{},['3-yr CoI']),el('th',{},['Tier'])]));
-  worst.forEach(s => wt.appendChild(el('tr',{},[
-    el('td',{class:'kcol'},[s.site]), el('td',{},[s.state||'—']), el('td',{},[fmt.mwdc(s.mwdc)]),
-    el('td',{},[SIG_LABEL[s.top_signature]||s.top_signature||'—']), el('td',{},[fmt.usd(s.cost_of_inaction_usd)]),
-    el('td',{},[s.conviction_tier||'—']),
-  ])));
-  worstPanel.appendChild(wt);
+  const wtHead = [el('th',{class:'kcol'},['Site']),el('th',{},['MWdc']),el('th',{},["What's wrong"]),
+    el('th',{},['Months affected']),el('th',{},['Annual loss']),el('th',{},['Confidence'])];
+  if (state.showTechnicalDetail) wtHead.push(el('th',{},['PI']),el('th',{},['PRI']),el('th',{},['β (per yr)']),
+    el('th',{},['β significant?']),el('th',{},['Last scored month']));
+  wt.appendChild(el('tr',{},wtHead));
+  worst.forEach(s => {
+    const row = [el('td',{class:'kcol'},[s.site]), el('td',{},[fmt.mwdc(s.mwdc)]),
+      el('td',{},[SIG_LABEL[s.top_signature]||s.top_signature||'—']), el('td',{},[s.fault_months!=null?fmt.count(s.fault_months):'—']),
+      el('td',{},[fmt.usd(s.recoverable_usd_yr)]), el('td',{},[s.conviction_tier||'—'])];
+    if (state.showTechnicalDetail) row.push(
+      el('td',{},[fmt.pi(s.latest_pi)]), el('td',{},[fmt.pri(s.latest_pri)]), el('td',{},[fmt.beta(s.beta)]),
+      el('td',{},[s.beta_t!=null?(Math.abs(s.beta_t)>=2?'Yes':'No'):'—']), el('td',{},[s.latest_scored_month||'—']));
+    wt.appendChild(el('tr',{},row));
+  });
+  worstPanel.appendChild(el('div',{class:'tblscroll'},[wt]));
   m.appendChild(worstPanel);
 
-  const warrantyN = sites.filter(s => s.rel_warranty_remaining_years).length;
-  if (warrantyN > 0) {
-    const wp = el('div', {class:'card-panel'});
-    panelHeader(wp, 'WARRANTY', `${warrantyN} site(s) still within the reliability-relevant warranty term`,
-      `Based on ${warrantyN} of ${sites.length} sites with a warranty-remaining figure on record. A third party paying for the repair changes the conversation entirely.`);
-    m.appendChild(wp);
-  }
+  // A6a: site-level warranty table, sorted by claim value descending -
+  // never a blank cell, unresolved sites render as em-dash with a footnote
+  // rather than being silently dropped.
+  const warrantyN = sites.filter(s => s.rel_warranty_remaining_years != null).length;
+  const wp = el('div', {class:'card-panel'});
+  panelHeader(wp, 'WARRANTY', 'Site-level cover, sorted by claim value',
+    `Based on ${warrantyN} of ${sites.length} sites with a warranty term resolved - the rest render as "—" below, not zero. A third party paying for the repair changes the conversation entirely.`);
+  const warrantyRows = sites.slice().sort((x,y) => (y.rel_warranty_claim_value_usd??-1) - (x.rel_warranty_claim_value_usd??-1));
+  const wat = el('table', {class:'grid'});
+  wat.appendChild(el('tr',{},[el('th',{class:'kcol'},['Site']),el('th',{},['MWdc']),el('th',{},['COD']),
+    el('th',{},['Cover remaining (yrs)']),el('th',{},['Expected failure probability (24mo)']),
+    el('th',{},['Claim value']),el('th',{},['Status'])]));
+  warrantyRows.forEach(s => {
+    const rem = s.rel_warranty_remaining_years;
+    const status = rem == null ? 'Not resolved' : rem <= 0 ? 'Expired' : rem <= 1 ? 'Expiring within 1yr' : 'Active';
+    const p24 = REPAIR_COST[s.top_signature] ? s['rel_p24_' + s.top_signature] : null;
+    wat.appendChild(el('tr',{},[
+      el('td',{class:'kcol'},[s.site]), el('td',{},[fmt.mwdc(s.mwdc)]), el('td',{},[s.cod||'—']),
+      el('td',{},[fmt.raw(rem,1)]), el('td',{},[p24!=null?fmt.pct(p24):'—']),
+      el('td',{},[fmt.usd(s.rel_warranty_claim_value_usd)]), el('td',{},[status]),
+    ]));
+  });
+  wp.appendChild(el('div',{class:'tblscroll'},[wat]));
+  m.appendChild(wp);
 
+  // A6b: "what breaks next" - a horizontal bar chart of expected failures
+  // over 24 months by fault type, plus a supporting table, from each
+  // site's own rel_p24_<signature> (the pooled Weibull fit applied at that
+  // site's age).
   const forecastPanel = el('div', {class:'card-panel'});
   const insp = sites.filter(s=>s.rel_insp_optimal_months).map(s=>s.rel_insp_optimal_months);
+  const SIGS = Object.keys(SIGNATURE_OFFERING);
+  const sigStats = SIGS.map(sig => {
+    const col = 'rel_p24_' + sig;
+    const withData = sites.filter(s => s[col] != null);
+    const expected = withData.reduce((acc,s) => acc + s[col], 0);
+    const atRisk = withData.filter(s => s[col] > 0.05);
+    const mttr = (DATA.reliability.mttr_by_signature.find(m => m.signature === sig) || {}).mttr_months;
+    const rc = REPAIR_COST[sig];
+    const avgMwdc = atRisk.length ? atRisk.reduce((a,s)=>a+(s.mwdc||0),0)/atRisk.length : 0;
+    const estLoss = rc ? rc.mobilisation_usd + rc.usd_per_mwdc_affected * avgMwdc : null;
+    return {sig, nData: withData.length, expected, nAtRisk: atRisk.length, mttr, estLoss};
+  }).filter(s => s.nData > 0).sort((a,b) => b.expected - a.expected);
+
   panelHeader(forecastPanel, 'WHAT BREAKS NEXT', '24-month failure risk and inspection economics, from the reliability model',
-    `Based on ${insp.length} of ${sites.length} sites with a fitted reliability model.`);
-  if (insp.length) {
-    const modeMonths = insp.sort((x,y)=>insp.filter(v=>v===x).length - insp.filter(v=>v===y).length).pop();
-    forecastPanel.appendChild(el('div',{class:'interp'},[
-      `Recommended inspection cadence across this portfolio clusters around every ${modeMonths} months. `,
-      `Total SCADA monitoring value across these sites: ${fmt.usd(sites.reduce((acc,s)=>acc+(s.rel_insp_scada_value_usd||0),0))}/yr.`]));
+    `Based on ${sigStats.length ? sigStats[0].nData : 0} of ${sites.length} sites with a fitted reliability model.`);
+  if (sigStats.length) {
+    const maxExp = Math.max(...sigStats.map(s=>s.expected), 0.001);
+    const barH = 26, gap = 10, leftAxis = 140, chartW = 420;
+    const chartH = sigStats.length * (barH+gap);
+    const bc = svg('svg', {width:'100%', height: chartH+40, viewBox:`0 0 ${leftAxis+chartW+60} ${chartH+40}`});
+    bc.appendChild(svg('line', {x1:leftAxis, y1:0, x2:leftAxis, y2:chartH, stroke:'var(--panel-border)', 'stroke-width':1}));
+    sigStats.forEach((s,i) => {
+      const y = i*(barH+gap);
+      const w = (s.expected/maxExp)*chartW;
+      const lbl = svg('text', {x:leftAxis-8, y:y+barH*0.65, 'text-anchor':'end', style:'font:11px Arial; fill:#333'});
+      lbl.textContent = SIG_LABEL[s.sig]||s.sig; bc.appendChild(lbl);
+      bc.appendChild(svg('rect', {x:leftAxis, y:y+2, width:Math.max(w,1), height:barH-4, fill:'var(--accent)', rx:3}));
+      const vt = svg('text', {x:leftAxis+w+6, y:y+barH*0.65, style:'font:11px Arial; fill:#333'});
+      vt.textContent = fmt.raw(s.expected,1); bc.appendChild(vt);
+    });
+    const xTitle = svg('text', {x:leftAxis+chartW/2, y:chartH+30, 'text-anchor':'middle', style:'font:11px Arial; fill:#7a756c'});
+    xTitle.textContent = 'Expected failures (count, next 24 months)'; bc.appendChild(xTitle);
+    const yTitle = svg('text', {x:8, y:chartH/2, 'text-anchor':'middle', style:'font:11px Arial; fill:#7a756c'});
+    yTitle.textContent = 'Fault type'; bc.appendChild(yTitle);
+    forecastPanel.appendChild(bc);
+
+    const bt = el('table', {class:'grid'});
+    bt.appendChild(el('tr',{},[el('th',{class:'kcol'},['Fault type']),el('th',{},['Sites at risk']),
+      el('th',{},['Expected failures (24mo)']),el('th',{},['Mean duration (months)']),
+      el('th',{},['Estimated loss if it happens']),el('th',{},['Recommended action'])]));
+    sigStats.forEach(s => bt.appendChild(el('tr',{},[
+      el('td',{class:'kcol'},[SIG_LABEL[s.sig]||s.sig]), el('td',{},[fmt.count(s.nAtRisk)]),
+      el('td',{},[fmt.raw(s.expected,1)]), el('td',{},[s.mttr!=null?fmt.raw(s.mttr,1):'—']),
+      el('td',{},[s.estLoss!=null?fmt.usd(s.estLoss):'—']), el('td',{},[SIGNATURE_OFFERING[s.sig]]),
+    ])));
+    forecastPanel.appendChild(el('div',{class:'tblscroll', style:'margin-top:10px'},[bt]));
+
+    if (insp.length) {
+      const modeMonths = insp.sort((x,y)=>insp.filter(v=>v===x).length - insp.filter(v=>v===y).length).pop();
+      forecastPanel.appendChild(el('div',{class:'interp', style:'margin-top:10px'},[
+        `Recommended inspection cadence across this portfolio clusters around every ${modeMonths} months. `,
+        `Total SCADA monitoring value across these sites: ${fmt.usd(sites.reduce((acc,s)=>acc+(s.rel_insp_scada_value_usd||0),0))}/yr.`]));
+    }
   } else {
     forecastPanel.appendChild(el('div',{class:'small'},['No reliability forecast available for this account\'s sites.']));
   }
