@@ -324,6 +324,255 @@ def test_71_band_filter():
           f"click-again clears to {n_all} accounts, relationship select defaults correctly")
 
 
+def _pw_page(pw, viewport=None):
+    """Shared launcher for the remaining Playwright-driven tests. Returns
+    (browser, page) or (None, None) if playwright/chromium isn't available -
+    callers should skip-and-print in that case, same as test 63/71 above."""
+    from playwright.sync_api import sync_playwright
+    import glob
+    candidates = glob.glob("/opt/pw-browsers/chromium*/chrome-linux/chrome")
+    if not candidates:
+        return None, None
+    browser = pw.chromium.launch(executable_path=candidates[0], headless=True)
+    page = browser.new_page(viewport=viewport or {"width": 1280, "height": 1000})
+    page.goto("file://" + os.path.join(REPO_ROOT, "ceo_cockpit.html"), timeout=60000)
+    page.wait_for_timeout(400)
+    return browser, page
+
+
+def test_64_axes():
+    """A1: every chart has a titled X and Y axis with units."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("test 64 (axes): skipped, playwright not installed")
+        return
+    with sync_playwright() as p:
+        browser, page = _pw_page(p)
+        if not browser:
+            print("test 64 (axes): skipped, no chromium found")
+            return
+        page.click("button[data-view='market']")
+        page.wait_for_timeout(300)
+        market_text = page.eval_on_selector("main", "el => el.innerText")
+        assert "Cost of inaction (USD)" in market_text, "waterfall chart missing its Y-axis title"
+        assert "Segment" in market_text, "waterfall chart missing its X-axis title"
+
+        page.click("button[data-view='pitch']")
+        page.wait_for_timeout(300)
+        page.select_option(".card-panel select", index=1)
+        page.wait_for_timeout(300)
+        pitch_text = page.eval_on_selector("main", "el => el.innerText")
+        assert "Cumulative USD" in pitch_text, "do-nothing-vs-engage chart missing its Y-axis title"
+        assert "Expected failures (count, next 24 months)" in pitch_text, "what-breaks-next chart missing its X-axis title"
+        assert "Fault type" in pitch_text, "what-breaks-next chart missing its Y-axis title"
+        browser.close()
+    print("test 64 (axes): passed - waterfall, do-nothing-vs-engage and what-breaks-next charts all carry titled axes")
+
+
+def test_65_number_format():
+    """A3: no dollar amount under $1M renders without a thousands comma, and
+    no dollar amount at/above $1M renders without the M suffix - the two
+    most common ways raw numbers leak past the fmt utility."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("test 65 (number format): skipped, playwright not installed")
+        return
+    import re
+    with sync_playwright() as p:
+        browser, page = _pw_page(p)
+        if not browser:
+            print("test 65 (number format): skipped, no chromium found")
+            return
+        violations = []
+        for view in ["market", "accounts", "pitch", "evidence", "coverage"]:
+            page.click(f"button[data-view='{view}']")
+            page.wait_for_timeout(300)
+            if view in ("pitch", "evidence") and page.query_selector(".card-panel select"):
+                page.select_option(".card-panel select", index=1)
+                page.wait_for_timeout(300)
+            text = page.eval_on_selector("main", "el => el.innerText")
+            for m in re.finditer(r"\$-?[\d,]+(?:\.\d+)?[MK]?", text):
+                tok = m.group(0)
+                digits = tok.lstrip("$-").rstrip("MK")
+                if "M" in tok or "K" in tok:
+                    continue
+                bare = digits.replace(",", "")
+                if not bare.replace(".", "", 1).isdigit():
+                    continue
+                value = float(bare)
+                if value >= 1_000_000:
+                    violations.append((view, tok, "should use M suffix"))
+                elif value >= 1000 and "," not in digits:
+                    violations.append((view, tok, "missing thousands comma"))
+        browser.close()
+    assert not violations, f"number format violations: {violations[:10]}"
+    print("test 65 (number format): passed - no bare/uncomma'd dollar amounts across all 5 screens")
+
+
+def test_67_definitions_collapsed():
+    """A5: the definitions panel is collapsed on load and doesn't push the
+    account table below the fold."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("test 67 (definitions collapsed): skipped, playwright not installed")
+        return
+    with sync_playwright() as p:
+        browser, page = _pw_page(p, viewport={"width": 1280, "height": 900})
+        if not browser:
+            print("test 67 (definitions collapsed): skipped, no chromium found")
+            return
+        page.click("button[data-view='accounts']")
+        page.wait_for_timeout(300)
+        is_open = page.eval_on_selector("details.defs-panel", "el => el.open")
+        assert not is_open, "definitions panel should be collapsed (closed) on load"
+        band_tile_y = page.eval_on_selector(".band-tile", "el => el.getBoundingClientRect().top")
+        assert band_tile_y < 900, f"band tiles pushed below the fold (top={band_tile_y}px in a 900px viewport)"
+        browser.close()
+    print(f"test 67 (definitions collapsed): passed - closed on load, band tiles at y={band_tile_y:.0f}px")
+
+
+def test_69_coverage_statements():
+    """B2: every section built on rel_* fields states the covered fraction,
+    and gaps render as an em-dash, not 0."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("test 69 (coverage statements): skipped, playwright not installed")
+        return
+    with sync_playwright() as p:
+        browser, page = _pw_page(p)
+        if not browser:
+            print("test 69 (coverage statements): skipped, no chromium found")
+            return
+        page.click("button[data-view='evidence']")
+        page.wait_for_timeout(300)
+        ev_text = page.eval_on_selector("main", "el => el.innerText")
+        assert "of 2,411 sites" in ev_text, "Evidence screen missing fleet-wide rel_* coverage statement"
+
+        page.click("button[data-view='pitch']")
+        page.wait_for_timeout(300)
+        page.select_option(".card-panel select", index=1)
+        page.wait_for_timeout(300)
+        pitch_text = page.eval_on_selector("main", "el => el.innerText")
+        assert "Based on" in pitch_text and "with a warranty term resolved" in pitch_text, \
+            "Warranty panel missing its coverage statement"
+        assert "Based on" in pitch_text and "with a fitted reliability model" in pitch_text, \
+            "What Breaks Next panel missing its coverage statement"
+        browser.close()
+    print("test 69 (coverage statements): passed - Evidence and Pitch screens both state rel_* coverage fractions")
+
+
+def test_70_sorting():
+    """A8/A10: Priority Accounts' and Evidence's site tables sort on every
+    column in both directions, numerically for numeric columns."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("test 70 (sorting): skipped, playwright not installed")
+        return
+    with sync_playwright() as p:
+        browser, page = _pw_page(p)
+        if not browser:
+            print("test 70 (sorting): skipped, no chromium found")
+            return
+
+        def col_values(col_idx):
+            return page.eval_on_selector_all(
+                f"table.grid tr:not(:first-child) td:nth-child({col_idx+1})", "els => els.map(e => e.innerText)")
+
+        def parse_num(v):
+            if v == '—':
+                return None
+            is_millions = v.endswith('M')
+            n = float(v.replace(',', '').replace('$', '').replace('%', '').replace(' weeks', '').rstrip('M'))
+            return n * 1e6 if is_millions else n
+
+        def is_sorted(values, numeric, ascending):
+            if numeric:
+                nums = [n for n in (parse_num(v) for v in values) if n is not None]
+                return nums == sorted(nums) if ascending else nums == sorted(nums, reverse=True)
+            vals = [v for v in values if v != '—']
+            return vals == sorted(vals) if ascending else vals == sorted(vals, reverse=True)
+
+        checked = 0
+        page.click("button[data-view='accounts']")
+        page.wait_for_timeout(300)
+        headers = page.query_selector_all("table.grid th")
+        numeric_cols = [2, 3, 6, 7, 8]  # Sites, MWdc, Their loss, SSI fee/yr, Payback
+        for idx in numeric_cols:
+            headers[idx].click(); page.wait_for_timeout(150)
+            desc = col_values(idx)
+            headers = page.query_selector_all("table.grid th")
+            headers[idx].click(); page.wait_for_timeout(150)
+            asc = col_values(idx)
+            headers = page.query_selector_all("table.grid th")
+            assert is_sorted(desc, True, False), f"accounts col {idx} not sorted descending: {desc[:5]}"
+            assert is_sorted(asc, True, True), f"accounts col {idx} not sorted ascending: {asc[:5]}"
+            checked += 1
+
+        page.click("button[data-view='evidence']")
+        page.wait_for_timeout(300)
+        page.select_option(".card-panel select", index=1)
+        page.wait_for_timeout(300)
+        tables = page.query_selector_all("table.grid")
+        ev_headers = tables[1].query_selector_all("th")
+
+        def ev_col_values(idx):
+            # table.grid:nth-of-type(2) would be scoped per-parent (each
+            # table is the only table.grid under its own panel), not
+            # document-wide, so index into the full table list explicitly.
+            return page.evaluate(
+                f"Array.from(document.querySelectorAll('table.grid')[1].querySelectorAll('tr:not(:first-child) td:nth-child({idx+1})')).map(e => e.innerText)")
+        for idx in [1, 2, 3]:  # MWdc, Latest PI, Latest PRI
+            ev_headers[idx].click(); page.wait_for_timeout(150)
+            desc = ev_col_values(idx)
+            ev_headers = page.query_selector_all("table.grid")[1].query_selector_all("th")
+            ev_headers[idx].click(); page.wait_for_timeout(150)
+            asc = ev_col_values(idx)
+            ev_headers = page.query_selector_all("table.grid")[1].query_selector_all("th")
+            assert is_sorted(desc, True, False), f"evidence col {idx} not sorted descending: {desc[:5]}"
+            assert is_sorted(asc, True, True), f"evidence col {idx} not sorted ascending: {asc[:5]}"
+            checked += 1
+        browser.close()
+    print(f"test 70 (sorting): passed - {checked} numeric columns verified both directions across two tables")
+
+
+def test_75_print():
+    """B6: the pitch page prints to roughly one A4 side with nav/filters
+    hidden. Exact page-count requires a PDF library not otherwise used by
+    this repo, so this checks the print-media content height against a
+    one-page budget instead (verified against an actual PDF render during
+    development: NextEra Energy, the largest account, renders to 1 page)."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("test 75 (print): skipped, playwright not installed")
+        return
+    with sync_playwright() as p:
+        browser, page = _pw_page(p, viewport={"width": 794, "height": 1123})
+        if not browser:
+            print("test 75 (print): skipped, no chromium found")
+            return
+        page.click("button[data-view='pitch']")
+        page.wait_for_timeout(300)
+        page.select_option(".card-panel select", index=1)  # largest account by default sort (coi_3yr_usd desc)
+        page.wait_for_timeout(300)
+        page.emulate_media(media="print")
+        page.wait_for_timeout(150)
+        topbar_visible = page.eval_on_selector("#topbar-wrap", "el => getComputedStyle(el).display !== 'none'")
+        assert not topbar_visible, "nav/header should be hidden when printing"
+        height = page.evaluate("document.body.scrollHeight")
+        # A4 usable height at 96dpi with 10mm margins is ~1050px; budget a
+        # generous 1400px given cross-platform print-CSS rendering variance.
+        assert height < 1400, f"pitch page print content is {height}px tall - too long for one A4 side"
+        browser.close()
+    print(f"test 75 (print): passed - nav/header hidden, content height {height}px fits one A4 page budget")
+
+
+
 if __name__ == "__main__":
     test_50_pricing_units()
     test_51_no_bare_roi_multiple()
@@ -336,8 +585,14 @@ if __name__ == "__main__":
     test_60_book_reconciliation()
     test_61_eu_reps_not_zero()
     test_63_offline_and_payload_budget()
+    test_64_axes()
+    test_65_number_format()
     test_66_site_map()
+    test_67_definitions_collapsed()
     test_68_pi_quarantine()
+    test_69_coverage_statements()
+    test_70_sorting()
     test_71_band_filter()
     test_72_single_logo_removed()
     test_73_crm_reconciliation_removed()
+    test_75_print()

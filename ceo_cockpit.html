@@ -79,12 +79,29 @@ button.btn.secondary { background:#fff; color:var(--accent); border:1px solid va
 .defs-pre { font-family:'Courier New',monospace; font-size:11.5px; line-height:1.5; white-space:pre-wrap;
   background:var(--card); padding:10px 12px; border-radius:6px; }
 .band-tile.active { outline:2px solid var(--accent); }
+tr.kb-focus td { background:var(--card); box-shadow: inset 2px 0 0 var(--accent); }
+.play-box { border:1px solid var(--panel-border); border-radius:6px; padding:12px 14px; margin-bottom:10px; }
 table.grid th:hover { color:var(--ink); }
 .print-btn { display:inline-block; }
+@page { size: A4; margin: 10mm; }
 @media print {
   #topbar-wrap, #header-controls, .no-print { display:none !important; }
   main#main { padding:0; max-width:100%; }
-  .card-panel { border:none; page-break-inside:avoid; }
+  .card-panel { border:none; page-break-inside:avoid; padding:4px 0; margin-bottom:5px; }
+  /* B6: the pitch page prints to one A4 side - nav/filters are already
+     covered by .no-print above; the long site-level tables (warranty can
+     run to hundreds of rows) are dropped from print, keeping only the
+     business-document essentials (header, plays, do-nothing-vs-engage,
+     the five worst sites, why this offering). Fonts/spacing shrink too -
+     screen sizing has room to breathe that a single printed page doesn't. */
+  .print-hide { display:none !important; }
+  h2 { font-size: 14px; margin: 1px 0 2px !important; }
+  .eyebrow { font-size: 9px; }
+  .small, table.grid { font-size: 10.5px; }
+  .interp { font-size: 12px; margin: 3px 0; }
+  .play-box { padding:6px 8px; margin-bottom:4px; }
+  table.grid th, table.grid td { padding:3px 6px; }
+  svg { max-height: 130px; }
 }
 </style>
 </head>
@@ -149,7 +166,9 @@ const ALBERS_PROJ = d3.geoAlbersUsa().scale(1300).translate([975/2, 610/2]);
 const state = { view: 'market', currentAccount: null, sortCol: 'coi_3yr_usd', sortDir: -1,
   filters: {relationship:'', region:'', focus:'FOCUS_NOW'},
   showTechnicalDetail: false, // A6c: persists across account navigation, not reset per render
-  evSortCol: 'cost_of_inaction_usd', evSortDir: -1 }; // A8: Evidence's own site table sort (separate from Priority Accounts')
+  evSortCol: 'cost_of_inaction_usd', evSortDir: -1, // A8: Evidence's own site table sort (separate from Priority Accounts')
+  kbFocusIdx: null }; // B6: j/k keyboard nav on the Priority Accounts table
+let accountsListCache = []; // B6: latest filtered/sorted account list, for the keyboard handler below
 
 function el(tag, attrs, children) {
   const e = document.createElement(tag);
@@ -250,6 +269,11 @@ function renderSiteMap(sites) {
 
   const REL_KEYS = ['Customer', 'Prospect', 'Whitespace'];
   if (!state.mapFilters) state.mapFilters = {Customer:true, Prospect:true, Whitespace:true};
+  // B6: empty state - every class toggled off shouldn't just read as a
+  // blank map with no explanation.
+  const emptyNote = el('div', {class:'small', style:'position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); display:none'},
+    ['All relationship classes are hidden - click a legend entry below to show sites.']);
+  wrap.appendChild(emptyNote);
 
   const maxMwdc = Math.max(1, ...sites.map(s => s.mwdc || 0));
   const radiusOf = mwdc => 2 + 14 * Math.sqrt((mwdc||0) / maxMwdc);
@@ -261,6 +285,7 @@ function renderSiteMap(sites) {
   const gridIdx = buildSiteGrid(compact, 24);
 
   function draw() {
+    emptyNote.style.display = REL_KEYS.some(k => state.mapFilters[k]) ? 'none' : 'block';
     const dpr = window.devicePixelRatio || 1;
     const cssW = canvas.clientWidth || 900, cssH = cssW * MAP_H / MAP_W;
     canvas.width = cssW * dpr; canvas.height = cssH * dpr;
@@ -347,11 +372,44 @@ function render() {
   else if (state.view === 'pitch') renderPitch(m);
   else if (state.view === 'evidence') renderEvidence(m);
   else if (state.view === 'coverage') renderCoverage(m);
+  // B6: deep links - the pitch page is the artefact people share, so its
+  // URL always reflects the selected account. replaceState (not pushState)
+  // so browsing accounts doesn't spam the back-button history.
+  const hash = (state.view === 'pitch' && state.currentAccount) ? '#account=' + encodeURIComponent(state.currentAccount) : '';
+  if (location.hash !== hash) history.replaceState(null, '', location.pathname + location.search + hash);
 }
 
 document.querySelectorAll('#topbar nav button').forEach(b => b.addEventListener('click', () => {
   state.view = b.dataset.view; render();
 }));
+
+// B6: keyboard nav on the Priority Accounts table - j/k move, Enter opens
+// the focused row's pitch page, Escape clears focus. Registered once at
+// document level (not inside renderAccounts) so it doesn't stack a new
+// listener on every re-render; scoped to the accounts view at fire time.
+document.addEventListener('keydown', e => {
+  if (state.view !== 'accounts' || !accountsListCache.length) return;
+  const tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'SELECT' || tag === 'INPUT') return; // don't steal keys from form controls
+  if (!['j','k','Enter','Escape'].includes(e.key)) return;
+  // a focused <button> (e.g. the nav tab just clicked) treats Enter as "activate
+  // me" by default, which would fire after this handler and undo the navigation
+  // below - suppress that default action for the keys this handler owns.
+  e.preventDefault();
+  if (e.key === 'j') {
+    state.kbFocusIdx = Math.min((state.kbFocusIdx ?? -1) + 1, accountsListCache.length - 1);
+    render();
+    document.querySelector('tr.kb-focus')?.scrollIntoView({block:'nearest'});
+  } else if (e.key === 'k') {
+    state.kbFocusIdx = Math.max((state.kbFocusIdx ?? 0) - 1, 0);
+    render();
+    document.querySelector('tr.kb-focus')?.scrollIntoView({block:'nearest'});
+  } else if (e.key === 'Enter' && state.kbFocusIdx != null && accountsListCache[state.kbFocusIdx]) {
+    state.currentAccount = accountsListCache[state.kbFocusIdx].owner_entity; state.view = 'pitch'; render();
+  } else if (e.key === 'Escape') {
+    state.kbFocusIdx = null; render();
+  }
+});
 
 // =============================================================== SCREEN 1 ==
 function renderMarket(m) {
@@ -525,9 +583,11 @@ Payback (weeks)
   list = list.map(a => ({...a, _top_issue: SIG_LABEL[a.top_signature]||a.top_signature||'',
     _offering: SIGNATURE_OFFERING[a.top_signature]||''}));
   list = sortRows(list, state.sortCol, !!NUMERIC_COL[state.sortCol], state.sortDir);
+  accountsListCache = list;
+  if (state.kbFocusIdx != null && state.kbFocusIdx >= list.length) state.kbFocusIdx = list.length ? list.length - 1 : null;
 
   panel.appendChild(el('div',{class:'small', style:'margin:10px 0'},
-    [list.length ? `${fmt.count(list.length)} accounts shown.` :
+    [list.length ? `${fmt.count(list.length)} accounts shown. Keyboard: j/k to move, Enter to open, Escape to clear.` :
       `No accounts match this filter combination${state.filters.focus?` (${state.filters.focus.replace('_',' ')})`:''}${state.filters.relationship?` × ${state.filters.relationship}`:''}.`]));
   m.appendChild(panel);
   if (!list.length) return;
@@ -542,8 +602,9 @@ Payback (weeks)
       [label + sortIndicator(active, state.sortDir)]));
   });
   table.appendChild(headRow);
-  list.forEach(a => {
-    const tr = el('tr', {style:'cursor:pointer', onclick:()=>{state.currentAccount=a.owner_entity; state.view='pitch'; render();}});
+  list.forEach((a,i) => {
+    const tr = el('tr', {class: i===state.kbFocusIdx?'kb-focus':undefined, style:'cursor:pointer',
+      onclick:()=>{state.currentAccount=a.owner_entity; state.view='pitch'; render();}});
     tr.appendChild(el('td',{class:'kcol'},[a.owner_entity, a.ownership_unresolved?el('span',{class:'badge unresolved'},['unresolved']):null].filter(v=>v!==null)));
     tr.appendChild(el('td',{},[el('span',{class:'badge '+a.relationship},[a.relationship])]));
     tr.appendChild(el('td',{},[fmt.count(a.n_sites)]));
@@ -559,12 +620,20 @@ Payback (weeks)
   m.appendChild(tablePanel);
 }
 
+// B6: CSV export on every table, not just the call list.
+function exportCsv(cols, rows, filename) {
+  const csv = [cols.join(',')].concat(rows.map(row => cols.map(c => JSON.stringify(row[c]===undefined||row[c]===null?'':row[c])).join(',')));
+  const blob = new Blob([csv.join('\n')], {type:'text/csv'});
+  const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename; link.click();
+}
+function exportBtn(cols, rows, filename) {
+  return el('button', {class:'btn secondary no-print', style:'font-size:11px; padding:4px 10px; margin-left:8px',
+    onclick:()=>exportCsv(cols, rows, filename)}, ['Export CSV']);
+}
 function exportAccountsCsv(list) {
-  const cols = ['owner_entity','relationship','focus_band','n_sites','mwdc','coi_3yr_usd','recoverable_usd_yr',
-    'fee_annual_usd','payback_weeks','confidence','top_signature','account_owner','ownership_unresolved'];
-  const rows = [cols.join(',')].concat(list.map(a => cols.map(c => JSON.stringify(a[c]===undefined?'':a[c])).join(',')));
-  const blob = new Blob([rows.join('\n')], {type:'text/csv'});
-  const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'ceo_cockpit_priority_accounts.csv'; link.click();
+  exportCsv(['owner_entity','relationship','focus_band','n_sites','mwdc','coi_3yr_usd','recoverable_usd_yr',
+    'fee_annual_usd','payback_weeks','confidence','top_signature','account_owner','ownership_unresolved'],
+    list, 'ceo_cockpit_priority_accounts.csv');
 }
 
 // =============================================================== SCREEN 3 ==
@@ -605,7 +674,7 @@ function renderPitch(m) {
   panelHeader(playsPanel, 'THE PLAYS', 'Recommended, ranked by 3-yr cost of inaction');
   if (!plays.length) playsPanel.appendChild(el('div',{class:'small'},['No plays met the grouping threshold (2+ sites sharing a fault pattern, or a single site above $1M CoI).']));
   plays.forEach(p => {
-    const box = el('div', {style:'border:1px solid var(--panel-border); border-radius:6px; padding:12px 14px; margin-bottom:10px'});
+    const box = el('div', {class:'play-box'});
     box.appendChild(el('div',{class:'interp'},[p.pitch_sentence]));
     box.appendChild(el('div',{class:'small'},[`${p.n_sites} sites · ${fmt.mwdc(p.mwdc)} MWdc · offering: ${p.offering} · fee ${fmt.usd(p.annual_fee_usd)}/yr · payback ${fmt.weeks(p.payback_weeks)}`]));
     playsPanel.appendChild(box);
@@ -671,6 +740,9 @@ function renderPitch(m) {
       el('td',{},[s.beta_t!=null?(Math.abs(s.beta_t)>=2?'Yes':'No'):'—']), el('td',{},[s.latest_scored_month||'—']));
     wt.appendChild(el('tr',{},row));
   });
+  const worstCols = ['site','mwdc','top_signature','fault_months','recoverable_usd_yr','conviction_tier'];
+  if (state.showTechnicalDetail) worstCols.push('latest_pi','latest_pri','beta','beta_t','latest_scored_month');
+  worstPanel.appendChild(exportBtn(worstCols, worst, `ceo_cockpit_${a.owner_entity.replace(/[^a-z0-9]+/gi,'_')}_underperforming_assets.csv`));
   worstPanel.appendChild(el('div',{class:'tblscroll'},[wt]));
   m.appendChild(worstPanel);
 
@@ -678,7 +750,7 @@ function renderPitch(m) {
   // never a blank cell, unresolved sites render as em-dash with a footnote
   // rather than being silently dropped.
   const warrantyN = sites.filter(s => s.rel_warranty_remaining_years != null).length;
-  const wp = el('div', {class:'card-panel'});
+  const wp = el('div', {class:'card-panel print-hide'});
   panelHeader(wp, 'WARRANTY', 'Site-level cover, sorted by claim value',
     `Based on ${warrantyN} of ${sites.length} sites with a warranty term resolved - the rest render as "—" below, not zero. A third party paying for the repair changes the conversation entirely.`);
   const warrantyRows = sites.slice().sort((x,y) => (y.rel_warranty_claim_value_usd??-1) - (x.rel_warranty_claim_value_usd??-1));
@@ -686,6 +758,8 @@ function renderPitch(m) {
   wat.appendChild(el('tr',{},[el('th',{class:'kcol'},['Site']),el('th',{},['MWdc']),el('th',{},['COD']),
     el('th',{},['Cover remaining (yrs)']),el('th',{},['Expected failure probability (24mo)']),
     el('th',{},['Claim value']),el('th',{},['Status'])]));
+  wp.appendChild(exportBtn(['site','mwdc','cod','rel_warranty_remaining_years','rel_warranty_claim_value_usd'],
+    warrantyRows, `ceo_cockpit_${a.owner_entity.replace(/[^a-z0-9]+/gi,'_')}_warranty.csv`));
   warrantyRows.forEach(s => {
     const rem = s.rel_warranty_remaining_years;
     const status = rem == null ? 'Not resolved' : rem <= 0 ? 'Expired' : rem <= 1 ? 'Expiring within 1yr' : 'Active';
@@ -720,6 +794,7 @@ function renderPitch(m) {
 
   panelHeader(forecastPanel, 'WHAT BREAKS NEXT', '24-month failure risk and inspection economics, from the reliability model',
     `Based on ${sigStats.length ? sigStats[0].nData : 0} of ${sites.length} sites with a fitted reliability model.`);
+  const whatBreaksDetail = el('div', {class:'print-hide'});
   if (sigStats.length) {
     const maxExp = Math.max(...sigStats.map(s=>s.expected), 0.001);
     const barH = 26, gap = 10, leftAxis = 140, chartW = 420;
@@ -739,7 +814,7 @@ function renderPitch(m) {
     xTitle.textContent = 'Expected failures (count, next 24 months)'; bc.appendChild(xTitle);
     const yTitle = svg('text', {x:8, y:chartH/2, 'text-anchor':'middle', style:'font:11px Arial; fill:#7a756c'});
     yTitle.textContent = 'Fault type'; bc.appendChild(yTitle);
-    forecastPanel.appendChild(bc);
+    whatBreaksDetail.appendChild(bc);
 
     const bt = el('table', {class:'grid'});
     bt.appendChild(el('tr',{},[el('th',{class:'kcol'},['Fault type']),el('th',{},['Sites at risk']),
@@ -750,7 +825,10 @@ function renderPitch(m) {
       el('td',{},[fmt.raw(s.expected,1)]), el('td',{},[s.mttr!=null?fmt.raw(s.mttr,1):'—']),
       el('td',{},[s.estLoss!=null?fmt.usd(s.estLoss):'—']), el('td',{},[SIGNATURE_OFFERING[s.sig]]),
     ])));
-    forecastPanel.appendChild(el('div',{class:'tblscroll', style:'margin-top:10px'},[bt]));
+    whatBreaksDetail.appendChild(exportBtn(['sig','nAtRisk','expected','mttr','estLoss'], sigStats,
+      `ceo_cockpit_${a.owner_entity.replace(/[^a-z0-9]+/gi,'_')}_what_breaks_next.csv`));
+    whatBreaksDetail.appendChild(el('div',{class:'tblscroll', style:'margin-top:10px'},[bt]));
+    forecastPanel.appendChild(whatBreaksDetail);
 
     if (insp.length) {
       const modeMonths = insp.sort((x,y)=>insp.filter(v=>v===x).length - insp.filter(v=>v===y).length).pop();
@@ -817,6 +895,8 @@ function renderEvidence(m) {
     el('td',{},[fmt.raw(s.weibull_beta,3)]), el('td',{},[s.beta_classification]), el('td',{},[fmt.eta(s.weibull_eta_years)]),
     el('td',{},[s.rvm_eligible?'Yes':'No']),
   ])));
+  fitPanel.appendChild(exportBtn(['signature','best_fit_family','weibull_beta','beta_classification','weibull_eta_years','rvm_eligible'],
+    DATA.reliability.signatures, 'ceo_cockpit_fleet_life_data_fit.csv'));
   fitPanel.appendChild(el('div',{class:'tblscroll', style:'margin-top:10px'},[ft]));
   m.appendChild(fitPanel);
 
@@ -858,6 +938,8 @@ function renderEvidence(m) {
     el('td',{},[fmt.beta(s.beta)]), el('td',{},[fmt.raw(s.beta_t,1)]),
     el('td',{},[s.decision_grade?'Yes':'No']), el('td',{},[s.rel_n_blocks!==null&&s.rel_n_blocks!==undefined?fmt.count(s.rel_n_blocks):'—']), el('td',{},[fmt.raw(s.rel_age_years,1)]),
   ])));
+  sitesPanel.appendChild(exportBtn(['site','mwdc','latest_pi','latest_pri','beta','beta_t','decision_grade','rel_n_blocks','rel_age_years','capacity_suspect'],
+    sitesSorted, `ceo_cockpit_${a.owner_entity.replace(/[^a-z0-9]+/gi,'_')}_site_evidence.csv`));
   sitesPanel.appendChild(el('div',{class:'tblscroll'},[st]));
   m.appendChild(sitesPanel);
 
@@ -910,6 +992,8 @@ function renderCoverage(m) {
       .forEach((v,i)=>tr.appendChild(el('td',{class:i===0?'kcol':''},[String(v)])));
     bt.appendChild(tr);
   });
+  bookPanel.appendChild(exportBtn(['rep','n_accounts_managed','n_accounts','n_customer','n_prospect','mwdc','recoverable_usd_yr','coi_3yr_usd'],
+    cov.book, 'ceo_cockpit_book.csv'));
   bookPanel.appendChild(el('div',{class:'tblscroll'},[bt]));
   m.appendChild(bookPanel);
 
@@ -924,6 +1008,12 @@ function renderCoverage(m) {
   m.appendChild(focusPanel);
 }
 
+// B6: deep links - a URL of the form #account=<owner> opens straight to
+// that account's pitch page (so a link can be pasted into an email).
+(function applyInitialHash() {
+  const m = /^#account=(.+)$/.exec(location.hash);
+  if (m) { state.currentAccount = decodeURIComponent(m[1]); state.view = 'pitch'; }
+})();
 render();
 </script>
 </body>
