@@ -67,6 +67,9 @@ button.btn.secondary { background:#fff; color:var(--accent); border:1px solid va
 .legend { display:flex; gap:16px; font-size:12px; margin-top:8px; flex-wrap:wrap; }
 .legend .sw { display:inline-block; width:11px; height:11px; border-radius:2px; margin-right:5px; vertical-align:middle; }
 .geo { cursor:default; }
+.map-canvas { width:100%; height:auto; aspect-ratio: 975 / 610; display:block; cursor:default; }
+.map-tooltip { position:absolute; pointer-events:none; background:#fff; border:1px solid var(--panel-border);
+  border-radius:6px; padding:8px 10px; font-size:12px; box-shadow:0 2px 8px rgba(0,0,0,.12); z-index:10; max-width:240px; }
 .pitch-header { display:flex; justify-content:space-between; align-items:flex-start; }
 .print-btn { display:inline-block; }
 @media print {
@@ -191,6 +194,130 @@ function panelHeader(panel, eyebrow, title, sub) {
 }
 function accountByName(name) { return DATA.accounts.find(a => a.owner_entity === name); }
 
+// ----------------------------------------------------------- site map (A4) --
+// 6,200 sites is too many for per-circle SVG hover handlers. Every site is
+// drawn to one <canvas>; a single delegated mousemove hit-tests against a
+// uniform-grid spatial index (a flat quadtree - cheap to build, O(1) average
+// lookup for point data at this density) instead of scanning all points.
+const MAP_W = 975, MAP_H = 610;
+function buildSiteGrid(points, cellSize) {
+  const grid = new Map();
+  points.forEach((p, i) => {
+    const key = Math.floor(p.x / cellSize) + ',' + Math.floor(p.y / cellSize);
+    if (!grid.has(key)) grid.set(key, []);
+    grid.get(key).push(i);
+  });
+  return { grid, cellSize };
+}
+function nearestSite(index, points, x, y) {
+  const { grid, cellSize } = index;
+  const cx = Math.floor(x / cellSize), cy = Math.floor(y / cellSize);
+  let best = -1, bestD = Infinity;
+  for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+    const bucket = grid.get((cx+dx) + ',' + (cy+dy));
+    if (!bucket) continue;
+    for (const i of bucket) {
+      const p = points[i];
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d <= p.r + 1.5 && d < bestD) { bestD = d; best = i; }
+    }
+  }
+  return best;
+}
+function renderSiteMap(sites) {
+  const wrap = el('div', {style:'position:relative'});
+  const canvas = document.createElement('canvas');
+  canvas.className = 'map-canvas';
+  wrap.appendChild(canvas);
+  const tooltip = el('div', {class:'map-tooltip', style:'display:none'});
+  wrap.appendChild(tooltip);
+
+  const REL_KEYS = ['Customer', 'Prospect', 'Whitespace'];
+  if (!state.mapFilters) state.mapFilters = {Customer:true, Prospect:true, Whitespace:true};
+
+  const maxMwdc = Math.max(1, ...sites.map(s => s.mwdc || 0));
+  const radiusOf = mwdc => 2 + 14 * Math.sqrt((mwdc||0) / maxMwdc);
+  const points = sites.map(s => {
+    const p = ALBERS_PROJ([s.lon, s.lat]);
+    return p ? {x:p[0], y:p[1], r:radiusOf(s.mwdc), site:s} : null;
+  });
+  const compact = points.filter(p => p !== null);
+  const gridIdx = buildSiteGrid(compact, 24);
+
+  function draw() {
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.clientWidth || 900, cssH = cssW * MAP_H / MAP_W;
+    canvas.width = cssW * dpr; canvas.height = cssH * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr * cssW / MAP_W, 0, 0, dpr * cssW / MAP_W, 0, 0);
+    ctx.clearRect(0, 0, MAP_W, MAP_H);
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--land').trim();
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--stroke').trim();
+    ctx.lineWidth = 1;
+    STATE_FEATURES.forEach(f => { const p = new Path2D(GEO_PATH(f)); ctx.fill(p); ctx.stroke(p); });
+    ctx.stroke(new Path2D(STATE_MESH_PATH));
+    compact.forEach(p => {
+      if (!state.mapFilters[p.site.relationship]) return;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, 2 * Math.PI);
+      ctx.fillStyle = REL_COLOR[p.site.relationship] || '#888';
+      ctx.globalAlpha = p.site.in_scope ? 0.85 : 0.35;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+  }
+  // deferred: canvas isn't attached to the document yet (the caller appends
+  // the returned wrapper after this function returns), so clientWidth would
+  // read 0 if drawn synchronously here.
+  requestAnimationFrame(draw);
+  const onResize = () => { if (!canvas.isConnected) { window.removeEventListener('resize', onResize); return; } draw(); };
+  window.addEventListener('resize', onResize);
+
+  canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (MAP_W / rect.width);
+    const y = (e.clientY - rect.top) * (MAP_H / rect.height);
+    const i = nearestSite(gridIdx, compact, x, y);
+    if (i < 0 || !state.mapFilters[compact[i].site.relationship]) {
+      tooltip.style.display = 'none';
+      canvas.style.cursor = 'default';
+      return;
+    }
+    const s = compact[i].site;
+    tooltip.innerHTML = '';
+    tooltip.appendChild(el('div', {style:'font-weight:bold'}, [s.owner]));
+    tooltip.appendChild(el('div', {}, [s.site]));
+    tooltip.appendChild(el('div', {}, [`${fmt.mwdc(s.mwdc)} MWdc · COD ${s.cod || '—'} · ${s.state || '—'}`]));
+    if (!s.in_scope) tooltip.appendChild(el('div', {class:'small'}, ['below 250 MWdc engagement floor']));
+    tooltip.style.left = (e.clientX - rect.left + 14) + 'px';
+    tooltip.style.top = (e.clientY - rect.top + 10) + 'px';
+    tooltip.style.display = 'block';
+    canvas.style.cursor = accountByName(s.owner) ? 'pointer' : 'default';
+  });
+  canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; canvas.style.cursor = 'default'; });
+  canvas.addEventListener('click', e => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (MAP_W / rect.width);
+    const y = (e.clientY - rect.top) * (MAP_H / rect.height);
+    const i = nearestSite(gridIdx, compact, x, y);
+    if (i < 0) return;
+    const s = compact[i].site;
+    if (!accountByName(s.owner)) return;
+    state.currentAccount = s.owner; state.view = 'pitch'; render();
+  });
+
+  const legend = el('div', {class:'legend'});
+  REL_KEYS.forEach(k => {
+    const n = sites.filter(s => s.relationship === k).length;
+    const on = state.mapFilters[k];
+    const item = el('span', {style:`cursor:pointer; opacity:${on?1:0.4}`, onclick:()=>{ state.mapFilters[k]=!state.mapFilters[k]; draw(); item.style.opacity = state.mapFilters[k]?1:0.4; }},
+      [el('span',{class:'sw',style:`background:${REL_COLOR[k]}`}), `${k} (${fmt.count(n)})`]);
+    legend.appendChild(item);
+  });
+  wrap.appendChild(legend);
+  return wrap;
+}
+
 // ---------------------------------------------------------------- render ----
 function render() {
   document.querySelectorAll('#topbar nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===state.view));
@@ -259,25 +386,9 @@ function renderMarket(m) {
   m.appendChild(waterfallPanel);
 
   const mapPanel = el('div', {class:'card-panel'});
-  panelHeader(mapPanel, 'GEOGRAPHY', 'In-scope accounts by location', 'Bubble size = 3-yr cost of inaction. Whitespace shown in the accent colour so it reads as opportunity, not absence.');
-  const W=975,H=610;
-  const s2 = svg('svg', {width:'100%', height:420, viewBox:`0 0 ${W} ${H}`});
-  STATE_FEATURES.forEach(f => s2.appendChild(svg('path', {d:GEO_PATH(f), class:'geo', fill:'var(--land)', stroke:'var(--stroke)', 'stroke-width':1})));
-  s2.appendChild(svg('path', {d:STATE_MESH_PATH, fill:'none', stroke:'var(--stroke)', 'stroke-width':1}));
-  const maxCoi = Math.max(1, ...DATA.screen1.map_bubbles.map(b=>b.coi||0));
-  DATA.screen1.map_bubbles.forEach(b => {
-    const p = ALBERS_PROJ([b.lon, b.lat]);
-    if (!p) return;
-    const rad = 3 + 16*Math.sqrt((b.coi||0)/maxCoi);
-    const c = svg('circle', {cx:p[0], cy:p[1], r:rad, fill:REL_COLOR[b.relationship]||'#888', opacity:0.75, stroke:'#fff', 'stroke-width':0.5});
-    c.style.cursor='pointer';
-    c.addEventListener('click', () => { state.currentAccount = b.owner; state.view='pitch'; render(); });
-    s2.appendChild(c);
-  });
-  mapPanel.appendChild(s2);
-  const legend = el('div', {class:'legend'});
-  ['Customer','Prospect','Whitespace'].forEach(k => legend.appendChild(el('span',{},[el('span',{class:'sw',style:`background:${REL_COLOR[k]}`}),k])));
-  mapPanel.appendChild(legend);
+  panelHeader(mapPanel, 'GEOGRAPHY', `Every US solar site - ${fmt.count(DATA.screen1.map_sites.length)} sites`,
+    'Colour = relationship, size = MWdc (square-root scaled). Out-of-scope sites (below the 250 MWdc floor) render at lower opacity for context, not as opportunity.');
+  mapPanel.appendChild(renderSiteMap(DATA.screen1.map_sites));
   m.appendChild(mapPanel);
 }
 

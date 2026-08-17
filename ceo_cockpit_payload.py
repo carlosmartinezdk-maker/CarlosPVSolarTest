@@ -39,6 +39,27 @@ def ri(v):
     return int(v)
 
 
+def build_map_sites(sites, account):
+    """A4's minimal per-site map schema: site, owner, lat, lon, mwdc, cod,
+    relationship, in_scope - for every geolocated site fleet-wide, not just
+    the in-scope subset."""
+    rel_map = dict(zip(account["owner_entity"], account["relationship"]))
+    scope_map = dict(zip(account["owner_entity"], account["above_floor"]))
+    out = []
+    for _, s in sites.iterrows():
+        if pd.isna(s.get("lat")) or pd.isna(s.get("lon")):
+            continue
+        owner = s["owner_entity"]
+        out.append(dict(
+            site=s["site"], owner=owner, lat=r(s["lat"], 3), lon=r(s["lon"], 3),
+            mwdc=r(s["mwdc"], 1), cod=s["cod"] if pd.notna(s.get("cod")) else None,
+            state=s["state"] if pd.notna(s.get("state")) else None,
+            relationship=rel_map.get(owner, "Whitespace"),
+            in_scope=bool(scope_map.get(owner, False)),
+        ))
+    return out
+
+
 def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all_pct, total_coi_all):
     in_scope = in_scope.sort_values("coi_3yr_usd", ascending=False)
 
@@ -160,14 +181,11 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
                 prospect_coi=r(in_scope.loc[in_scope["relationship"] == "Prospect", "coi_3yr_usd"].sum()),
                 whitespace_coi=r(in_scope.loc[in_scope["relationship"] == "Whitespace", "coi_3yr_usd"].sum()),
             ),
-            map_bubbles=[
-                dict(owner=owner, lat=r(g["lat"].mean(), 3), lon=r(g["lon"].mean(), 3),
-                     coi=r(g["cost_of_inaction_usd"].fillna(0).sum()),
-                     relationship=in_scope.loc[in_scope["owner_entity"] == owner, "relationship"].iloc[0]
-                     if owner in in_scope_owners else "below_floor")
-                for owner, g in sites[sites["owner_entity"].isin(in_scope_owners)].groupby("owner_entity")
-                if g["lat"].notna().any()
-            ],
+            # A4: every US solar site as its own dot, not an account-centroid
+            # bubble - out-of-scope sites (below the 250 MWdc floor) are
+            # included too so the map reads as the whole fleet, not just the
+            # engaged slice. ~6,200 rows x 7 small fields, well inside budget.
+            map_sites=build_map_sites(sites, account),
         ),
         accounts=accounts_out,
         plays=plays_out,

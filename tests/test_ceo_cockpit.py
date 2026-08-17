@@ -261,6 +261,24 @@ def test_68_pi_quarantine():
           f"{n_csv_rows} sites in capacity_suspect.csv")
 
 
+def test_66_site_map():
+    """A4: every site is its own map point (not an account-centroid bubble),
+    with the minimal schema needed for colour/size/tooltip, including
+    out-of-scope sites for context."""
+    payload = _load_payload()
+    map_sites = payload["screen1"]["map_sites"]
+    assert len(map_sites) > 6000, f"expected ~6,200 individual site dots, got {len(map_sites)}"
+    required = {"site", "owner", "lat", "lon", "mwdc", "cod", "relationship", "in_scope"}
+    missing_fields = required - set(map_sites[0].keys())
+    assert not missing_fields, f"map_sites row missing fields: {missing_fields}"
+    rels = {s["relationship"] for s in map_sites}
+    assert rels <= {"Customer", "Prospect", "Whitespace"}, f"unexpected relationship values: {rels}"
+    n_out_of_scope = sum(1 for s in map_sites if not s["in_scope"])
+    assert n_out_of_scope > 0, "expected some out-of-scope sites in the map data"
+    print(f"test 66 (site map): passed - {len(map_sites)} sites ({n_out_of_scope} out-of-scope), "
+          f"relationships: {sorted(rels)}")
+
+
 if __name__ == "__main__":
     test_50_pricing_units()
     test_51_no_bare_roi_multiple()
@@ -275,4 +293,5 @@ if __name__ == "__main__":
     test_61_eu_reps_not_zero()
     test_62_book_concentration_flagged()
     test_63_offline_and_payload_budget()
+    test_66_site_map()
     test_68_pi_quarantine()
