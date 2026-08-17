@@ -77,10 +77,15 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
                  "cost_of_inaction_usd", "recoverable_usd_yr", "recoverable_mwh_yr",
                  "latest_pi", "latest_pri", "latest_scored_month", "beta", "beta_t", "beta_excess",
                  "excess_category", "decision_grade", "warranty_urgent", "warranty_active",
-                 "months", "pi", "pri",
+                 "months", "pi", "pri", "capacity_suspect",
                  "rel_n_blocks", "rel_age_years", "rel_insp_optimal_months", "rel_insp_optimal_cost_usd",
                  "rel_insp_saving_usd", "rel_insp_scada_value_usd", "rel_warranty_remaining_years",
                  "rel_warranty_claim_value_usd"]
+    # B1: a capacity_suspect site's PI is physically impossible (bad MWdc
+    # denominator, not real performance) - null the PI-derived fields so no
+    # chart/table can render them, but keep the site row (mwdc, CoI, etc
+    # stay) since the site's existence isn't in question, only its PI.
+    PI_DERIVED_FIELDS = ("latest_pi", "pi")
     sites_by_account = {}
     for owner, g in sites[sites["owner_entity"].isin(in_scope_owners)].groupby("owner_entity"):
         rows = []
@@ -97,6 +102,9 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
                 elif isinstance(v, (bool, np.bool_)):
                     v = bool(v)
                 row[c] = v
+            if row.get("capacity_suspect"):
+                for f in PI_DERIVED_FIELDS:
+                    row[f] = None
             rows.append(row)
         sites_by_account[owner] = rows
 

@@ -54,6 +54,42 @@ def corrected_site_fee(offerings: list, mwdc: float, pricing: dict) -> float:
 
 
 # --------------------------------------------------------------------------
+# Capacity-suspect quarantine (CEO_COCKPIT_REVISIONS_PASS2.md Part B1): a PI
+# of 52 means a site produced 52x what physics allows - the cause is a
+# capacity (MWdc) denominator that's wrong, not real performance. Flag on
+# the trailing 12-month median PI so one bad month doesn't quarantine a
+# site, and everything downstream can suppress the bogus PI-derived
+# figures without pretending the site doesn't exist.
+# --------------------------------------------------------------------------
+CAPACITY_SUSPECT_PI_THRESHOLD = 1.35
+
+
+def median_trailing12_pi(pi_series) -> float:
+    if pi_series is None:
+        return np.nan
+    vals = [v for v in list(pi_series)[-12:] if v is not None and not (isinstance(v, float) and np.isnan(v))]
+    return float(np.median(vals)) if vals else np.nan
+
+
+def flag_capacity_suspect(sites: pd.DataFrame) -> pd.DataFrame:
+    sites = sites.copy()
+    sites["median_pi_12mo"] = sites["pi"].apply(median_trailing12_pi)
+    sites["capacity_suspect"] = sites["median_pi_12mo"] > CAPACITY_SUSPECT_PI_THRESHOLD
+    n = int(sites["capacity_suspect"].sum())
+    log.info("capacity_suspect: %d/%d sites flagged (trailing 12mo median PI > %.2f)",
+              n, len(sites), CAPACITY_SUSPECT_PI_THRESHOLD)
+    return sites
+
+
+def write_capacity_suspect_csv(sites: pd.DataFrame, path: str) -> None:
+    flagged = sites.loc[sites["capacity_suspect"],
+                         ["site", "owner_entity", "utility", "state", "mwdc", "median_pi_12mo", "latest_pi"]]
+    flagged = flagged.sort_values("median_pi_12mo", ascending=False)
+    flagged.to_csv(path, index=False)
+    log.info("wrote %s: %d sites for a data fix (capacity/MWdc denominator)", path, len(flagged))
+
+
+# --------------------------------------------------------------------------
 # Owner rollup (Section 1.2): parent_company where resolved, else utility
 # --------------------------------------------------------------------------
 def load_parent_map(path: str) -> dict:
@@ -420,6 +456,9 @@ def main():
     sites = resolve_owner_entity(sites, parent_map)
     log.info("owner rollup: %d sites -> %d owner_entities (%d resolved via parent_mapping)",
               len(sites), sites["owner_entity"].nunique(), (sites["owner_source"] == "parent_mapping").sum())
+
+    sites = flag_capacity_suspect(sites)
+    write_capacity_suspect_csv(sites, f"{DATA_DIR}/capacity_suspect.csv")
 
     account = build_account_table(sites, pricing)
     account = match_all_owners(account, gtm)

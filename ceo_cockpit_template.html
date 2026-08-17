@@ -46,6 +46,7 @@ table.grid th.kcol, table.grid td.kcol { text-align:left; }
 .badge.NEW_LOGO { background:#8a5a12; color:#fff; }
 .badge.NURTURE { background:#c9c2b3; color:#4a4536; }
 .badge.PARK { background:#e6e1d8; color:var(--muted); }
+.badge.suspect { background:#f4d9d4; color:#8a2e1e; margin-left:6px; }
 .badge.unresolved { background:var(--warn); color:#fff; }
 .acct-card { background:#fff; border:1px solid var(--panel-border); border-radius:8px; padding:16px 18px; margin-bottom:12px; cursor:pointer; }
 .acct-card:hover { border-color:var(--accent); }
@@ -366,9 +367,11 @@ function renderPitch(m) {
   grid2.appendChild(el('div',{class:'small', style:'margin-top:6px'},['Illustrative, not a contractual projection - "engage" assumes 85% of the physical gap recovers per Part 8\'s recovery-fraction convention, residual 15% continues as ongoing loss.']));
   m.appendChild(grid2);
 
-  const worst = sites.slice().sort((x,y)=>(y.cost_of_inaction_usd||0)-(x.cost_of_inaction_usd||0)).slice(0,5);
+  const worst = sites.filter(s=>!s.capacity_suspect).sort((x,y)=>(y.cost_of_inaction_usd||0)-(x.cost_of_inaction_usd||0)).slice(0,5);
   const worstPanel = el('div', {class:'card-panel'});
-  panelHeader(worstPanel, 'THEIR WORST FIVE SITES', 'Because the CFO will ask');
+  const nSuspect = sites.filter(s=>s.capacity_suspect).length;
+  panelHeader(worstPanel, 'THEIR WORST FIVE SITES', 'Because the CFO will ask',
+    nSuspect ? `${nSuspect} site(s) excluded - capacity under review, see the Evidence screen.` : undefined);
   const wt = el('table', {class:'grid'});
   wt.appendChild(el('tr',{},[el('th',{class:'kcol'},['Site']),el('th',{},['State']),el('th',{},['MWdc']),
     el('th',{},['Issue']),el('th',{},['3-yr CoI']),el('th',{},['Tier'])]));
@@ -445,13 +448,16 @@ function renderEvidence(m) {
   if (!a) { m.appendChild(el('div',{class:'card-panel'},['Pick an account above to see its site-level evidence (PI/PRI, D-band, degradation fit).'])); return; }
   const sites = (DATA.sites_by_account[a.owner_entity] || []).slice().sort((x,y)=>(y.cost_of_inaction_usd||0)-(x.cost_of_inaction_usd||0));
 
+  const nSuspectEv = sites.filter(s=>s.capacity_suspect).length;
   const sitesPanel = el('div', {class:'card-panel'});
-  panelHeader(sitesPanel, 'SITE-LEVEL EVIDENCE', `${a.owner_entity} - ${sites.length} sites`);
+  panelHeader(sitesPanel, 'SITE-LEVEL EVIDENCE', `${a.owner_entity} - ${sites.length} sites`,
+    nSuspectEv ? `${nSuspectEv} site(s) show "capacity under review" - a PI computed from a capacity denominator we don't trust, suppressed rather than shown as a number.` : undefined);
   const st = el('table', {class:'grid'});
   st.appendChild(el('tr',{},[el('th',{class:'kcol'},['Site']),el('th',{},['Latest PI']),el('th',{},['Latest PRI']),
     el('th',{},['beta']),el('th',{},['t-stat']),el('th',{},['Decision-grade']),el('th',{},['N_blocks']),el('th',{},['Age (yr)'])]));
   sites.forEach(s => st.appendChild(el('tr',{},[
-    el('td',{class:'kcol'},[s.site]), el('td',{},[fmtNum(s.latest_pi,3)]), el('td',{},[fmtNum(s.latest_pri,3)]),
+    el('td',{class:'kcol'},[s.site, s.capacity_suspect?el('span',{class:'badge suspect', title:'12-month median PI exceeded 1.35 - capacity (MWdc) figure is under review, PI suppressed'},['capacity under review']):null].filter(v=>v!==null)),
+    el('td',{},[s.capacity_suspect?'—':fmtNum(s.latest_pi,3)]), el('td',{},[fmtNum(s.latest_pri,3)]),
     el('td',{},[s.beta!==null?(s.beta*100).toFixed(2)+'%':'—']), el('td',{},[fmtNum(s.beta_t,1)]),
     el('td',{},[s.decision_grade?'Yes':'No']), el('td',{},[s.rel_n_blocks??'—']), el('td',{},[fmtNum(s.rel_age_years,1)]),
   ])));

@@ -236,6 +236,31 @@ def test_63_offline_and_payload_budget():
           f"{n_sites_in_payload} sites in payload (in-scope accounts only)")
 
 
+def test_68_pi_quarantine():
+    """B1: no site with a 12-month median PI above 1.35 appears with a real
+    PI value anywhere in the payload, and capacity_suspect.csv is written."""
+    import os
+    csv_path = os.path.join(REPO_ROOT, "ceo_cockpit", "data", "capacity_suspect.csv")
+    assert os.path.exists(csv_path), "capacity_suspect.csv was not written"
+    with open(csv_path) as f:
+        n_csv_rows = sum(1 for _ in f) - 1  # minus header
+    assert n_csv_rows > 0, "capacity_suspect.csv has no flagged sites"
+
+    payload = _load_payload()
+    n_flagged = 0
+    n_pi_leaked = 0
+    for owner, rows in payload["sites_by_account"].items():
+        for s in rows:
+            if s.get("capacity_suspect"):
+                n_flagged += 1
+                if s.get("latest_pi") is not None or s.get("pi") is not None:
+                    n_pi_leaked += 1
+    assert n_flagged > 0, "no capacity_suspect sites found in the in-scope payload - widen the search if this fires"
+    assert n_pi_leaked == 0, f"{n_pi_leaked} capacity_suspect site(s) still carry a non-null PI value in the payload"
+    print(f"test 68 (PI quarantine): passed - {n_flagged} in-scope sites flagged and PI-suppressed, "
+          f"{n_csv_rows} sites in capacity_suspect.csv")
+
+
 if __name__ == "__main__":
     test_50_pricing_units()
     test_51_no_bare_roi_multiple()
@@ -250,3 +275,4 @@ if __name__ == "__main__":
     test_61_eu_reps_not_zero()
     test_62_book_concentration_flagged()
     test_63_offline_and_payload_budget()
+    test_68_pi_quarantine()
