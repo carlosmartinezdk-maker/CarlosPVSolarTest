@@ -227,7 +227,7 @@ def test_63_offline_and_payload_budget():
         page.on("pageerror", lambda exc: errors.append(str(exc)))
         page.goto("file://" + path, timeout=60000)
         page.wait_for_timeout(500)
-        for v in ["accounts", "pitch", "evidence", "coverage", "prize"]:
+        for v in ["accounts", "pitch", "evidence", "coverage", "market"]:
             page.click(f"button[data-view='{v}']")
             page.wait_for_timeout(300)
         browser.close()

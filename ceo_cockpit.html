@@ -82,7 +82,7 @@ button.btn.secondary { background:#fff; color:var(--accent); border:1px solid va
 <header id="topbar">
   <h1>SSI CEO Cockpit</h1>
   <nav class="seg" id="view-nav">
-    <button data-view="prize" class="active">The Prize</button>
+    <button data-view="market" class="active">Addressable Market</button>
     <button data-view="accounts">Priority Accounts</button>
     <button data-view="pitch">Pitch Page</button>
     <button data-view="evidence">Evidence</button>
@@ -133,7 +133,7 @@ const STATE_MESH_PATH = GEO_PATH(STATE_MESH);
 const ALBERS_PROJ = d3.geoAlbersUsa().scale(1300).translate([975/2, 610/2]);
 
 // ---------------------------------------------------------------- state ----
-const state = { view: 'prize', currentAccount: null, sortCol: 'coi_3yr_usd', sortDir: -1,
+const state = { view: 'market', currentAccount: null, sortCol: 'coi_3yr_usd', sortDir: -1,
   filters: {relationship:'', region:'', focus:''} };
 
 function el(tag, attrs, children) {
@@ -199,7 +199,7 @@ function render() {
   document.getElementById('vintage-note').textContent = monthLabel(DATA.meta.data_through_month);
   const m = document.getElementById('main');
   m.innerHTML = '';
-  if (state.view === 'prize') renderPrize(m);
+  if (state.view === 'market') renderMarket(m);
   else if (state.view === 'accounts') renderAccounts(m);
   else if (state.view === 'pitch') renderPitch(m);
   else if (state.view === 'evidence') renderEvidence(m);
@@ -211,10 +211,10 @@ document.querySelectorAll('#topbar nav button').forEach(b => b.addEventListener(
 }));
 
 // =============================================================== SCREEN 1 ==
-function renderPrize(m) {
+function renderMarket(m) {
   const w = DATA.screen1.waterfall;
   const headline = el('div', {class:'card-panel'});
-  panelHeader(headline, 'THE PRIZE', 'How big, how real, and where',
+  panelHeader(headline, 'ADDRESSABLE MARKET', 'How big, how real, and where',
     'Denominator: all figures below are the ' + fmt.count(DATA.meta.in_scope_accounts) + ' accounts at or above the 250 MWdc engagement floor - the remaining ' +
     fmt.count(DATA.meta.total_accounts_all - DATA.meta.in_scope_accounts) + ' owners are below it and out of scope for this tool.');
   const strip = el('div', {class:'cards'});
@@ -239,16 +239,22 @@ function renderPrize(m) {
     ['Whitespace', w.whitespace_coi, REL_COLOR.Whitespace],
   ];
   const maxV = Math.max(...wf.map(x=>x[1]));
-  const bw = 160, gap=24, h=220, pad=40;
-  const s = svg('svg', {width: wf.length*(bw+gap), height:h+50, viewBox:`0 0 ${wf.length*(bw+gap)} ${h+50}`});
+  const bw = 160, gap=24, h=220, pad=40, leftAxis=44, bottomAxis=40;
+  const chartW = wf.length*(bw+gap), chartH = h+50;
+  const s = svg('svg', {width: chartW+leftAxis, height:chartH+bottomAxis, viewBox:`0 0 ${chartW+leftAxis} ${chartH+bottomAxis}`});
   wf.forEach(([label,val,color],i) => {
     const bh = (val/maxV)*h;
-    s.appendChild(svg('rect', {x:i*(bw+gap)+gap/2, y:h+pad-bh, width:bw, height:bh, fill:color, rx:4}));
-    const t = svg('text', {x:i*(bw+gap)+gap/2+bw/2, y:h+pad-bh-8, 'text-anchor':'middle', style:'font:bold 13px Arial'});
+    s.appendChild(svg('rect', {x:leftAxis+i*(bw+gap)+gap/2, y:h+pad-bh, width:bw, height:bh, fill:color, rx:4}));
+    const t = svg('text', {x:leftAxis+i*(bw+gap)+gap/2+bw/2, y:h+pad-bh-8, 'text-anchor':'middle', style:'font:bold 13px Arial'});
     t.textContent = fmt.usd(val); s.appendChild(t);
-    const l = svg('text', {x:i*(bw+gap)+gap/2+bw/2, y:h+pad+16, 'text-anchor':'middle', style:'font:11px Arial; fill:#7a756c'});
-    l.textContent = label; s.appendChild(l);
+    const l = svg('text', {x:leftAxis+i*(bw+gap)+gap/2+bw/2, y:h+pad+16, 'text-anchor':'middle', style:'font:11px Arial; fill:#7a756c'});
+    l.textContent = label; l.setAttribute('title', label); s.appendChild(l);
   });
+  s.appendChild(svg('line', {x1:leftAxis, y1:h+pad, x2:leftAxis, y2:0, stroke:'var(--panel-border)', 'stroke-width':1}));
+  const yTitle = svg('text', {x:-((h+pad)/2), y:16, 'text-anchor':'middle', transform:'rotate(-90)', style:'font:11px Arial; fill:#7a756c'});
+  yTitle.textContent = 'Cost of inaction (USD)'; s.appendChild(yTitle);
+  const xTitle = svg('text', {x:leftAxis+chartW/2, y:chartH+bottomAxis-10, 'text-anchor':'middle', style:'font:11px Arial; fill:#7a756c'});
+  xTitle.textContent = 'Segment'; s.appendChild(xTitle);
   waterfallPanel.appendChild(s);
   m.appendChild(waterfallPanel);
 
@@ -386,7 +392,8 @@ function renderPitch(m) {
   const doNothing = [1,2,3].map(y => a.recoverable_usd_yr * y);
   const engage = [1,2,3].map(y => a.fee_annual_usd * y + a.recoverable_usd_yr * 0.15 * y);
   const maxV2 = Math.max(...doNothing, ...engage, 1);
-  const chart = svg('svg', {width:'100%', height:180, viewBox:'0 0 500 180'});
+  const chart = svg('svg', {width:'100%', height:200, viewBox:'0 0 500 200'});
+  chart.appendChild(svg('line', {x1:44, y1:150, x2:44, y2:10, stroke:'var(--panel-border)', 'stroke-width':1}));
   [0,1,2].forEach(i => {
     const x = 60 + i*150;
     const h1 = (doNothing[i]/maxV2)*120, h2 = (engage[i]/maxV2)*120;
@@ -395,6 +402,10 @@ function renderPitch(m) {
     const lbl = svg('text',{x:x+35, y:168, 'text-anchor':'middle', style:'font:11px Arial; fill:#7a756c'}); lbl.textContent = `Year ${i+1}`;
     chart.appendChild(lbl);
   });
+  const y2Title = svg('text', {x:-80, y:14, 'text-anchor':'middle', transform:'rotate(-90)', style:'font:11px Arial; fill:#7a756c'});
+  y2Title.textContent = 'Cumulative USD'; chart.appendChild(y2Title);
+  const x2Title = svg('text', {x:250, y:192, 'text-anchor':'middle', style:'font:11px Arial; fill:#7a756c'});
+  x2Title.textContent = 'Year'; chart.appendChild(x2Title);
   grid2.appendChild(chart);
   grid2.appendChild(el('div',{class:'legend'},[
     el('span',{},[el('span',{class:'sw',style:'background:var(--warn)'}),'Do nothing (compounding loss)']),
