@@ -1,0 +1,160 @@
+"""
+Pass 3 site-detail extraction (CEO_COCKPIT_REVISIONS_PASS3.md Section 4).
+
+Reads the S0-S17 pipeline's per-site-month parquet (data/site_month_dollars.parquet
+- the same source s11_explorer.py reads for explorer.html) and the event
+ledger (data/event_ledger.parquet) DIRECTLY, rather than re-deriving or
+re-scraping explorer.html's built payload. This is deliberate: Carlos's
+Part 6 caution in the Pass 3 spec is that the cockpit's site view must be
+"generated from the same functions" as the explorer, not reimplemented -
+reading the identical upstream parquet the explorer reads is the way to
+guarantee that, rather than a second computation that can drift.
+
+In-scope only (~2,411 of 6,203 sites) to protect the payload budget.
+"""
+import pandas as pd
+
+MONTHLY_SRC = "data/site_month_dollars.parquet"
+LEDGER_SRC = "data/event_ledger.parquet"
+FORECAST_SRC = "data/reliability_forecast.parquet"
+INSPECTION_SRC = "data/inspection_schedule.parquet"
+
+# Same fixed 6-signature order s11_explorer.py uses for its own per-site
+# reliability lookup (RELIABILITY_SIGS_SORTED = sorted(config.RELIABILITY_SIGNATURES))
+# - kept here rather than imported from config to avoid this module reaching
+# past the two parquets it's built around.
+RELIABILITY_SIGS_SORTED = ["BLOCK_OUTAGE", "BOS_INTERMITTENT", "OUTAGE_FULL", "SOILING", "TRACKER", "UNATTRIBUTED"]
+INSPECTION_HORIZONS = [3, 6, 12, 24]
+
+# All 6,203 sites share one identical 89-month calendar grid (2019-01
+# through the latest month with weather data) - verified directly against
+# the source parquet, not assumed. Storing `months` once at the payload
+# top level instead of once per site is the single biggest saving here.
+MONTHLY_COLS = ["site", "month_start", "E_act_mwh", "E_exp_mwh", "PI", "PRI", "D",
+                "signature_final", "gate_fired", "benchmark_mode", "block_fraction",
+                "peer_count", "peer_radius_km", "peers_healthy"]
+FORECAST_COLS = ["site", "signature", "horizon_months", "cond_prob_failure", "credibility_Z"]
+INSPECTION_COLS = ["site", "optimal_interval_months", "total_cost_3mo", "total_cost_6mo",
+                    "total_cost_12mo", "total_cost_24mo"]
+
+
+def _rnd(v, nd):
+    return None if pd.isna(v) else round(float(v), nd)
+
+
+def _rnd_fraction(v, nd):
+    """block_fraction stores discrete values as fraction strings ("1/6",
+    from config.BLOCK_FRACTION_TABLE) mixed with plain floats/NaN in the
+    same column - normalise both to a rounded float."""
+    if pd.isna(v):
+        return None
+    if isinstance(v, str) and "/" in v:
+        num, den = v.split("/")
+        return round(float(num) / float(den), nd)
+    return round(float(v), nd)
+
+
+def _rndint(v):
+    return None if pd.isna(v) else int(round(float(v)))
+
+
+def load_site_detail(in_scope_sites: set) -> dict:
+    """Returns dict(months, signature_lookup, gate_lookup, per_site) where
+    per_site[site] holds parallel per-month arrays (aligned to `months`)
+    plus flat per-site ledger arrays (one entry per site-year-signature
+    row). Values are pre-rounded (PI/PRI/D to 3dp, MWh to whole numbers)
+    and signature/gate are small-int indices into the two lookup lists -
+    per the spec's "signature-as-index alone saves most of it.\""""
+    df = pd.read_parquet(MONTHLY_SRC, columns=MONTHLY_COLS)
+    df = df[df["site"].isin(in_scope_sites)].copy()
+    df["month_start"] = pd.to_datetime(df["month_start"])
+
+    months = sorted(df["month_start"].unique())
+    month_labels = [pd.Timestamp(m).strftime("%Y-%m") for m in months]
+
+    sig_values = sorted(df["signature_final"].dropna().unique().tolist())
+    gate_values = sorted(df["gate_fired"].dropna().unique().tolist())
+    sig_index = {v: i for i, v in enumerate(sig_values)}
+    gate_index = {v: i for i, v in enumerate(gate_values)}
+
+    per_site = {}
+    for site, g in df.groupby("site", sort=False):
+        # reindex onto the shared month grid so every site's arrays line
+        # up positionally with `months`, even though every site already
+        # has all 89 rows in practice - cheap insurance against a future
+        # dataset where that stops being true.
+        g = g.set_index("month_start").reindex(months)
+        per_site[site] = dict(
+            e_act=[_rndint(v) for v in g["E_act_mwh"]],
+            e_exp=[_rndint(v) for v in g["E_exp_mwh"]],
+            pi=[_rnd(v, 3) for v in g["PI"]],
+            pri=[_rnd(v, 3) for v in g["PRI"]],
+            d=[_rnd(v, 3) for v in g["D"]],
+            sig_idx=[sig_index.get(v) for v in g["signature_final"]],
+            gate_idx=[gate_index.get(v) for v in g["gate_fired"]],
+            benchmark_peer=[None if pd.isna(v) else int(v == "peer") for v in g["benchmark_mode"]],
+            block_fraction=[_rnd_fraction(v, 3) for v in g["block_fraction"]],
+            peer_count=[_rndint(v) for v in g["peer_count"]],
+            peer_radius_km=[_rnd(v, 1) for v in g["peer_radius_km"]],
+            peers_healthy=[_rndint(v) for v in g["peers_healthy"]],
+            ledger_year=[], ledger_sig_idx=[], ledger_months=[], ledger_episodes=[],
+            ledger_exposure_months=[], ledger_mwh_lost=[], ledger_usd_lost=[],
+        )
+
+    ledger = pd.read_parquet(LEDGER_SRC)
+    ledger = ledger[ledger["site"].isin(in_scope_sites)].sort_values(["site", "year"])
+    for site, g in ledger.groupby("site", sort=False):
+        d = per_site.setdefault(site, {})
+        d["ledger_year"] = g["year"].astype(int).tolist()
+        d["ledger_sig_idx"] = [sig_index.get(v) for v in g["signature"]]
+        d["ledger_months"] = g["months"].astype(int).tolist()
+        d["ledger_episodes"] = [_rndint(v) for v in g["episodes"]]
+        d["ledger_exposure_months"] = [_rnd(v, 1) for v in g["exposure_months"]]
+        d["ledger_mwh_lost"] = [_rndint(v) for v in g["mwh_lost"]]
+        d["ledger_usd_lost"] = [_rndint(v) for v in g["usd_lost"]]
+
+    # Reliability panel (Pass 3 §3.2d): 12/24-month failure probability with
+    # its credibility weight, per fault type, plus the inspection cost
+    # curve - read directly from the same reliability_forecast.parquet and
+    # inspection_schedule.parquet s11_explorer.py reads for its own
+    # per-site reliability lookup (load_reliability_site_lookup), rather
+    # than refitting anything here.
+    rel_sigs_present = [s for s in RELIABILITY_SIGS_SORTED if s in sig_index]
+    n_rel = len(rel_sigs_present)
+    for d in per_site.values():
+        d["rel_p12"] = [None] * n_rel
+        d["rel_p24"] = [None] * n_rel
+        d["rel_credibility_z"] = [None] * n_rel
+        d["insp_costs"] = None
+
+    forecast = pd.read_parquet(FORECAST_SRC, columns=FORECAST_COLS)
+    forecast = forecast[forecast["site"].isin(in_scope_sites) & forecast["signature"].isin(rel_sigs_present)]
+    sig_pos = {s: i for i, s in enumerate(rel_sigs_present)}
+    for (site, sig), g in forecast.groupby(["site", "signature"], sort=False):
+        d = per_site.setdefault(site, {})
+        if "rel_p12" not in d:
+            d["rel_p12"] = [None] * n_rel
+            d["rel_p24"] = [None] * n_rel
+            d["rel_credibility_z"] = [None] * n_rel
+            d["insp_costs"] = None
+        pos = sig_pos[sig]
+        h12 = g[g["horizon_months"] == 12]
+        h24 = g[g["horizon_months"] == 24]
+        if len(h12):
+            d["rel_p12"][pos] = _rnd(h12["cond_prob_failure"].iloc[0], 4)
+            d["rel_credibility_z"][pos] = _rnd(h12["credibility_Z"].iloc[0], 3)
+        if len(h24):
+            d["rel_p24"][pos] = _rnd(h24["cond_prob_failure"].iloc[0], 4)
+            if d["rel_credibility_z"][pos] is None:
+                d["rel_credibility_z"][pos] = _rnd(h24["credibility_Z"].iloc[0], 3)
+
+    inspection = pd.read_parquet(INSPECTION_SRC, columns=INSPECTION_COLS)
+    inspection = inspection[inspection["site"].isin(in_scope_sites)]
+    for row in inspection.itertuples():
+        d = per_site.setdefault(row.site, {})
+        d["insp_costs"] = [_rndint(row.total_cost_3mo), _rndint(row.total_cost_6mo),
+                            _rndint(row.total_cost_12mo), _rndint(row.total_cost_24mo)]
+
+    return dict(months=month_labels, signature_lookup=sig_values,
+                gate_lookup=gate_values, reliability_signatures=rel_sigs_present,
+                inspection_horizons_months=INSPECTION_HORIZONS, per_site=per_site)

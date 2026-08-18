@@ -147,7 +147,12 @@ textarea.note { width:100%; background: #fff; color:var(--ink); border:1px solid
   <select id="hdr-site-select" class="sel"></select>
   <button class="hdr-clear" id="hdr-clear-btn">Clear</button>
   <span class="hdr-scope-note" id="hdr-scope-note"></span>
+  <span style="margin-left:auto; display:flex; align-items:center; gap:8px;">
+    <span class="small">Recovery target</span>
+    <span class="seg" id="benchmark-seg"></span>
+  </span>
 </div>
+<div id="benchmark-note" class="small" style="padding:4px 20px; border-bottom:1px solid var(--panel-border); color:var(--muted);"></div>
 </div>
 
 <main id="main"></main>
@@ -232,6 +237,253 @@ const state = {
   currentSite: null,
   hiddenCols: new Set(['confidence', 'peer_count', 'peer_radius_km']),
 };
+
+// ================================================================= Part 1 ==
+// Switchable recovery benchmark (RECOVERY_BENCHMARK_AND_CUSTOMER_ROI.md).
+// "The whole toggle is a ratio applied to actual generation... cheap enough
+// to run client-side" (spec §1.2) - every site already carries e_act/pi/pri/
+// rec_pct/signature/benchmark_mode per month (s11_explorer.py's own payload,
+// unchanged for this feature), so switching benchmarks recomputes each
+// site's derived $ fields in place from those base arrays and re-renders.
+// Nothing here is a second implementation of S9's math - target_gap_recoverable
+// is the same T/G/R/$ chain, just parameterised on PRI_target/PI_target
+// instead of hardcoded P75 (test 86 requires exact parity at P75).
+const BENCHMARK_KEY = 'ssi_recovery_benchmark';
+const ZERO_RECOVERY_SIGNATURES = new Set(['CURTAILMENT', 'SNOW', 'CLIPPING']);
+const BENCHMARK_LABELS = {
+  P50: ['Conservative', 'P50'], P75: ['Attainable', 'P75'], GOLDEN: ['Proven', 'Golden year'],
+};
+state.benchmark = (() => {
+  try { return localStorage.getItem(BENCHMARK_KEY) || (DATA.meta.recovery_benchmark && DATA.meta.recovery_benchmark.default) || 'P75'; }
+  catch(e) { return 'P75'; }
+})();
+
+// Per-month target ratio for one site under one benchmark - the P50/P75
+// settings use the same fleet constant for every month. GOLDEN falls back
+// to P75 PER BRANCH, independently for PRI (peer months) and PI (physical
+// months): a site can have a golden year with peer months but none in
+// physical-fallback mode that year (or vice versa), and the branch with no
+// golden figure must fall back honestly rather than silently contributing
+// zero for months in years the site never even qualified against.
+function benchmarkTargets(site, benchmark) {
+  const kpi = DATA.kpi;
+  if (benchmark === 'P50') return {pri: kpi.pri_p50, pi: kpi.pi_p50, priFellBack: false, piFellBack: false};
+  if (benchmark === 'P75') return {pri: kpi.pri_p75, pi: kpi.pi_p75, priFellBack: false, piFellBack: false};
+  // GOLDEN
+  if (!site.golden_available) return {pri: kpi.pri_p75, pi: kpi.pi_p75, priFellBack: true, piFellBack: true};
+  const priFellBack = site.pri_golden_floored == null, piFellBack = site.pi_golden_floored == null;
+  return {
+    pri: priFellBack ? kpi.pri_p75 : site.pri_golden_floored,
+    pi: piFellBack ? kpi.pi_p75 : site.pi_golden_floored,
+    priFellBack, piFellBack,
+    golden_year: site.golden_year, degradation_rate_annual: site.degradation_rate_annual,
+  };
+}
+function degradationAdjust(targetValue, monthYear, golden) {
+  if (targetValue == null || !golden || golden.golden_year == null) return targetValue;
+  const years = monthYear - golden.golden_year;
+  return targetValue * Math.pow(1 - (golden.degradation_rate_annual || 0), years);
+}
+
+// Recomputes one site's monthly value_usd[] and the derived annual
+// recoverable$/MWh under `benchmark`, mirroring s9_dollars.target_gap_recoverable
+// via the shortcut formula (§1.2): T = E_act x target/score, per mode.
+function computeSiteRecoverable(site, benchmark) {
+  const t = benchmarkTargets(site, benchmark);
+  const months = site.months, n = months.length;
+  const monthlyValue = new Array(n).fill(null);
+  const ppa = DATA.meta.ppa_usd_per_mwh;
+  const years = new Set();
+  let totalUsd = 0, totalMwh = 0;
+  for (let i = 0; i < n; i++) {
+    const yr = parseInt(months[i].slice(0, 4), 10);
+    years.add(yr);
+    const eAct = site.e_act[i];
+    if (eAct == null) continue;
+    let target = null;
+    if (site.benchmark_mode[i] === 'peer' && site.pri[i] != null && site.pri[i] > 0) {
+      let priTarget = t.pri;
+      if (benchmark === 'GOLDEN' && !t.priFellBack) priTarget = degradationAdjust(priTarget, yr, t);
+      if (priTarget != null) target = eAct * priTarget / site.pri[i];
+    } else if (site.benchmark_mode[i] === 'physical' && site.pi[i] != null && site.pi[i] > 0) {
+      let piTarget = t.pi;
+      if (benchmark === 'GOLDEN' && !t.piFellBack) piTarget = degradationAdjust(piTarget, yr, t);
+      if (piTarget != null) target = eAct * piTarget / site.pi[i];
+    }
+    if (target == null) continue;
+    const gap = Math.max(target - eAct, 0);
+    const recovered = gap * (site.rec_pct[i] || 0);
+    let usd = recovered * ppa;
+    if (ZERO_RECOVERY_SIGNATURES.has(site.signature[i])) usd = 0;
+    monthlyValue[i] = usd;
+    totalUsd += usd;
+    totalMwh += (ZERO_RECOVERY_SIGNATURES.has(site.signature[i]) ? 0 : gap * (site.rec_pct[i] || 0));
+  }
+  const nYears = Math.max(years.size, 1);
+  return {monthlyValue, recoverable_usd_yr: totalUsd / nYears, recoverable_mwh_yr: totalMwh / nYears, fellBack: t.priFellBack || t.piFellBack};
+}
+
+function costOfInactionJs(recoverableUsdYr, betaExcess, betaT, horizon, discountRate) {
+  if (recoverableUsdYr == null) return null;
+  const slopeSignificant = betaExcess != null && betaT != null && Math.abs(betaT) >= 2.0;
+  const growth = (slopeSignificant && betaExcess < 0) ? Math.abs(betaExcess) : 0.0;
+  let total = 0;
+  for (let h = 1; h <= horizon; h++) {
+    total += (recoverableUsdYr * Math.pow(1 + growth, h)) / Math.pow(1 + discountRate, h);
+  }
+  return total;
+}
+function detectionValueJs(recoverableUsdYr, tTotalMonths, conversion) {
+  const steady = (recoverableUsdYr || 0) * conversion;
+  if (tTotalMonths == null) return {year1: steady, steady};
+  const year1 = steady * Math.max(0, 1 - tTotalMonths / 12);
+  return {year1, steady};
+}
+function customerRoiPaybackMonthsJs(vYear1, vSteady, feeAnnual, repairOutlay, horizonYears) {
+  let cumBenefit = 0, cumCost = repairOutlay;
+  for (let month = 1; month <= horizonYears * 12; month++) {
+    const yearIdx = Math.floor((month - 1) / 12) + 1;
+    cumBenefit += (yearIdx === 1 ? vYear1 : vSteady) / 12;
+    cumCost += feeAnnual / 12;
+    if (cumBenefit >= cumCost) return month;
+  }
+  return null;
+}
+function customerRoiIrrJs(vYear1, vSteady, feeAnnual, repairOutlay, horizonYears) {
+  const npv = (rate) => {
+    let b = 0, f = 0;
+    for (let h = 1; h <= horizonYears; h++) {
+      b += (h === 1 ? vYear1 : vSteady) / Math.pow(1 + rate, h);
+      f += feeAnnual / Math.pow(1 + rate, h);
+    }
+    return b - f - repairOutlay;
+  };
+  let lo = -0.9, hi = 20.0, npvLo = npv(lo), npvHi = npv(hi);
+  if (npvLo * npvHi > 0) return null;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2, npvMid = npv(mid);
+    if (Math.abs(npvMid) < 1e-6) return mid;
+    if (npvLo * npvMid < 0) hi = mid; else { lo = mid; npvLo = npvMid; }
+  }
+  return (lo + hi) / 2;
+}
+function computeCustomerRoiJs(vYear1, vSteady, feeAnnual, repairCostUsd, repairUneconomic, rvmActive, horizonYears, discountRate) {
+  if (repairUneconomic) return {benefit: null, ssiFees: null, repairOutlay: null, cost: null, netBenefit: null, roiMultiple: null, paybackMonths: null, irr: null, excluded: true};
+  let benefit = 0, ssiFees = 0;
+  for (let h = 1; h <= horizonYears; h++) {
+    benefit += (h === 1 ? vYear1 : vSteady) / Math.pow(1 + discountRate, h);
+    ssiFees += feeAnnual / Math.pow(1 + discountRate, h);
+  }
+  const repairOutlay = (repairCostUsd || 0) * (rvmActive ? 1.20 : 1.00);
+  const cost = ssiFees + repairOutlay;
+  const netBenefit = benefit - cost;
+  const roiMultiple = cost > 0 ? benefit / cost : null;
+  return {
+    benefit, ssiFees, repairOutlay, cost, netBenefit, roiMultiple,
+    paybackMonths: customerRoiPaybackMonthsJs(vYear1, vSteady, feeAnnual, repairOutlay, horizonYears),
+    irr: customerRoiIrrJs(vYear1, vSteady, feeAnnual, repairOutlay, horizonYears),
+    excluded: false,
+  };
+}
+
+// The single mutation point: recomputes every derived $ field on every site
+// for `benchmark`, in place, then updates the fleet totals - every existing
+// display in this template reads these same field names, so nothing else
+// has to change to pick up the new benchmark (B6-style global toggle, same
+// pattern as the cockpit's Pass 3 geography/relationship controls).
+// test 86 requires EXACT parity at P75 against S9's own authoritative
+// output - the client-side shortcut recompute is algebraically equivalent
+// but uses fleet percentiles rounded to 3dp for display (DATA.kpi.pri_p75),
+// which drifts the result by a fraction of a percent. Cheapest fix that
+// doesn't require shipping full-precision constants: snapshot every site's
+// server-computed originals once, and for P75 specifically restore them
+// verbatim instead of recomputing - P50/GOLDEN still recompute, since
+// they have no "authoritative" server figure to match against.
+function snapshotOriginals() {
+  if (DATA._origCached) return;
+  DATA.sites.forEach(site => {
+    site._orig = {recoverable_usd_yr: site.recoverable_usd_yr, recoverable_mwh_yr: site.recoverable_mwh_yr, value_usd: site.value_usd};
+  });
+  DATA._origKpi = {recoverable_usd_yr: DATA.kpi.recoverable_usd_yr, recoverable_mwh_yr: DATA.kpi.recoverable_mwh_yr};
+  DATA._origCached = true;
+}
+
+function applyBenchmark(benchmark) {
+  snapshotOriginals();
+  state.benchmark = benchmark;
+  try { localStorage.setItem(BENCHMARK_KEY, benchmark); } catch(e) {}
+  const croiCfg = DATA.meta.customer_roi;
+  const horizon = croiCfg.horizon_years, discountRate = croiCfg.discount_rate, conversion = croiCfg.conversion;
+  let totalUsd = 0, totalMwh = 0, nFellBack = 0;
+  DATA.sites.forEach(site => {
+    const rec = benchmark === 'P75'
+      ? {recoverable_usd_yr: site._orig.recoverable_usd_yr, recoverable_mwh_yr: site._orig.recoverable_mwh_yr, monthlyValue: site._orig.value_usd, fellBack: false}
+      : computeSiteRecoverable(site, benchmark);
+    site.recoverable_usd_yr = rec.recoverable_usd_yr;
+    site.recoverable_mwh_yr = rec.recoverable_mwh_yr;
+    site.value_usd = rec.monthlyValue;
+    site.benchmark_fell_back = rec.fellBack;
+    if (rec.fellBack) nFellBack++;
+    totalUsd += rec.recoverable_usd_yr || 0;
+    totalMwh += rec.recoverable_mwh_yr || 0;
+
+    const coi = costOfInactionJs(site.recoverable_usd_yr, site.beta_excess, site.beta_t, horizon, discountRate);
+    const feeAnnual = site.annual_fee_usd || 0;
+    const ssiCost = feeAnnual * horizon;
+    const netBenefit = (coi || 0) - ssiCost;
+    let roiMultiple = (coi && ssiCost > 0) ? coi / ssiCost : null;
+    const ratioSuppressed = roiMultiple != null && roiMultiple > croiCfg.ratio_suppression_threshold;
+    const tTotal = (site.t_detect_months != null && site.t_remediate_months != null) ? site.t_detect_months + site.t_remediate_months : null;
+    const value = detectionValueJs(site.recoverable_usd_yr, tTotal, conversion);
+    site.cost_of_inaction_usd = coi;
+    site.net_benefit_usd = coi != null ? netBenefit : null;
+    site.roi_multiple = ratioSuppressed ? null : roiMultiple;
+    site.ratio_suppressed = ratioSuppressed;
+    site.payback_months = (feeAnnual > 0 && value.steady) ? 12 * feeAnnual / value.steady : null;
+    site.v_detect_year1_usd = value.year1;
+    site.v_detect_steady_usd = value.steady;
+
+    const rvmActive = (site.recommended_offerings || []).includes('RVM');
+    const croi = computeCustomerRoiJs(value.year1, value.steady, feeAnnual, site.repair_cost_usd,
+                                       site.repair_uneconomic, rvmActive, horizon, discountRate);
+    site.customer_roi_benefit_usd = croi.benefit;
+    site.customer_roi_ssi_fees_usd = croi.ssiFees;
+    site.customer_roi_repair_outlay_usd = croi.repairOutlay;
+    site.customer_roi_cost_usd = croi.cost;
+    site.customer_roi_net_benefit_usd = croi.netBenefit;
+    site.customer_roi_multiple = croi.roiMultiple;
+    site.customer_roi_payback_months = croi.paybackMonths;
+    site.customer_roi_irr = croi.irr;
+    site.customer_roi_excluded = croi.excluded;
+  });
+  DATA.kpi.recoverable_usd_yr = totalUsd;
+  DATA.kpi.recoverable_mwh_yr = totalMwh;
+  DATA.kpi.benchmark_fellback_count = nFellBack;
+}
+
+function benchmarkNoteText(benchmark) {
+  const kpi = DATA.kpi;
+  const base = {
+    P50: `Conservative (P50): reach the fleet median PRI/PI (${kpi.pri_p50.toFixed(3)} / ${kpi.pi_p50.toFixed(3)}).`,
+    P75: `Attainable (P75): reach what one in four comparable plants already achieve (${kpi.pri_p75.toFixed(3)} / ${kpi.pi_p75.toFixed(3)}).`,
+    GOLDEN: `Proven (Golden year): each site's own best proven year, floored at P50 and degradation-adjusted.`,
+  }[benchmark];
+  const fellBack = kpi.benchmark_fellback_count || 0;
+  const fallbackNote = (benchmark === 'GOLDEN' && fellBack) ? ` ${fellBack.toLocaleString()} site(s) have no golden year available (capacity-suspect or under 2 years of history) and fell back to Attainable (P75), marked.` : '';
+  return base + fallbackNote + ' Applies everywhere recoverable revenue, cost of inaction or ROI is shown, including exports.';
+}
+
+function renderBenchmarkSeg() {
+  const seg = document.getElementById('benchmark-seg');
+  seg.innerHTML = '';
+  ['P50', 'P75', 'GOLDEN'].forEach(b => {
+    const [label, sub] = BENCHMARK_LABELS[b];
+    seg.appendChild(el('button', {class: state.benchmark === b ? 'active' : '',
+      title: sub, onclick: () => { applyBenchmark(b); render(); }}, [label]));
+  });
+  document.getElementById('benchmark-note').textContent = benchmarkNoteText(state.benchmark);
+}
+applyBenchmark(state.benchmark);  // run once at load so P50/GOLDEN persist across a reload, not just P75's server-computed defaults
 
 function loadTriage() {
   try { return JSON.parse(localStorage.getItem('triage_state') || '{}'); } catch(e) { return {}; }
@@ -795,7 +1047,11 @@ function exportCsv() {
   const cols = ['site','state','operator','mwac','mwdc','dcac','tracking','cod','years_present','latest_pi','latest_pri','latest_d',
     'latest_scored_month','months_since_last_scored','stale',
     'beta','beta_t','fault_months','episode_count','top_signature','conviction_tier','recoverable_mwh_yr','recoverable_usd_yr'];
-  const rows = [cols.join(',')].concat(list.map(s => cols.map(c => JSON.stringify(s[c]===undefined?'':s[c])).join(',')));
+  // Part 1.4: "show the active benchmark on every export... a pitch page
+  // printed under P50 and one printed under Golden are different
+  // commercial documents and must be distinguishable after the fact."
+  const stamp = `# Recovery benchmark: ${BENCHMARK_LABELS[state.benchmark][0]} (${BENCHMARK_LABELS[state.benchmark][1]}), exported ${new Date().toISOString()}`;
+  const rows = [stamp, cols.join(',')].concat(list.map(s => cols.map(c => JSON.stringify(s[c]===undefined?'':s[c])).join(',')));
   const blob = new Blob([rows.join('\n')], {type:'text/csv'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'triage_filtered.csv'; a.click();
 }
@@ -1008,6 +1264,26 @@ function renderDetail() {
   header.appendChild(note);
   m.appendChild(header);
 
+  // Part 1.4: "a small comparison strip... so a CFO sees the range rather
+  // than a single figure presented as fact" - computed fresh here (pure,
+  // doesn't touch the active benchmark's applied state) rather than
+  // switching the toggle three times.
+  const benchPanel = el('div', {class:'card-panel'});
+  panelHeader(benchPanel, 'RECOVERY BENCHMARK', 'This site\'s recoverable $/yr under all three settings',
+    'The active setting (top nav) is what every other screen and export uses. Golden year floors at P50 and degradation-adjusts, so it can never read lower than a fair comparison would allow.');
+  const benchCards = el('div', {class:'cards'});
+  ['P50','P75','GOLDEN'].forEach(b => {
+    const rec = b === 'P75' ? {recoverable_usd_yr: s._orig.recoverable_usd_yr, fellBack: false} : computeSiteRecoverable(s, b);
+    const [label] = BENCHMARK_LABELS[b];
+    const active = state.benchmark === b;
+    benchCards.appendChild(el('div', {class:'card', style: active ? 'outline:2px solid var(--accent)' : ''}, [
+      el('div',{class:'v'},[fmtUsd(rec.recoverable_usd_yr)]),
+      el('div',{class:'l'},[`${label} (${BENCHMARK_LABELS[b][1]})${rec.fellBack ? ' — no golden year, using P75' : ''}${b === 'GOLDEN' && s.already_at_best ? ' — already at its best' : ''}${active ? ' — active' : ''}`]),
+    ]));
+  });
+  benchPanel.appendChild(benchCards);
+  m.appendChild(benchPanel);
+
   // monthly chart
   const chartPanel = el('div', {class:'card-panel'});
   panelHeader(chartPanel, 'PERFORMANCE', 'Monthly actual vs. expected generation',
@@ -1219,6 +1495,7 @@ function renderHeaderControls() {
 
 function render() {
   renderHeaderControls();
+  renderBenchmarkSeg();
   document.querySelectorAll('#topbar nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===state.view));
   if (state.view==='owners') renderOwners();
   else if (state.view==='fleet') renderFleet();

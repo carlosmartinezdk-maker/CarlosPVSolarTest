@@ -62,8 +62,29 @@ EPISODE_GAP_TOLERANCE_MONTHS = 1
 
 # PRI_P75 is NOT hardcoded - it is computed from this fleet at runtime
 # (Section 6: "the methodology observed 1.056 on a different fleet. Do not
-# hardcode."). See s9_dollars.compute_pri_p75().
+# hardcode."). See recovery_benchmark.compute_percentiles().
 PRI_P75_REFERENCE_OTHER_FLEET = 1.056  # for comparison/sanity only, never used directly
+
+# --------------------------------------------------------------------------
+# Recovery benchmark toggle (RECOVERY_BENCHMARK_AND_CUSTOMER_ROI.md Part 1/3)
+# --------------------------------------------------------------------------
+RECOVERY_BENCHMARK_DEFAULT = "P75"                # P50 | P75 | GOLDEN
+RECOVERY_BENCHMARK_RECOMPUTE_PERCENTILES = True   # never hardcode; they move with coverage
+CAPACITY_SUSPECT_PI_THRESHOLD = 1.35              # trailing-12mo median PI above this -> bad MWdc denominator, not real performance
+GOLDEN_MIN_MONTHS_IN_YEAR = 6
+GOLDEN_MIN_YEARS_HISTORY = 2
+GOLDEN_FLOOR_AT = "P50"                           # REQUIRED - unfloored golden year is a WEAKER target than P75 on half the fleet
+GOLDEN_CAP_PRI = 1.20
+GOLDEN_DEGRADATION_ADJUST = True
+GOLDEN_EXCLUDE_CAPACITY_SUSPECT = True
+
+# --------------------------------------------------------------------------
+# Customer-side ROI (RECOVERY_BENCHMARK_AND_CUSTOMER_ROI.md Part 2/3)
+# --------------------------------------------------------------------------
+# horizon_years/discount_rate/conversion (detection_to_remediation) already
+# live in pricing.yaml and are reused as-is - not duplicated here.
+CUSTOMER_ROI_INCLUDE_REPAIR_SPEND = True   # REQUIRED - repair spend is ~81% of what the customer actually pays
+CUSTOMER_ROI_RVM_FRAMING_DEFAULT = "incremental"  # incremental | gross
 
 # --------------------------------------------------------------------------
 # Warranty defaults - ASSUMED, not contractual (Section 6 / S7e)

@@ -12,23 +12,29 @@ import logging
 import numpy as np
 import pandas as pd
 
-import config
-
 logging.basicConfig(level=logging.INFO, format="%(asctime)s S9 %(message)s")
 log = logging.getLogger("s9")
 
+import config
+import recovery_benchmark
+
 
 def compute_pri_p75(df: pd.DataFrame) -> float:
+    """Thin wrapper over recovery_benchmark.compute_percentiles() - kept so
+    S9's own call sites/tests don't change, but the actual math lives in one
+    place (RECOVERY_BENCHMARK_AND_CUSTOMER_ROI.md §1.1 needs P50 alongside
+    this P75, and duplicating the quantile logic in two files is exactly
+    the kind of drift this project keeps finding and fixing)."""
     peer_pri = df.loc[df["benchmark_mode"] == "peer", "PRI"].dropna()
     if len(peer_pri) < 20:
         log.warning("only %d peer-benchmarked PRI values in this run - PRI_P75 "
                     "will be noisy at subsample scale. Reference fleet (different "
                     "dataset) observed 1.056; NOT used directly per Section 6.", len(peer_pri))
-    return peer_pri.quantile(0.75) if len(peer_pri) else np.nan
+    return recovery_benchmark.compute_percentiles(df)["pri_p75"] or np.nan
 
 
 def compute_pi_p75(df: pd.DataFrame) -> float:
-    return df["PI"].dropna().quantile(0.75)
+    return recovery_benchmark.compute_percentiles(df)["pi_p75"] or np.nan
 
 
 def target_gap_recoverable(df: pd.DataFrame, pri_p75: float, pi_p75: float) -> pd.DataFrame:
@@ -100,6 +106,12 @@ def main():
     pri_p75 = compute_pri_p75(df)
     pi_p75 = compute_pi_p75(df)
     log.info("PRI_P75 (this fleet) = %.4f | PI_P75 (this fleet) = %.4f", pri_p75, pi_p75)
+    # Part 1's switchable benchmark needs P50 too ("Conservative" setting) -
+    # logged here for visibility; recovery_benchmark.py (run after S9) is
+    # the authoritative writer of all four percentiles plus the golden-year
+    # table, since P50/P75 alone aren't the whole toggle.
+    pct = recovery_benchmark.compute_percentiles(df)
+    log.info("PRI_P50 (this fleet) = %.4f | PI_P50 (this fleet) = %.4f", pct["pri_p50"], pct["pi_p50"])
 
     df = target_gap_recoverable(df, pri_p75, pi_p75)
     df = tracker_quick_estimate(df)

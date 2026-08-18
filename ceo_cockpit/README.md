@@ -30,25 +30,15 @@ in `data/` here is a small, git-committable export instead.
   Reliability tab).
 
 `pricing.yaml` and `config.py` are already tracked in the main repo and
-come along with a normal clone - not duplicated here.
+come along with a normal clone - not duplicated here. `pricing.yaml` is
+the single source of truth for the Solar SaaS / SCADA Monitoring rates
+(fixed at source 17 Aug 2026 - see `tests/test_pricing.py`); both
+`explorer.html` and `ceo_cockpit.html` read from it directly rather than
+carrying their own copies, so they can never disagree on fee potential.
 
-## Two things the next session needs to know before starting
+## One thing the next session needs to know before starting
 
-**1. The 12x pricing bug in spec Section 1.1 is real, and `pricing.yaml`
-is shared with the main pipeline.** Solar SaaS and SCADA Monitoring are
-priced per MWdc per MONTH, not per year - `pricing.yaml` currently has
-them as flat annual rates, which is wrong by 12x. Every `annual_fee_usd`,
-`roi_multiple`, and `cost_of_inaction_usd`-vs-fee comparison already in
-`explorer.html`, `SSI_Solar_Reliability_Metrics.xlsx`, and this handoff's
-`site_summary.parquet` inherits that error. Fixing `pricing.yaml` for the
-cockpit (as the spec requires) will change those numbers everywhere else
-too, the next time the main pipeline is rebuilt. **Flag this back to
-Carlos explicitly rather than silently fixing it in isolation** - he
-should decide whether/when the main analysis branch re-runs S9-S17 with
-corrected pricing, since that's a larger, separate action from building
-the cockpit.
-
-**2. Script naming collision.** The spec names the build script
+**Script naming collision.** The spec names the build script
 `s12_ceo_cockpit.py`, but `s12_lifedata.py` already exists in this repo
 (life-data construction, part of the S12-S17 reliability addendum built
 earlier). Use `s18_ceo_cockpit.py` instead, continuing the existing
