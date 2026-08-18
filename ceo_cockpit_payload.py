@@ -93,7 +93,24 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
             owner_entity=a["owner_entity"], relationship=a["relationship"],
             n_sites=ri(a["n_sites"]), mwdc=r(a["mwdc"], 1), states=a["states"],
             coi_3yr_usd=r(a["coi_3yr_usd"]), recoverable_usd_yr=r(a["recoverable_usd_yr"]),
+            # Part 1: P50/GOLDEN alternates - P75 IS recoverable_usd_yr
+            # above, kept as-is rather than re-derived a second way.
+            recoverable_usd_yr_p50=r(a["recoverable_usd_yr_p50"]),
+            recoverable_usd_yr_golden=r(a["recoverable_usd_yr_golden"]),
             fee_annual_usd=r(a["fee_annual_usd"]), fee_as_pct_of_loss=r(a["fee_as_pct_of_loss"], 4),
+            # Part 2: customer-side ROI - what the customer actually pays
+            # (fees + repair spend), not just our fee. Never summed with
+            # fee_annual_usd/total_ssi_potential_usd_yr above - different
+            # questions, same "never sum them" rule as Pass 3 §2.2.
+            repair_cost_usd=r(a["repair_cost_usd"]), rvm_fee_gross_usd=r(a["rvm_fee_gross_usd"]),
+            rvm_fee_incremental_usd=r(a["rvm_fee_incremental_usd"]), n_rvm_eligible=ri(a["n_rvm_eligible"]),
+            n_repair_uneconomic=ri(a["n_repair_uneconomic"]),
+            customer_roi_benefit_usd=r(a["customer_roi_benefit_usd"]),
+            customer_roi_ssi_fees_usd=r(a["customer_roi_ssi_fees_usd"]),
+            customer_roi_repair_outlay_usd=r(a["customer_roi_repair_outlay_usd"]),
+            customer_roi_cost_usd=r(a["customer_roi_cost_usd"]),
+            customer_roi_net_benefit_usd=r(a["customer_roi_net_benefit_usd"]),
+            customer_roi_multiple=r(a["customer_roi_multiple"], 2) if pd.notna(a["customer_roi_multiple"]) else None,
             # Pass 3 §2.2: "lead-offering fee" (fee_annual_usd, above) vs.
             # "total potential at full attach" (below) - two different
             # questions, kept as separately-labelled fields, never summed.
@@ -241,6 +258,26 @@ def build_payload(sites, account, in_scope, plays, coverage, gtm, whitespace_all
             # must never be summed or shown without their distinct labels.
             in_scope_total_ssi_potential_usd=r(in_scope["total_ssi_potential_usd_yr"].sum()),
             inspection_coverage=dict(n=int(in_scope["n_sites_insp_fitted"].sum()), of=n_in_scope_sites),
+            # Part 1: the active benchmark control needs the fleet's own
+            # in-scope totals under P50/GOLDEN too, alongside the existing
+            # (P75) in_scope_coi_usd/recoverable figures above.
+            in_scope_recoverable_usd_yr=r(in_scope["recoverable_usd_yr"].sum()),
+            in_scope_recoverable_usd_yr_p50=r(in_scope["recoverable_usd_yr_p50"].sum()),
+            in_scope_recoverable_usd_yr_golden=r(in_scope["recoverable_usd_yr_golden"].sum()),
+            recovery_benchmark_default="P75",
+            # Part 2: fleet-wide customer ROI, summed components (never
+            # averaged ratios) - same rule as every account-level figure.
+            customer_roi=dict(
+                benefit_usd=r(in_scope["customer_roi_benefit_usd"].sum()),
+                ssi_fees_usd=r(in_scope["customer_roi_ssi_fees_usd"].sum()),
+                repair_outlay_usd=r(in_scope["customer_roi_repair_outlay_usd"].sum()),
+                cost_usd=r(in_scope["customer_roi_cost_usd"].sum()),
+                net_benefit_usd=r(in_scope["customer_roi_net_benefit_usd"].sum()),
+                multiple=r(in_scope["customer_roi_benefit_usd"].sum() / in_scope["customer_roi_cost_usd"].sum(), 2)
+                         if in_scope["customer_roi_cost_usd"].sum() > 0 else None,
+                n_rvm_eligible=int(in_scope["n_rvm_eligible"].sum()),
+                n_repair_uneconomic=int(in_scope["n_repair_uneconomic"].sum()),
+            ),
             matched_gtm_accounts=coverage["matched_gtm_accounts"],
             # Pass 3 §4: shared lookups for the site-detail arrays below -
             # every in-scope site shares this identical month grid, so it's

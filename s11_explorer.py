@@ -227,6 +227,86 @@ def cost_of_inaction(recoverable_usd_yr, beta_excess, beta_t, horizon_years, dis
     return r(total, 0)
 
 
+def _customer_roi_payback_months(v_year1, v_steady, fee_annual, repair_outlay, horizon_years):
+    """Month the customer's cumulative benefit first equals or exceeds their
+    cumulative cost - repair_outlay lands undiscounted in month 1 alongside
+    the first month's fee/recovered-value slice, per §2.2's cash-flow rule."""
+    cum_benefit, cum_cost = 0.0, repair_outlay
+    for month in range(1, horizon_years * 12 + 1):
+        year_idx = (month - 1) // 12 + 1
+        cum_benefit += (v_year1 if year_idx == 1 else v_steady) / 12
+        cum_cost += fee_annual / 12
+        if cum_benefit >= cum_cost:
+            return month
+    return None
+
+
+def _customer_roi_irr(v_year1, v_steady, fee_annual, repair_outlay, horizon_years):
+    """Discount rate where net_benefit = 0 - repair_outlay stays undiscounted
+    (it lands in year 1 regardless of rate) while benefit/fees discount with
+    r, matching §2.2's own definitions for benefit and cost. Bisection over
+    a wide bracket; returns None if no root exists in range (e.g. the site
+    never breaks even, or breaks even so fast even a very high rate can't
+    erase the surplus)."""
+    def npv(rate):
+        b = sum((v_year1 if h == 1 else v_steady) / (1 + rate) ** h for h in range(1, horizon_years + 1))
+        f = sum(fee_annual / (1 + rate) ** h for h in range(1, horizon_years + 1))
+        return b - f - repair_outlay
+    lo, hi = -0.9, 20.0
+    npv_lo, npv_hi = npv(lo), npv(hi)
+    if npv_lo * npv_hi > 0:
+        return None
+    for _ in range(60):
+        mid = (lo + hi) / 2
+        npv_mid = npv(mid)
+        if abs(npv_mid) < 1e-6:
+            return mid
+        if (npv_lo * npv_mid) < 0:
+            hi = mid
+        else:
+            lo, npv_lo = mid, npv_mid
+    return (lo + hi) / 2
+
+
+def compute_customer_roi(v_detect_year1, v_detect_steady, fee_annual, repair_cost_usd,
+                          repair_uneconomic, rvm_active, horizon_years, discount_rate) -> dict:
+    """RECOVERY_BENCHMARK_AND_CUSTOMER_ROI.md §2.2 - what the CUSTOMER
+    actually pays (SSI fees AND repair spend), not just our fee. Kept as
+    its own field namespace (customer_roi_*) rather than overwriting the
+    existing SSI-fee-only roi_multiple/net_benefit_usd/payback_months -
+    the two answer different questions and, per §1.3's "never sum them"
+    precedent for the benchmark toggle, must never be confused for each
+    other either.
+
+    §2.1's own reference run: benefit $601.6M, SSI fees $42.3M, repair
+    $182.5M, total cost $224.7M, net $376.9M, ROI 2.7x - repair is 81% of
+    what the customer pays, which is the whole point of this section."""
+    if repair_uneconomic:
+        return dict(customer_roi_benefit_usd=None, customer_roi_ssi_fees_usd=None,
+                     customer_roi_repair_outlay_usd=None, customer_roi_cost_usd=None,
+                     customer_roi_net_benefit_usd=None, customer_roi_multiple=None,
+                     customer_roi_payback_months=None, customer_roi_irr=None,
+                     customer_roi_excluded=True)
+    benefit = sum((v_detect_year1 if h == 1 else v_detect_steady) / (1 + discount_rate) ** h
+                  for h in range(1, horizon_years + 1))
+    ssi_fees = sum(fee_annual / (1 + discount_rate) ** h for h in range(1, horizon_years + 1))
+    repair_outlay = (repair_cost_usd or 0) * (1.20 if rvm_active else 1.00)
+    customer_cost = ssi_fees + repair_outlay
+    net_benefit = benefit - customer_cost
+    roi_multiple = (benefit / customer_cost) if customer_cost > 0 else None
+    payback = _customer_roi_payback_months(v_detect_year1, v_detect_steady, fee_annual, repair_outlay, horizon_years)
+    irr = _customer_roi_irr(v_detect_year1, v_detect_steady, fee_annual, repair_outlay, horizon_years)
+    return dict(
+        customer_roi_benefit_usd=r(benefit, 0), customer_roi_ssi_fees_usd=r(ssi_fees, 0),
+        customer_roi_repair_outlay_usd=r(repair_outlay, 0), customer_roi_cost_usd=r(customer_cost, 0),
+        customer_roi_net_benefit_usd=r(net_benefit, 0),
+        customer_roi_multiple=r(roi_multiple, 2) if roi_multiple is not None else None,
+        customer_roi_payback_months=payback,
+        customer_roi_irr=r(irr, 3) if irr is not None else None,
+        customer_roi_excluded=False,
+    )
+
+
 def compute_roi(recoverable_usd_yr, offerings, mwdc, signature, severity, beta_excess, beta_t, pricing) -> dict:
     off = pricing["offerings"]
     fee = 0.0
@@ -258,6 +338,15 @@ def compute_roi(recoverable_usd_yr, offerings, mwdc, signature, severity, beta_e
     payback_months = (12 * fee / value["v_detect_steady_usd"]) if (fee > 0 and value["v_detect_steady_usd"]) else None
     ratio_suppressed = bool(roi_multiple is not None and roi_multiple > pricing["ratio_suppression_threshold"])
 
+    # §2: customer-side ROI - includes what the customer pays for repairs,
+    # not just our fee. "RVM coordinates" = RVM is one of the recommended
+    # offerings (same condition as the rvm_fee_* fields above).
+    croi = compute_customer_roi(
+        v_detect_year1=value["v_detect_year1_usd"], v_detect_steady=value["v_detect_steady_usd"],
+        fee_annual=fee, repair_cost_usd=rc["repair_cost_usd"], repair_uneconomic=rc["repair_uneconomic"],
+        rvm_active="RVM" in offerings, horizon_years=horizon, discount_rate=pricing["discount_rate"],
+    )
+
     return dict(
         annual_fee_usd=r(fee, 0) if fee else 0, pricing_source="confirmed" if fee_sources else None,
         repair_cost_usd=rc["repair_cost_usd"], repair_cost_source=rc["repair_cost_source"],
@@ -268,6 +357,7 @@ def compute_roi(recoverable_usd_yr, offerings, mwdc, signature, severity, beta_e
         cost_of_inaction_usd=coi, net_benefit_usd=r(net_benefit, 0) if coi is not None else None,
         roi_multiple=None if ratio_suppressed else (r(roi_multiple, 1) if roi_multiple is not None else None),
         ratio_suppressed=ratio_suppressed, payback_months=r(payback_months, 1) if payback_months is not None else None,
+        **croi,
     )
 
 
@@ -346,6 +436,13 @@ def build_payload() -> dict:
         eal_decile_cutoff = None
 
     reliability_site_lookup = load_reliability_site_lookup()
+
+    # Part 1: switchable recovery benchmark (RECOVERY_BENCHMARK_AND_CUSTOMER_ROI.md).
+    # recovery_benchmark.py is a separate pipeline step run after S9 - read
+    # its outputs rather than recomputing the golden-year guards here.
+    golden = pd.read_parquet("data/recovery_benchmark.parquet").set_index("site")
+    with open("data/recovery_benchmark_meta.json") as f:
+        rb_meta = json.load(f)
 
     site_payloads = []
     for _, srow in sites.iterrows():
@@ -441,7 +538,16 @@ def build_payload() -> dict:
         # fraction was fitted, D otherwise (addendum section 3).
         age_years = srow.get("plant_age")
         age_years = None if pd.isna(age_years) else float(age_years)
-        warranty_active = bool(age_years is not None and age_years < config.WARRANTY_DEFAULTS_YEARS["module_performance"])
+        # RECOVERY_BENCHMARK_AND_CUSTOMER_ROI.md §2.4: this warranty_active
+        # feeds RVM eligibility ("not warranty_active"), not the reliability
+        # warranty-valuation math in S14 - but it was using the blanket 25yr
+        # module_performance term, which config.py's own comment says marks
+        # ~all sites "in warranty" for every fault type. That collapsed RVM
+        # eligibility to a single site fleet-wide. S14 already solved this
+        # correctly for reliability failures with RELIABILITY_WARRANTY_YEARS
+        # (blended inverter/module_product term, ~11yr) - use the same fix
+        # here rather than reinventing it.
+        warranty_active = bool(age_years is not None and age_years < config.RELIABILITY_WARRANTY_YEARS)
         fault_idxs = [i for i, sgv in enumerate(sig_final) if sgv not in ("NONE", "UNSCORED", "WATCH_NOT_A_FAULT")]
         if fault_idxs:
             fi = fault_idxs[-1]
@@ -470,8 +576,25 @@ def build_payload() -> dict:
             beta_t=t["beta_t"] if t is not None else None, pricing=pricing,
         )
 
+        # Part 1: the golden-year target and its guard flags - P50/P75 are
+        # fleet-wide constants (payload meta, below), so only the per-site
+        # "Proven" ingredients need to travel with each site.
+        gy = golden.loc[site] if site in golden.index else None
+        golden_out = dict(
+            golden_available=bool(gy["golden_available"]) if gy is not None else False,
+            golden_reason=gy["golden_reason"] if gy is not None else "not_computed",
+            golden_year=ri(gy["golden_year"]) if gy is not None and pd.notna(gy["golden_year"]) else None,
+            pri_golden_raw=r(gy["pri_golden_raw"], 4) if gy is not None and pd.notna(gy["pri_golden_raw"]) else None,
+            pri_golden_floored=r(gy["pri_golden_floored"], 4) if gy is not None and pd.notna(gy["pri_golden_floored"]) else None,
+            pri_golden_capped_flag=bool(gy["pri_golden_capped_flag"]) if gy is not None else False,
+            pi_golden_floored=r(gy["pi_golden_floored"], 4) if gy is not None and pd.notna(gy["pi_golden_floored"]) else None,
+            degradation_rate_annual=r(gy["degradation_rate_annual"], 4) if gy is not None else None,
+            already_at_best=bool(gy["already_at_best"]) if gy is not None else False,
+            capacity_suspect=bool(gy["capacity_suspect"]) if gy is not None else False,
+        )
+
         site_payloads.append(dict(
-            **routing, **roi,
+            **routing, **roi, **golden_out,
             site=site, state=srow.get("state"), operator=srow.get("operator"),
             utility=srow.get("utility"), county=srow.get("county"), ba=srow.get("ba"),
             plant_id=r(srow.get("plant_id"), 0), mwac=r(srow.get("mwac"), 2), mwdc=r(srow.get("mwdc"), 2),
@@ -583,6 +706,24 @@ def build_payload() -> dict:
                 dict(name="warranty terms", value="2y EPC / 5-10y inverter / 10-12y module / 25y perf.", status="assumed default, not contractual"),
                 dict(name="weather source this run", value=weather_source_assumption, status=weather_source_status),
             ],
+            # Part 1.4: the active benchmark must be stamped on every export
+            # and printed page - the client reads this for the guard
+            # thresholds/labels rather than hardcoding them a second time.
+            recovery_benchmark=dict(
+                default=config.RECOVERY_BENCHMARK_DEFAULT,
+                percentiles=rb_meta["percentiles"],
+                golden_min_months_in_year=config.GOLDEN_MIN_MONTHS_IN_YEAR,
+                golden_min_years_history=config.GOLDEN_MIN_YEARS_HISTORY,
+                golden_cap_pri=config.GOLDEN_CAP_PRI,
+                golden_floor_at=config.GOLDEN_FLOOR_AT,
+            ),
+            customer_roi=dict(
+                horizon_years=pricing["horizon_years"], discount_rate=pricing["discount_rate"],
+                conversion=pricing["conversion"]["detection_to_remediation"],
+                rvm_framing_default=config.CUSTOMER_ROI_RVM_FRAMING_DEFAULT,
+                include_repair_spend=config.CUSTOMER_ROI_INCLUDE_REPAIR_SPEND,
+                ratio_suppression_threshold=pricing["ratio_suppression_threshold"],
+            ),
         ),
         funnel=funnel.to_dict(orient="records"),
         kpi=dict(
@@ -594,11 +735,15 @@ def build_payload() -> dict:
             recoverable_mwh_yr=r(total_recoverable_mwh_yr, 0),
             recoverable_usd_yr=r(total_recoverable_usd_yr, 0),
             pi_p25=r(np.percentile(all_pi, 25), 3) if all_pi else None,
-            pi_p50=r(np.percentile(all_pi, 50), 3) if all_pi else None,
-            pi_p75=r(np.percentile(all_pi, 75), 3) if all_pi else None,
+            # p50/p75 come from recovery_benchmark_meta.json (recovery_benchmark.py,
+            # the same function s9_dollars.py now calls) rather than being
+            # recomputed here a third way - test 86 needs these to match
+            # S9's own PRI_P75/PI_P75 exactly, not just approximately.
+            pi_p50=r(rb_meta["percentiles"]["pi_p50"], 3),
+            pi_p75=r(rb_meta["percentiles"]["pi_p75"], 3),
             pri_p25=r(np.percentile(all_pri, 25), 3) if all_pri else None,
-            pri_p50=r(np.percentile(all_pri, 50), 3) if all_pri else None,
-            pri_p75=r(np.percentile(all_pri, 75), 3) if all_pri else None,
+            pri_p50=r(rb_meta["percentiles"]["pri_p50"], 3),
+            pri_p75=r(rb_meta["percentiles"]["pri_p75"], 3),
         ),
         signature_counts=sig_counts,
         year_signature_counts=year_sig_counts,
@@ -800,8 +945,26 @@ def sanitize(obj):
     return obj
 
 
+def write_roi_export(site_payloads: list) -> None:
+    """RECOVERY_BENCHMARK_AND_CUSTOMER_ROI.md - repair cost, RVM fees and
+    customer-ROI are all computed here, once, per §6's own recurring
+    caution (the cockpit's site view should read the same functions, not
+    reimplement them). ceo_cockpit reads this rather than recomputing."""
+    cols = ["site", "repair_cost_usd", "repair_uneconomic", "rvm_fee_gross_usd", "rvm_fee_incremental_usd",
+            "rvm_eligible", "customer_roi_benefit_usd", "customer_roi_ssi_fees_usd",
+            "customer_roi_repair_outlay_usd", "customer_roi_cost_usd", "customer_roi_net_benefit_usd",
+            "customer_roi_multiple", "customer_roi_payback_months", "customer_roi_irr",
+            "customer_roi_excluded", "golden_available", "golden_year", "pri_golden_raw",
+            "pri_golden_floored", "pri_golden_capped_flag", "pi_golden_floored",
+            "degradation_rate_annual", "already_at_best", "capacity_suspect"]
+    rows = [{c: s.get(c) for c in cols} for s in site_payloads]
+    pd.DataFrame(rows).to_parquet("data/site_roi_export.parquet", index=False)
+    log.info("wrote data/site_roi_export.parquet: %d sites", len(rows))
+
+
 def main():
     payload = build_payload()
+    write_roi_export(payload["sites"])
     payload = sanitize(payload)
     payload_json = json.dumps(payload, separators=(",", ":"))
     size_mb = len(payload_json.encode("utf-8")) / 1e6

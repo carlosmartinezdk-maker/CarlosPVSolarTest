@@ -37,12 +37,27 @@ def test_50_pricing_units():
 
 def test_51_no_bare_roi_multiple():
     """No ROI multiple renders anywhere in the cockpit template without an
-    adjacent dollar figure - the template drops ROI multiple as a hero
-    metric entirely per spec Section 2, using fee_as_pct_of_loss and
-    payback_weeks instead."""
+    adjacent dollar figure - originally (CEO_COCKPIT_REVISIONS_PASS2.md
+    Section 2) this meant dropping ROI multiple as a hero metric entirely,
+    using fee_as_pct_of_loss/payback_weeks instead, because the only ROI
+    figure that existed then was the SSI-fee-only ratio the later
+    RECOVERY_BENCHMARK_AND_CUSTOMER_ROI.md spec calls out by name as "a
+    number a CFO disbelieves" (16.8x). That later spec explicitly REQUIRES
+    showing the new, honest customer-inclusive ROI multiple - "Report ROI,
+    payback and net dollars together. Any one alone is manipulable" (§2.3)
+    - so the constraint narrows rather than disappears: no BARE multiple
+    (old SSI-only roi_multiple field, or customer_roi_multiple rendered
+    without the net-benefit/cost figures beside it), not "no multiple at
+    all"."""
     with open(os.path.join(REPO_ROOT, "ceo_cockpit_template.html")) as f:
         html = f.read()
-    assert "roi_multiple" not in html, "roi_multiple must not be rendered as a standalone hero metric"
+    assert "a.roi_multiple" not in html and "b.roi_multiple" not in html, (
+        "the old SSI-fee-only roi_multiple must not be rendered as a standalone hero metric")
+    # customer_roi_multiple is allowed, but only alongside net benefit and
+    # cost - never presented as a lone figure with nothing to check it against.
+    assert "customer_roi_multiple" in html, "the new customer-inclusive ROI multiple should be shown (§2.3)"
+    assert "customer_roi_net_benefit_usd" in html and "customer_roi_cost_usd" in html, (
+        "customer_roi_multiple must always render alongside net benefit and total cost, per §2.3's 'report together' rule")
     print("test 51 (no bare ROI multiple): passed")
 
 
@@ -363,7 +378,11 @@ def test_64_axes():
         page.select_option(".card-panel select", index=1)
         page.wait_for_timeout(300)
         pitch_text = page.eval_on_selector("main", "el => el.innerText")
-        assert "Cumulative USD" in pitch_text, "do-nothing-vs-engage chart missing its Y-axis title"
+        # RECOVERY_BENCHMARK_AND_CUSTOMER_ROI.md §2.3: this chart became a
+        # three-bar Do nothing/Fix it yourself/Engage comparison instead of
+        # a year-by-year cumulative projection, so its axis title changed
+        # from "Cumulative USD" to "3-year USD" to match.
+        assert "3-year USD" in pitch_text, "do-nothing/fix-it-yourself/engage chart missing its Y-axis title"
         assert "Expected failures (count, next 24 months)" in pitch_text, "what-breaks-next chart missing its X-axis title"
         assert "Fault type" in pitch_text, "what-breaks-next chart missing its Y-axis title"
         browser.close()

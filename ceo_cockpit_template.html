@@ -763,6 +763,41 @@ function renderMarket(m) {
     [`Whitespace share is an estimate bounded by GTM-account matching quality - only ${fmt.count(DATA.meta.matched_gtm_accounts)} of ${fmt.count(DATA.meta.total_accounts_all)} owners matched to a GTM record. Read it as an upper bound, not a settled figure - it will fall as matching improves. "Total potential at full attach" assumes every offering at every site, software (SaaS+SCADA) plus inspection at its reliability-optimal frequency - see Coverage & Books for the per-rep breakdown.`]));
   m.appendChild(headline);
 
+  // RECOVERY_BENCHMARK_AND_CUSTOMER_ROI.md Parts 1 & 2, fleet level.
+  const cr = DATA.meta.customer_roi;
+  const roiPanel = el('div', {class:'card-panel'});
+  panelHeader(roiPanel, 'CUSTOMER ROI', 'What the customer actually pays - fees AND repair spend, not just our fee',
+    `Repair is ${cr.cost_usd ? fmt.pct(cr.repair_outlay_usd/cr.cost_usd) : '—'} of what the customer pays here. This answers "what is this worth at full attach after the customer also pays to fix it" - a different question from Lead-offering fee/Total potential above, and never summed with them.`);
+  const roiStrip = el('div', {class:'cards'});
+  [
+    ['Benefit (3yr, discounted)', fmt.usd(cr.benefit_usd)],
+    ['SSI fees (3yr)', fmt.usd(cr.ssi_fees_usd)],
+    ['Repair spend (3yr)', fmt.usd(cr.repair_outlay_usd)],
+    ['Total customer cost (3yr)', fmt.usd(cr.cost_usd)],
+    ['Net benefit (3yr)', fmt.usd(cr.net_benefit_usd)],
+    ['ROI multiple', cr.multiple!=null?fmt.ratio(cr.multiple):'—'],
+  ].forEach(([l,v]) => roiStrip.appendChild(el('div',{class:'card'},[el('div',{class:'v'},[String(v)]), el('div',{class:'l'},[l])])));
+  roiPanel.appendChild(roiStrip);
+  roiPanel.appendChild(el('div',{class:'small', style:'margin-top:6px'},
+    [`${fmt.count(cr.n_rvm_eligible)} in-scope site(s) are RVM-eligible. ${fmt.count(cr.n_repair_uneconomic)} site(s) excluded as repowering candidates (repair cost exceeds the uneconomic threshold), not counted above.`]));
+  m.appendChild(roiPanel);
+
+  // Part 1: benchmark comparison - the fleet total this screen already
+  // shows (recoverable_usd_yr, 3-yr CoI above) is computed at the
+  // Attainable (P75) setting; this states the other two for comparison
+  // without silently changing what every account-level number above means.
+  const benchPanel = el('div', {class:'card-panel'});
+  panelHeader(benchPanel, 'RECOVERY BENCHMARK', 'In-scope recoverable $/yr under all three settings',
+    'The account-level figures throughout this tool use Attainable (P75) - reach what one in four comparable plants already achieve. Golden year floors at P50 and degradation-adjusts, so it can never read lower than a fair comparison would allow.');
+  const benchStrip = el('div', {class:'cards'});
+  [
+    ['Conservative (P50)', fmt.usd(DATA.meta.in_scope_recoverable_usd_yr_p50)],
+    ['Attainable (P75) — in use', fmt.usd(DATA.meta.in_scope_recoverable_usd_yr)],
+    ['Proven (Golden year)', fmt.usd(DATA.meta.in_scope_recoverable_usd_yr_golden)],
+  ].forEach(([l,v]) => benchStrip.appendChild(el('div',{class:'card'},[el('div',{class:'v'},[String(v)]), el('div',{class:'l'},[l])])));
+  benchPanel.appendChild(benchStrip);
+  m.appendChild(benchPanel);
+
   const waterfallPanel = el('div', {class:'card-panel'});
   panelHeader(waterfallPanel, 'STRATEGY', 'The waterfall: total cost of inaction, in scope, by relationship');
   const wf = [
@@ -1069,31 +1104,63 @@ function renderPitch(m) {
   });
   m.appendChild(playsPanel);
 
+  // RECOVERY_BENCHMARK_AND_CUSTOMER_ROI.md §2.3: three bars, not one number
+  // - "the middle bar is the one that wins the argument, because it shows
+  // the repair is owed either way and SkySpecs is the part that finds it."
+  // Cost stack (fees vs repair) always shown on the Engage bar - hiding
+  // the 81% that's repair spend would be found out in the first serious
+  // conversation.
   const grid2 = el('div', {class:'card-panel'});
-  panelHeader(grid2, 'DO NOTHING VS ENGAGE', '3-year outlook');
-  const doNothing = [1,2,3].map(y => a.recoverable_usd_yr * y);
-  const engage = [1,2,3].map(y => a.fee_annual_usd * y + a.recoverable_usd_yr * 0.15 * y);
-  const maxV2 = Math.max(...doNothing, ...engage, 1);
-  const chart = svg('svg', {width:'100%', height:200, viewBox:'0 0 500 200'});
-  chart.appendChild(svg('line', {x1:44, y1:150, x2:44, y2:10, stroke:'var(--panel-border)', 'stroke-width':1}));
-  [0,1,2].forEach(i => {
-    const x = 60 + i*150;
-    const h1 = (doNothing[i]/maxV2)*120, h2 = (engage[i]/maxV2)*120;
-    chart.appendChild(svg('rect',{x:x, y:150-h1, width:30, height:h1, fill:'var(--warn)'}));
-    chart.appendChild(svg('rect',{x:x+40, y:150-h2, width:30, height:h2, fill:'var(--good)'}));
-    const lbl = svg('text',{x:x+35, y:168, 'text-anchor':'middle', style:'font:11px Arial; fill:#7a756c'}); lbl.textContent = `Year ${i+1}`;
+  panelHeader(grid2, 'DO NOTHING · FIX IT YOURSELF · ENGAGE SKYSPECS', `3-year customer ROI, ${fmt.pct(0.08)} discount rate`,
+    a.customer_roi_multiple != null
+      ? `ROI ${fmt.ratio(a.customer_roi_multiple)} · payback and net dollars below - any one of the three alone is manipulable, together they aren't.`
+      : 'No repair history to cost on this account yet - bars below reflect fees/detection value only.');
+  const doNothing = a.customer_roi_benefit_usd || 0;               // value foregone by not fixing
+  const fixYourself = a.repair_cost_usd || 0;                       // repair spend, no detection (RVM markup NOT included)
+  const engageFees = a.customer_roi_ssi_fees_usd || 0;
+  const engageRepair = a.customer_roi_repair_outlay_usd || 0;       // repair spend WITH RVM's 20% where it coordinates
+  const bars = [
+    ['Do nothing', [[doNothing, 'var(--warn)']]],
+    ['Fix it yourself', [[fixYourself, '#8a7a5c']]],
+    ['Engage SkySpecs', [[engageFees, 'var(--accent)'], [engageRepair, 'var(--good)']]],
+  ];
+  const maxV2 = Math.max(doNothing, fixYourself, engageFees + engageRepair, 1);
+  const chart = svg('svg', {width:'100%', height:210, viewBox:'0 0 500 210'});
+  chart.appendChild(svg('line', {x1:44, y1:160, x2:44, y2:10, stroke:'var(--panel-border)', 'stroke-width':1}));
+  bars.forEach(([label, segments], i) => {
+    const x = 70 + i*140;
+    let yTop = 160;
+    segments.forEach(([v, color]) => {
+      const h = (v/maxV2)*130;
+      chart.appendChild(svg('rect',{x, y:yTop-h, width:50, height:h, fill:color}));
+      yTop -= h;
+    });
+    const total = segments.reduce((s,[v])=>s+v,0);
+    const t = svg('text',{x:x+25, y:yTop-6, 'text-anchor':'middle', style:'font:bold 11px Arial'}); t.textContent = fmt.usd(total);
+    chart.appendChild(t);
+    const lbl = svg('text',{x:x+25, y:178, 'text-anchor':'middle', style:'font:11px Arial; fill:#7a756c'}); lbl.textContent = label;
     chart.appendChild(lbl);
   });
-  const y2Title = svg('text', {x:-80, y:14, 'text-anchor':'middle', transform:'rotate(-90)', style:'font:11px Arial; fill:#7a756c'});
-  y2Title.textContent = 'Cumulative USD'; chart.appendChild(y2Title);
-  const x2Title = svg('text', {x:250, y:192, 'text-anchor':'middle', style:'font:11px Arial; fill:#7a756c'});
-  x2Title.textContent = 'Year'; chart.appendChild(x2Title);
+  const y2Title = svg('text', {x:-85, y:14, 'text-anchor':'middle', transform:'rotate(-90)', style:'font:11px Arial; fill:#7a756c'});
+  y2Title.textContent = '3-year USD'; chart.appendChild(y2Title);
   grid2.appendChild(chart);
   grid2.appendChild(el('div',{class:'legend'},[
-    el('span',{},[el('span',{class:'sw',style:'background:var(--warn)'}),'Do nothing (compounding loss)']),
-    el('span',{},[el('span',{class:'sw',style:'background:var(--good)'}),'Engage (fee + residual loss)']),
+    el('span',{},[el('span',{class:'sw',style:'background:var(--warn)'}),'Do nothing (value foregone)']),
+    el('span',{},[el('span',{class:'sw',style:'background:#8a7a5c'}),'Fix it yourself (repair only - undetected faults keep running)']),
+    el('span',{},[el('span',{class:'sw',style:'background:var(--accent)'}),'Engage: SSI fees']),
+    el('span',{},[el('span',{class:'sw',style:'background:var(--good)'}),'Engage: repair spend' + (a.n_rvm_eligible ? ' (incl. RVM coordination)' : '')]),
   ]));
-  grid2.appendChild(el('div',{class:'small', style:'margin-top:6px'},['Illustrative, not a contractual projection - "engage" assumes 85% of the physical gap recovers per Part 8\'s recovery-fraction convention, residual 15% continues as ongoing loss.']));
+  if (a.customer_roi_net_benefit_usd != null) {
+    grid2.appendChild(el('div',{class:'cards', style:'margin-top:10px'},[
+      el('div',{class:'card'},[el('div',{class:'v'},[fmt.usd(a.customer_roi_net_benefit_usd)]), el('div',{class:'l'},['Net benefit (3yr)'])]),
+      el('div',{class:'card'},[el('div',{class:'v'},[a.customer_roi_multiple!=null?fmt.ratio(a.customer_roi_multiple):'—']), el('div',{class:'l'},['ROI multiple'])]),
+      el('div',{class:'card'},[el('div',{class:'v'},[fmt.usd(a.customer_roi_cost_usd)]), el('div',{class:'l'},['Total customer cost (3yr)'])]),
+    ]));
+  }
+  if (a.n_repair_uneconomic) grid2.appendChild(el('div',{class:'small', style:'margin-top:8px; color:var(--warn)'},
+    [`${fmt.count(a.n_repair_uneconomic)} site(s) excluded from this ROI - repair cost exceeds the uneconomic-repair threshold, a repowering conversation rather than a repair one.`]));
+  grid2.appendChild(el('div',{class:'small', style:'margin-top:6px'},
+    ['Illustrative, not a contractual projection. Benefit at 85% detection-to-remediation conversion; repair costs are ESTIMATES pending vendor quotes.']));
   m.appendChild(grid2);
 
   // A6c: plain language leads, PI/PRI/beta/significance/last-scored-month

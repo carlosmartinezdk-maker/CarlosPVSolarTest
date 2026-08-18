@@ -1,0 +1,12 @@
+{
+  "percentiles": {
+    "pri_p50": 0.9505995592134562,
+    "pri_p75": 1.0193866664808509,
+    "pi_p50": 0.8842686297747822,
+    "pi_p75": 0.9768177433960888
+  },
+  "capacity_suspect_pi_threshold": 1.35,
+  "golden_min_months_in_year": 6,
+  "golden_min_years_history": 2,
+  "golden_cap_pri": 1.2
+}

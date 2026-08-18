@@ -303,9 +303,32 @@ def build_account_table(sites: pd.DataFrame, pricing: dict) -> pd.DataFrame:
         median_years_present=("years_present", "median"),
         owner_source=("owner_source", "first"),
         top_signature_mode=("top_signature", lambda s: s.mode().iloc[0] if len(s.mode()) else None),
+        # Part 1: P50/GOLDEN recoverable$ alternates (P75 stays the
+        # existing recoverable_usd_yr column above, untouched).
+        recoverable_usd_yr_p50=("recoverable_usd_yr_p50", lambda s: s.fillna(0).sum()),
+        recoverable_usd_yr_golden=("recoverable_usd_yr_golden", lambda s: s.fillna(0).sum()),
+        # Part 2: customer-side ROI, summed components (never averaged
+        # ratios - test 94). NaN (customer_roi_excluded sites) contributes
+        # 0, which is exactly "excluded from the aggregate" (§2.2's own
+        # rule) without a separate filter step.
+        customer_roi_benefit_usd=("customer_roi_benefit_usd", lambda s: s.fillna(0).sum()),
+        customer_roi_ssi_fees_usd=("customer_roi_ssi_fees_usd", lambda s: s.fillna(0).sum()),
+        customer_roi_repair_outlay_usd=("customer_roi_repair_outlay_usd", lambda s: s.fillna(0).sum()),
+        customer_roi_cost_usd=("customer_roi_cost_usd", lambda s: s.fillna(0).sum()),
+        customer_roi_net_benefit_usd=("customer_roi_net_benefit_usd", lambda s: s.fillna(0).sum()),
+        repair_cost_usd=("repair_cost_usd", lambda s: s.fillna(0).sum()),
+        rvm_fee_gross_usd=("rvm_fee_gross_usd", lambda s: s.fillna(0).sum()),
+        rvm_fee_incremental_usd=("rvm_fee_incremental_usd", lambda s: s.fillna(0).sum()),
+        n_rvm_eligible=("rvm_eligible", lambda s: int(s.fillna(False).sum())),
+        n_repair_uneconomic=("customer_roi_excluded", lambda s: int(s.fillna(False).sum())),
     ).reset_index()
 
     acct["total_ssi_potential_usd_yr"] = acct["software_revenue_usd_yr"] + acct["inspection_revenue_usd_yr"]
+    # roi_multiple from the SUMMED benefit/cost, not an average of each
+    # site's own multiple - a large site and a small one don't contribute
+    # equally to an account's ROI (test 94).
+    acct["customer_roi_multiple"] = np.where(
+        acct["customer_roi_cost_usd"] > 0, acct["customer_roi_benefit_usd"] / acct["customer_roi_cost_usd"], np.nan)
     acct["fee_as_pct_of_loss"] = np.where(acct["recoverable_usd_yr"] > 0,
                                            acct["fee_annual_usd"] / acct["recoverable_usd_yr"], np.nan)
     acct["payback_weeks"] = np.where(
@@ -520,6 +543,30 @@ def main():
 
     sites = flag_capacity_suspect(sites)
     write_capacity_suspect_csv(sites, f"{DATA_DIR}/capacity_suspect.csv")
+
+    # RECOVERY_BENCHMARK_AND_CUSTOMER_ROI.md - repair cost, RVM fees and
+    # customer-ROI are computed once in s11_explorer.py (§6's own recurring
+    # caution: read the same functions, don't reimplement); the P50/GOLDEN
+    # recoverable$ alternates come from recovery_benchmark.py. P75 itself
+    # is untouched here - it's already correct via the existing
+    # cost_of_inaction_usd/recoverable_usd_yr columns in site_summary.parquet,
+    # and re-deriving it via the shortcut formula risks a small precision
+    # drift from S9's direct computation that the default view shouldn't carry.
+    roi_export = pd.read_parquet("data/site_roi_export.parquet").drop(columns=["capacity_suspect"])
+    # site_summary.parquet is a stale export from an earlier explorer.html
+    # build and already carries its own (pre-bugfix, all-null/zero)
+    # repair_cost_usd/rvm_* columns - drop them so the freshly-computed
+    # ones from roi_export win outright instead of colliding into _x/_y.
+    # capacity_suspect is excluded from roi_export above: sites already has
+    # its own already-tested flag_capacity_suspect() output (same rule,
+    # same 84/6203 count observed) - no need to replace it.
+    stale_cols = [c for c in roi_export.columns if c != "site" and c in sites.columns]
+    sites = sites.drop(columns=stale_cols).merge(roi_export, on="site", how="left")
+    by_bench = pd.read_parquet("data/site_recoverable_by_benchmark.parquet",
+                                columns=["site", "recoverable_usd_yr_p50", "recoverable_usd_yr_golden"])
+    sites = sites.merge(by_bench, on="site", how="left")
+    log.info("merged customer ROI/RVM (%d sites) and P50/GOLDEN recoverable$ alternates",
+              roi_export["repair_cost_usd"].notna().sum())
 
     account = build_account_table(sites, pricing)
     account = match_all_owners(account, gtm)
