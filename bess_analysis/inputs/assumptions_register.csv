@@ -1,0 +1,25 @@
+id,area,assumption,value,rationale,validated
+B1,Data,EIA-923 2025 file is the Final release (spec named the early release),Final,EIA now serves Final,yes
+B2,Data,Battery rows = Page 1 Energy Storage with prime mover BA and fuel MWH; Quantity = charge; Grossgen = discharge,-,Spec,yes
+B3,Data,EIA-923 annual respondents (dominant 2019-2022) have EIA-allocated monthly values: excluded from the regression and from monthly signatures (ANNUAL_RESPONDENT),-,Same finding as gas build,yes
+B4,Capacity,E_rated per plant-year from each EIA-860 vintage (Operable + retired that year); plants missing from a vintage borrow the nearest vintage (flagged),-,Spec: time-varying E_rated,yes
+B5,Hybrid,Hybrid if RTE>1 in any month or Co-Located Renewable Firming=Y or DC coupled=Y or PV at the same Plant Id; excluded from fleet efficiency stats,-,Spec + 2025 860 coupling fields,yes
+B6,Decomposition,Usable months: C>0 D>0 C/D<3 EFC>0.10 monthly respondent; >=10 months; eta in (0.5 1],10 / 0.10,Spec,yes
+B7,Decomposition,Seasonal P_aux fitted jointly with one shared intercept (eta is not seasonal) and season-specific slopes; >=3 months per season,-,Separate small fits are unstable,partly
+B8,Decomposition,Naive RTE for the gap = site mean of monthly apparent RTE (reproduces spec 0.844); throughput-weighted also reported,-,Definition not stated in spec,partly
+B9,Peers,UTI peers: same BA + duration band + age +-3y; healthy (RTE>=0.75 & throughput>0; standalone); >=3 peers; ladder drop age then national same band,3,Spec + coverage,no
+B10,In service,Site in service from first active month; trailing zeros stay in service (live outage) unless 860 lists the site retired,-,Pre-commissioning zero rows otherwise read as outages,partly
+B11,Signatures,Partial availability fractions {1/2 2/3 3/4 4/5 5/6 7/8} of trailing-6-month UTI median +-0.04 flat +-0.06 >=2 months with onset from >=0.9,-,Spec M5 (quantised),no
+B12,Signatures,Thermal/aux: HVAC excess above enclosure-type p90 (standalone fitted sites) or P_aux trend >20%/yr; applied to deficit months (summer for HVAC),-,Spec rule 4,no
+B13,Signatures,Hybrid sites skip efficiency-based rules 4-6 (their efficiency is contaminated) but keep availability rules 1-3,-,Deviation from strict first-match order,partly
+B14,Deficit,Deficit = eta_true<0.86 or UTI<0.75 or P_aux>1% nameplate or monthly RTE >5 pts below duration-band median,-,Spec HEALTHY test,no
+B15,Fade,EPC = D/max(1 round(EFC)) / E_rated(year); slope of 12-month rolling p90; >=24 months and >50% months EFC>=0.5 else insufficient_history,-,Spec M6,yes
+B16,Warranty,Contracted cycle life 6000 EFC when unknown (all sites),6000,Spec (flagged),no
+B17,Warranty,Operating envelope on monthly mean ambient -10..30 degC (assumed),-10/30,No contract data,no
+B18,Warranty,Cumulative EFC before 2019 = first-12-month EFC rate x months since COD,estimate,No pre-2019 load,no
+B19,Asymmetry,Realised asymmetry uses peak monthly average power (MWh/h); true peak power needs interval data,proxy,-,no
+B20,Loss,MWh at stake: outage/partial = shortfall vs trailing 6-month median (else peer EFC x E_rated); efficiency signatures = extra charge vs band-median RTE; thermal = excess aux MW x hours,-,Spec R6 (MWh not $),partly
+B21,Reliability,Credibility tau = phi/lambda_pool; pool ladder BA+duration band+vintage -> duration band+climate -> duration band -> fleet; min 5 sites & 60 exposure-months,-,Spec R5,no
+B22,Weather,nClimGrid county monthly mean (NSRDB needs an API key),-,Spec fallback,partly
+B23,Money,No dollar figures: lost BESS MWh have no PPA price; monetisation needs nodal price data,-,Guardrail 6,yes
+B24,Owner,Owner = EIA-860 Schedule 4 majority owner else operator; customer group / SSI-prospect not supplied,-,No CRM input,-

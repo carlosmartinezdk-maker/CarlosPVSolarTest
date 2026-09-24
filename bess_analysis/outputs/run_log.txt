@@ -1,0 +1,49 @@
+
+============================== BESS ACCEPTANCE GATES ==============================
+[PASS] Fleet median apparent RTE 2025, standalone (site annual D/C)              got 0.84                   expected 0.851 ±0.02   (median of monthly RTE 0.842; throughput-weighted 0.855)
+[PASS] Decomposed eta_true, fleet median                                         got 0.889                  expected 0.889 ±0.02   (p10 0.778, p90 0.954; standalone only 0.888)
+[PASS] Naive RTE on the same fitted sites (site mean of monthly RTE)             got 0.84                   expected 0.844 ±0.02   (throughput-weighted per site 0.854)
+[PASS] Gap eta_true - naive (points)                                             got 4.87                   expected ~4.5 ±1.5   (with throughput-weighted naive: 3.42)
+[PASS] eta_true above naive RTE (regression not inverted)                        got True                   expected True
+[PASS] P_aux % of nameplate, median                                              got 0.221                  expected 0.21 (p90 < ~1%)   (p10 -0.07%, p90 0.84%)
+[PASS] Sites with a usable aux decomposition                                     got 623 of 988             expected ~600 of ~960
+[PASS] Total BESS discharge 2025 (MWh)                                           got 26,706,620             expected 26,500,000 ±1,000,000
+[PASS] Total BESS discharge 2019 (MWh)                                           got 456,006                expected 430,000 ±30,000
+[WARN] BESS nameplate 2025 (GW, EIA-860 3_4 BA)                                  got 44.0                   expected ~40-43   (year-end operable incl. units commissioned late 2025)
+[PASS] Median duration 2025 (h)                                                  got 2.0                    expected 2.0
+[PASS] Capacity join rate to EIA-860 (plant-months)                              got 0.9942                 expected >=0.98   (same-vintage 0.9837)
+[PASS] Fleet RTE vs EIA published anchor (standalone 2025, throughput-weighted)  got 0.855                  expected ~0.82-0.85 (and <0.95)   (above 0.95 would mean hybrids included or Quantity/Grossgen swapped)
+[WARN] Variance/mean of fault counts, FULL_OUTAGE                                got 1.1                    expected >1 (overdispersion -> NB)   (NB alpha=0.000; used: poisson (alpha~0))
+[WARN] Variance/mean of fault counts, PARTIAL_AVAILABILITY                       got 0.93                   expected >1 (overdispersion -> NB)   (NB alpha=0.000; used: poisson (alpha~0))
+[WARN] Variance/mean of fault counts, THERMAL_AUX                                got 1.18                   expected >1 (overdispersion -> NB)   (NB alpha=1.041; used: negative binomial)
+[WARN] Variance/mean of fault counts, UNATTRIBUTED                               got 1.26                   expected >1 (overdispersion -> NB)   (NB alpha=0.000; used: poisson (alpha~0))
+[WARN] Backtest FULL_OUTAGE (fit<=Y, predict Y+1, 2023-2025)                     got AUC 0.63, slope 0.65, chi2/df 3.9 expected AUC>0.65, slope~1, chi2/df~1, beats mean   (40% of test plant-years are sites with no prior history; beats mean: True)
+[WARN] Backtest PARTIAL_AVAILABILITY (fit<=Y, predict Y+1, 2023-2025)            got AUC 0.61, slope 0.48, chi2/df 11.3 expected AUC>0.65, slope~1, chi2/df~1, beats mean   (40% of test plant-years are sites with no prior history; beats mean: False)
+[WARN] Backtest THERMAL_AUX (fit<=Y, predict Y+1, 2023-2025)                     got AUC 0.74, slope 0.83, chi2/df 3.9 expected AUC>0.65, slope~1, chi2/df~1, beats mean   (40% of test plant-years are sites with no prior history; beats mean: True)
+[WARN] Backtest UNATTRIBUTED (fit<=Y, predict Y+1, 2023-2025)                    got AUC 0.61, slope 0.41, chi2/df 6.2 expected AUC>0.65, slope~1, chi2/df~1, beats mean   (40% of test plant-years are sites with no prior history; beats mean: False)
+summary: {'PASS': 12, 'WARN': 9} 
+
+signatures (scored, standalone): {'HEALTHY': 3326, 'UNATTRIBUTED': 2451, 'UNDER_DISPATCH': 1914, 'THERMAL_AUX': 995, 'FULL_OUTAGE': 408, 'CELL_DEGRADATION': 393, 'CAPACITY_FADE': 357, 'PARTIAL_AVAILABILITY': 286, 'AUGMENTATION': 18, 'NO_DATA': 2}
+leads: 464 {'C': 265, 'A': 135, 'B': 64}
+hazards:
+               signature          axis      k   k_lo   k_hi       aic                   shape
+0           FULL_OUTAGE     age_years  1.219  1.099  1.353  1591.152          wear-out (k>1)
+1           FULL_OUTAGE  cum_efc_x100  0.251  0.211  0.300  5421.115  infant mortality (k<1)
+2  PARTIAL_AVAILABILITY     age_years  1.068  0.960  1.188  1632.830            random (k~1)
+3  PARTIAL_AVAILABILITY  cum_efc_x100  0.652  0.594  0.716  1754.603  infant mortality (k<1)
+4           THERMAL_AUX     age_years  0.316  0.277  0.361   605.296  infant mortality (k<1)
+5           THERMAL_AUX  cum_efc_x100  0.389  0.326  0.465   774.626  infant mortality (k<1)
+6          UNATTRIBUTED     age_years  0.429  0.389  0.473  1711.758  infant mortality (k<1)
+7          UNATTRIBUTED  cum_efc_x100  0.467  0.424  0.513  2189.684  infant mortality (k<1)
+dispersion:
+               signature  plant_years  events  var_mean_ratio  poisson_pearson_disp  nb_alpha   phi  lr_nb_vs_poisson         model_used
+0           FULL_OUTAGE         2192     284           1.105                 0.974     0.000   inf            -0.000  poisson (alpha~0)
+1  PARTIAL_AVAILABILITY         2192     287           0.934                 0.846     0.000   inf            -0.001  poisson (alpha~0)
+2           THERMAL_AUX         2192     102           1.179                 0.414     1.041  0.96               NaN  negative binomial
+3          UNATTRIBUTED         2192     453           1.257                 0.460     0.000   inf               NaN  poisson (alpha~0)
+backtest:
+               signature     n  share_new_sites  event_rate    AUC  calibration_slope  pearson_chi2_df  brier  brier_fleet_mean  beats_baseline   pass
+0           FULL_OUTAGE  1899            0.402       0.121  0.631              0.646            3.880  0.106             0.107            True  False
+1  PARTIAL_AVAILABILITY  1899            0.402       0.123  0.605              0.485           11.256  0.109             0.106           False  False
+2           THERMAL_AUX  1899            0.402       0.044  0.738              0.826            3.930  0.038             0.042            True  False
+3          UNATTRIBUTED  1899            0.402       0.169  0.611              0.412            6.239  0.145             0.144           False  False
