@@ -1,0 +1,35 @@
+
+============================== ACCEPTANCE GATES ==============================
+[PASS] CC median heat rate 2025 (plant-month, pre-floor QC — spec definition)  got 7303                         expected 7,307 ±200   (post-QC scoreable median = 7,368)
+[PASS] GT median heat rate 2025 (plant-month, pre-floor QC — spec definition)  got 11353                        expected 11,353 ±400   (post-QC scoreable median = 11,912)
+[PASS] CC capacity 2025 (GW, EIA-860 nameplate)                                got 328.3                        expected ~333 ±5
+[PASS] GT capacity 2025 (GW, EIA-860 nameplate)                                got 161.7                        expected ~160 ±5
+[PASS] Capacity join rate CC (plant-months)                                    got 0.999                        expected >=0.95   (same-vintage join 0.997)
+[PASS] Capacity join rate GT (plant-months)                                    got 0.997                        expected >=0.95   (same-vintage join 0.991)
+[PASS] Gas Steam join rate (indicative)                                        got 0.552                        expected ~0.52 (spec)   (gas-fuel ST rows only; coal co-firing units filed under coal in 860 are excluded upstream)
+[PASS] Plant-months below floor after re-aggregation, CC (non-CHP)             got 0.0191                       expected <0.05   (CHP cohort 0.352 (EIA CHP fuel allocation, reported separately))
+[PASS] Plant-months below floor after re-aggregation, GT (non-CHP)             got 0.0136                       expected <0.05   (CHP cohort 0.651 (EIA CHP fuel allocation, reported separately))
+[PASS] Plant-months below floor after re-aggregation, ST (non-CHP)             got 0.0038                       expected <0.05   (CHP cohort 0.704 (EIA CHP fuel allocation, reported separately))
+[PASS] Plant-months below floor after re-aggregation, IC (non-CHP)             got 0.0133                       expected <0.05   (CHP cohort 0.419 (EIA CHP fuel allocation, reported separately))
+[PASS] National delivered gas 2022 ($/MMBtu)                                   got 7.32                         expected 7.30 ±0.2
+[PASS] National delivered gas 2020 ($/MMBtu)                                   got 2.66                         expected 2.66 ±0.15
+[PASS] k_T sign, CC                                                            got 0.091 %/degC                 expected positive   (hinge form: applied above 15 degC)
+[PASS] k_T magnitude, CC                                                       got 0.091 %/degC                 expected 0.1-0.3 %/degC simple cycle; less for CC
+[PASS] k_T sign, GT                                                            got 0.070 %/degC                 expected positive   (hinge form: applied above 15 degC)
+[WARN] k_T magnitude, GT                                                       got 0.070 %/degC                 expected 0.1-0.3 %/degC simple cycle; less for CC
+[PASS] k_T sign, IC                                                            got 0.057 %/degC                 expected positive   (hinge form: applied above 15 degC)
+[PASS] k_T magnitude, IC                                                       got 0.057 %/degC                 expected 0.1-0.3 %/degC simple cycle; less for CC
+[PASS] k_T sign, ST                                                            got 0.119 %/degC                 expected positive   (hinge form: applied above 15 degC)
+[PASS] k_T magnitude, ST                                                       got 0.119 %/degC                 expected 0.1-0.3 %/degC simple cycle; less for CC
+[FAIL] Non-recoverable degradation, fleet median (%/yr)                        got 0.057                        expected 0.3-0.6   (annual-p90 envelope of HRI_own; raw annual CC heat-rate trend is also ~0)
+[FAIL] Fouling share of recoverable degradation                                got 0.851                        expected 0.70-0.85
+[WARN] Variance/mean of fault counts, FOULING (plant-years, exposure>=6)       got 0.79                         expected >2 -> negative binomial   (NB alpha=0.000; model used: poisson (alpha~0))
+[WARN] Variance/mean of fault counts, HGP (plant-years, exposure>=6)           got 1.31                         expected >2 -> negative binomial   (NB alpha=2.426; model used: negative binomial)
+[WARN] Variance/mean of fault counts, CYCLING (plant-years, exposure>=6)       got 1.33                         expected >2 -> negative binomial   (NB alpha=6.723; model used: negative binomial)
+[WARN] Backtest FOULING (fit<=Y, predict Y+1, 2022-2025)                       got AUC 0.68, slope 1.21, chi2/df 0.84, beats mean True expected AUC>0.65, slope~1, chi2/df~1, beats baseline
+[WARN] Backtest HGP (fit<=Y, predict Y+1, 2022-2025)                           got AUC 0.78, slope 0.95, chi2/df 4.02, beats mean True expected AUC>0.65, slope~1, chi2/df~1, beats baseline
+[WARN] Backtest CYCLING (fit<=Y, predict Y+1, 2022-2025)                       got AUC 0.76, slope 1.05, chi2/df 5.43, beats mean True expected AUC>0.65, slope~1, chi2/df~1, beats baseline
+[PASS] Scale cross-check: fouling waste scaled to 100 MW & 5% ($/yr)           got 304,494                      expected ~1.2M (within an order of magnitude)   (spec example assumes ~60% CF; fouling plants here run lower)
+summary: {'PASS': 21, 'WARN': 7, 'FAIL': 2}
+
+{'leads': 491, 'tiers': {'C': 454, 'B': 22, 'A': 15}, 'fouling_share': np.float64(0.8511386278817343), 'nonrec_med': np.float64(0.057382295857568086), 'L_bar': {'ANNUAL_ONLY': 11.46, 'CYCLING': 6.25, 'DUCT_FIRING': 3.08, 'FOULING': 2.86, 'FUEL_QUALITY': 1.69, 'HGP': 4.23, 'INTERRUPTIBLE_GAS': 12.83, 'NONRECOVERABLE': 3.77, 'UNATTRIBUTED': 2.38}}

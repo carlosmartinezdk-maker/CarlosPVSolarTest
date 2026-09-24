@@ -1,0 +1,31 @@
+check,expected,got,status,note
+"CC median heat rate 2025 (plant-month, pre-floor QC — spec definition)","7,307 ±200",7303,PASS,"post-QC scoreable median = 7,368"
+"GT median heat rate 2025 (plant-month, pre-floor QC — spec definition)","11,353 ±400",11353,PASS,"post-QC scoreable median = 11,912"
+"CC capacity 2025 (GW, EIA-860 nameplate)",~333 ±5,328.3,PASS,
+"GT capacity 2025 (GW, EIA-860 nameplate)",~160 ±5,161.7,PASS,
+Capacity join rate CC (plant-months),>=0.95,0.999,PASS,same-vintage join 0.997
+Capacity join rate GT (plant-months),>=0.95,0.997,PASS,same-vintage join 0.991
+Gas Steam join rate (indicative),~0.52 (spec),0.552,PASS,gas-fuel ST rows only; coal co-firing units filed under coal in 860 are excluded upstream
+"Plant-months below floor after re-aggregation, CC (non-CHP)",<0.05,0.0191,PASS,"CHP cohort 0.352 (EIA CHP fuel allocation, reported separately)"
+"Plant-months below floor after re-aggregation, GT (non-CHP)",<0.05,0.0136,PASS,"CHP cohort 0.651 (EIA CHP fuel allocation, reported separately)"
+"Plant-months below floor after re-aggregation, ST (non-CHP)",<0.05,0.0038,PASS,"CHP cohort 0.704 (EIA CHP fuel allocation, reported separately)"
+"Plant-months below floor after re-aggregation, IC (non-CHP)",<0.05,0.0133,PASS,"CHP cohort 0.419 (EIA CHP fuel allocation, reported separately)"
+National delivered gas 2022 ($/MMBtu),7.30 ±0.2,7.32,PASS,
+National delivered gas 2020 ($/MMBtu),2.66 ±0.15,2.66,PASS,
+"k_T sign, CC",positive,0.091 %/degC,PASS,hinge form: applied above 15 degC
+"k_T magnitude, CC",0.1-0.3 %/degC simple cycle; less for CC,0.091 %/degC,PASS,
+"k_T sign, GT",positive,0.070 %/degC,PASS,hinge form: applied above 15 degC
+"k_T magnitude, GT",0.1-0.3 %/degC simple cycle; less for CC,0.070 %/degC,WARN,
+"k_T sign, IC",positive,0.057 %/degC,PASS,hinge form: applied above 15 degC
+"k_T magnitude, IC",0.1-0.3 %/degC simple cycle; less for CC,0.057 %/degC,PASS,
+"k_T sign, ST",positive,0.119 %/degC,PASS,hinge form: applied above 15 degC
+"k_T magnitude, ST",0.1-0.3 %/degC simple cycle; less for CC,0.119 %/degC,PASS,
+"Non-recoverable degradation, fleet median (%/yr)",0.3-0.6,0.057,FAIL,annual-p90 envelope of HRI_own; raw annual CC heat-rate trend is also ~0
+Fouling share of recoverable degradation,0.70-0.85,0.851,FAIL,
+"Variance/mean of fault counts, FOULING (plant-years, exposure>=6)",>2 -> negative binomial,0.79,WARN,NB alpha=0.000; model used: poisson (alpha~0)
+"Variance/mean of fault counts, HGP (plant-years, exposure>=6)",>2 -> negative binomial,1.31,WARN,NB alpha=2.426; model used: negative binomial
+"Variance/mean of fault counts, CYCLING (plant-years, exposure>=6)",>2 -> negative binomial,1.33,WARN,NB alpha=6.723; model used: negative binomial
+"Backtest FOULING (fit<=Y, predict Y+1, 2022-2025)","AUC>0.65, slope~1, chi2/df~1, beats baseline","AUC 0.68, slope 1.21, chi2/df 0.84, beats mean True",WARN,
+"Backtest HGP (fit<=Y, predict Y+1, 2022-2025)","AUC>0.65, slope~1, chi2/df~1, beats baseline","AUC 0.78, slope 0.95, chi2/df 4.02, beats mean True",WARN,
+"Backtest CYCLING (fit<=Y, predict Y+1, 2022-2025)","AUC>0.65, slope~1, chi2/df~1, beats baseline","AUC 0.76, slope 1.05, chi2/df 5.43, beats mean True",WARN,
+Scale cross-check: fouling waste scaled to 100 MW & 5% ($/yr),~1.2M (within an order of magnitude),"304,494",PASS,spec example assumes ~60% CF; fouling plants here run lower
