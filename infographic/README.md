@@ -17,7 +17,7 @@ node check.js ../bess_analysis/outputs/bess_results_infographic.html build/bess_
 python shot.py <html> <tag> <width>                     # optional: Chromium render + interaction smoke test
 ```
 
-`check.js` runs the spec's acceptance checks against the embedded `DATA`, using the page's own DOM-free `core` script. The last run passed 22/22 for both pages:
+`check.js` runs the spec's acceptance checks against the embedded `DATA`, using the page's own DOM-free `core` script. The last run passed 24/24 for both pages (including the SSI / prospect partition and the growth filter):
 - every inline script parses;
 - totals reconcile to the parquet within 0.1%;
 - turning every technology off gives 0 sites and an empty chart;
@@ -28,8 +28,8 @@ python shot.py <html> <tag> <width>                     # optional: Chromium ren
 
 ## Choices where the spec was silent, conflicted, or lacked inputs
 
-- **Reference page.** The reference `us_fleet_infographic.html` was not available. The layout, CSS tokens, controls and table behaviour follow the spec text.
-- **SSI list and parent groups.** No SSI customer list or parent-group mapping was supplied. Every site is a prospect and the SSI share reads 0% (labelled on the page). Customers are EIA-860 Schedule 4 majority owners, falling back to the operator.
+- **Reference page.** The layout and CSS follow `us_fleet_infographic.html`, the fleet production page: stat bar, coloured technology toggle with All / none, segmented year control, customer capacity-growth filters, SSI / prospect pills, table column shading and growth badges.
+- **Customers and SSI.** Customers are parent groups from the fleet workbook's customer mapping (`crm/`). SSI flags come from the current SSI list: 43 of its 173 names are US customer groups. On the pages, SSI customers hold 17.8% of the gas capacity shown and 19.1% of the BESS capacity.
 - **Capacity totals.** "Drop sites with no scoreable month" conflicts with the capacity totals the spec expects. The dropped sites stay out, and the page states the coverage: 562 of 583 GW gas nameplate in 2025, and 41.2 of 44.0 GW BESS. The full-fleet by-year capacity is embedded as `DATA.fleetCap`.
 - **Capacity by year** comes from each EIA-860 vintage (the analysis' time-varying series), not from commissioning dates.
 - **BESS colour index** is η_true ÷ the median of the site's duration band (standalone). This centres it on 1.0 so the ≥1.02 / 0.98 / 0.94 / 0.88 bands apply. Hybrids and sites without a fit are grey.

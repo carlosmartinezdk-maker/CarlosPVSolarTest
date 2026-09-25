@@ -29,7 +29,7 @@ The modules follow the spec: `load_storage.py`, `load_860_allvintages.py`, `hybr
 | `bess_efficiency_decomposition.csv` | one row per site: η_true, P_aux (MW and % of nameplate), P_aux summer/shoulder/winter, HVAC excess, rolling-refit trends in η and P_aux, naive RTEs, n, R², standard errors, `insufficient_history` where applicable |
 | `bess_event_ledger.parquet` | plant × year × signature: duration D, incidence K, exposure months, MWh at stake, recoverable MWh, ledger type, L̄ |
 | `bess_episodes.parquet` | one row per episode |
-| `bess_site_summary.xlsx` | site summary (annual RTE/EFC/UTI, η_true, P_aux, fade, cumulative EFC, warranty position, availability months, dominant signature, applications, chemistry, enclosure, owner, hybrid flag, P12/EAL per fault signature, lead rank), plus sheets for leads, gates, decomposition, hazards, rate models, backtest, risk, hybrid quarantine and assumptions |
+| `bess_site_summary.xlsx` | site summary (annual RTE/EFC/UTI, η_true, P_aux, fade, cumulative EFC, warranty position, availability months, dominant signature, applications, chemistry, enclosure, owner, customer group, SSI status, hybrid flag, P12/EAL per fault signature, lead rank), plus sheets for leads, gates, decomposition, hazards, rate models, backtest, risk, hybrid quarantine and assumptions |
 | `efficiency_decomposition.png` | η_true vs P_aux by duration band, standalone vs hybrid, with fleet medians and the naive-RTE line |
 | `hazard_curves.png` | Weibull onset hazards on calendar age vs cumulative EFC |
 | `bess_leads.csv` | 464 sites (135 tier A, 64 tier B, 265 tier C), ranked by MWh at stake over the last 24 months and then by warranty headroom |
@@ -105,7 +105,8 @@ The modules follow the spec: `load_storage.py`, `load_860_allvintages.py`, `hybr
    - **η trend:** 363 sites with at least 24 months of history have a rolling-refit η trend, with a median of −0.8 points/yr. This is noisy; per-site standard errors are in the CSV.
    - **Fade:** the EPC fade slope is `insufficient_history` for 449 sites and has a median of 0.0%/yr where computable, so there is no fleet fade signal yet. That matches the spec's expectation for a fleet with a median age of 2–3 years.
 9. **Decomposition caveat.** Within a site, the intercept and slope estimates are negatively correlated. The fleet medians are robust, but an individual site's (η_true, P_aux) pair should be read with its standard errors (`se_a`, `se_b`).
-10. **Nameplate 2025 = 44.0 GW** (spec ~40–43, WARN). EIA-860 year-end operable capacity includes units commissioned in late 2025 that have little 2025 throughput.
+10. **Customers and SSI.** Customer groups and SSI status come from `crm/`, the fleet workbook customer mapping plus the current SSI customer list. 162 sites and 19.1% of capacity are at SSI customers, led by AES, Engie, NextEra and Intersect. 70 of the 464 leads are SSI customers.
+11. **Nameplate 2025 = 44.0 GW** (spec ~40–43, WARN). EIA-860 year-end operable capacity includes units commissioned in late 2025 that have little 2025 throughput.
 
 ## What monthly data cannot determine
 
