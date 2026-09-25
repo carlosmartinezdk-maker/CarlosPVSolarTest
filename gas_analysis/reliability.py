@@ -6,7 +6,7 @@ import statsmodels.api as sm
 import statsmodels.formula.api as smf
 from sklearn.metrics import roc_auc_score
 
-FAULT_SIGS = ["FOULING", "HGP", "CYCLING"]
+FAULT_SIGS = ["FOULING", "HGP", "CYCLING", "COOLING_DEGRADATION", "BOP_INTERMITTENT"]
 POOL_MIN_UNITS = 5
 POOL_MIN_EXPOSURE = 120          # exposure-months
 BACKTEST_YEARS = [2021, 2022, 2023, 2024]

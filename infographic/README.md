@@ -37,3 +37,20 @@ python shot.py <html> <tag> <width>                     # optional: Chromium ren
 - **Gas chart** stacks *excess fuel $ vs the attainable target* by signature, with recoverable signatures at the bottom. Table and stat "Recoverable $" apply recovery fractions and the own-best cap.
 - **Conviction classes** (New, Chronic, Improving, Event) are defined in `build_data.py`.
 - **Palette.** The spec's signature palette fails the colour validator on close pairs (`#5f8fa6` vs `#4a8ca8`, ΔE 2.4). Close colours are never stacked adjacently and carry a hatch texture; the legend and hover give identity.
+
+## BoP targeting view (gas, spec `specs/infographic_addon_v2.md`)
+
+The gas page has a **View** toggle: `Performance` / `BoP targeting`. The BoP view repoints the map (dots coloured by conviction tier), chart (capacity or cooling + BoP recoverable $ by tier per year), stat bar and table at the Part B outputs (`bop_site_targets.csv`, `bop_tiers_by_year.parquet`).
+
+- **Filters.** Tier, BPRI band, evidence- vs exposure-led, BoP age, cycling intensity (CEMS starts/MW/yr above p75), and Confidence. Confidence defaults to **CEMS-backed only**. The shared Customer, State, Relationship and Year filters also apply; a single year shows the tier as of that year.
+- **Table.** Two modes, *By site* and *By customer* (the prospect list).
+  - The prospect list sorts by recoverable $ by default. One click re-sorts by share at risk.
+  - The share ordering excludes customers with fewer than 3 in-scope sites; they are listed in a collapsed section instead.
+  - Customer roll-ups cover each customer's in-scope fleet (technology, state, relationship and confidence filters). A customer is listed when at least one of its sites passes the prospecting filters.
+- **Copy target list.** Puts the whole current table on the clipboard as TSV, including rows beyond the 700 shown.
+- **check.js 4b.** Checks that:
+  - tier counts sum to the site count and match the CSV;
+  - tier filters partition the sites;
+  - share at risk equals (confirmed + likely MW) / total MW, recomputed from site rows;
+  - the CEMS filter changes the row count;
+  - recoverable $ and chart totals reconcile.

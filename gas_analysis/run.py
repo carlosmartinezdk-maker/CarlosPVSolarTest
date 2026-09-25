@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from config import OUT
 from pipeline import scored_panel
-from climate import regions
+import bop
 from ledger import build_ledger
 import hazard
 import reliability as R
@@ -15,8 +15,7 @@ from economics import cost_table, HORIZON_YR, scale_check
 
 
 def main(force=False):
-    p, kt, curves = scored_panel(force=force)
-    p = p.merge(regions()[["plant_id", "climate_region"]], on="plant_id", how="left")
+    p, kt, curves, cs, cm = scored_panel(force=force, force_bop="--bop" in sys.argv)
     led, ep, lbar = build_ledger(p)
     onset = hazard.onset_hazards(p, ep)
     renewal, _ = hazard.fouling_renewal(p, ep)
@@ -29,7 +28,7 @@ def main(force=False):
     L = leads.build(p)
 
     s = p[p["scoreable"]]
-    rec = s[s["signature"].isin(["FOULING", "HGP"])].groupby("signature")["recoverable_mmbtu"].sum()
+    rec = s[s["signature"].isin(["FOULING", "HGP", "COOLING_DEGRADATION", "BOP_INTERMITTENT"])].groupby("signature")["recoverable_mmbtu"].sum()
     fouling_share = rec.get("FOULING", 0) / rec.sum()
     pl = p.drop_duplicates(["plant_id", "cls"])
     nonrec_med = -pl["nonrec_slope_per_yr"].median() * 100
@@ -48,6 +47,20 @@ def main(force=False):
                      "expected": "~1.2M (within an order of magnitude)", "got": f"{scale_check(p):,.0f}",
                      "status": "PASS" if 1.2e5 <= scale_check(p) <= 1.2e7 else "WARN",
                      "note": "spec example assumes ~60% CF; fouling plants here run lower"}
+    # ---- Part B: balance-of-plant risk index and targeting
+    d, ev_year = bop.score(p, cs, cm)
+    T = bop.site_targets(p, d, summ)
+    C = bop.customer_targets(T)
+    yt = bop.yearly_tiers(d, cs, ev_year)
+    T.to_csv(OUT / "bop_site_targets.csv", index=False)
+    bop.write_customer_targets(C, OUT / "bop_customer_targets.csv")
+    n_packs = bop.evidence_pack(p, T, cs, OUT / "bop_evidence_pack")
+    yt.to_parquet(OUT / "bop_tiers_by_year.parquet", index=False)
+    summ = summ.merge(T[["plant_id", "tech", "BPRI", "bpri_confidence", "tier", "suggested_scope"]]
+                      .rename(columns={"tech": "cls", "tier": "bop_tier", "suggested_scope": "bop_suggested_scope"}),
+                      on=["plant_id", "cls"], how="left")
+    for row in bop.gates(p, cs, cm, T):
+        g.loc[len(g)] = row
     assumptions = pd.read_csv(OUT.parent / "inputs" / "assumptions_register.csv")
     with pd.ExcelWriter(OUT / "gas_plant_summary.xlsx", engine="openpyxl") as xw:
         summ.to_excel(xw, sheet_name="plant_summary", index=False)
@@ -63,12 +76,15 @@ def main(force=False):
         bt.to_excel(xw, sheet_name="backtest", index=False)
         risk.to_excel(xw, sheet_name="risk_by_signature", index=False)
         lbar.reset_index().to_excel(xw, sheet_name="episode_length", index=False)
+        T.to_excel(xw, sheet_name="bop_site_targets", index=False)
+        C.to_excel(xw, sheet_name="bop_customer_targets", index=False)
         cost_table().to_excel(xw, sheet_name="remediation_costs", index=False)
         assumptions.to_excel(xw, sheet_name="assumptions", index=False)
     g.to_csv(OUT / "gate_results.csv", index=False)
     report.print_gates(g)
     extras = {"leads": len(L), "tiers": L["conviction_tier"].value_counts().to_dict() if len(L) else {},
-              "fouling_share": fouling_share, "nonrec_med": nonrec_med, "L_bar": lbar.round(2).to_dict()}
+              "fouling_share": fouling_share, "nonrec_med": nonrec_med, "L_bar": lbar.round(2).to_dict(),
+              "bop_tiers": T["tier"].value_counts().to_dict(), "evidence_briefs": n_packs}
     print(extras)
     return 1 if (g["status"] == "FAIL").any() else 0
 

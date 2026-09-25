@@ -5,7 +5,7 @@ from components import LEDGER
 
 GAP_TOL = 1                       # a single intervening month does not break an episode
 LEDGER_SIGS = ["FOULING", "HGP", "CYCLING", "NONRECOVERABLE", "DUCT_FIRING", "FUEL_QUALITY", "UNATTRIBUTED",
-               "ANNUAL_ONLY", "INTERRUPTIBLE_GAS"]
+               "ANNUAL_ONLY", "INTERRUPTIBLE_GAS", "COOLING_DEGRADATION", "BOP_INTERMITTENT"]
 FIRM_FULL = 0.999
 
 

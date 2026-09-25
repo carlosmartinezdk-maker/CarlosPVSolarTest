@@ -5,3 +5,5 @@ NONRECOVERABLE,None (not recoverable by maintenance),0,0,n/a,
 CYCLING,Operating-regime change (commercial decision),0,0,n/a,
 DUCT_FIRING,None (by design),0,0,n/a,
 FUEL_QUALITY,Meter / gas-chromatograph check,5000,0,UNVALIDATED PLACEHOLDER,
+COOLING_DEGRADATION,Condenser performance test + circ-water flow verification + condenser cleaning / circ-water pump refurbishment,120000,800,UNVALIDATED PLACEHOLDER,Replace with vendor quote; survey-only cost is ~20-40k
+BOP_INTERMITTENT,BoP diagnostic visit + pump vibration survey + targeted repair,60000,300,UNVALIDATED PLACEHOLDER,Scope TBD until on-site diagnosis

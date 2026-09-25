@@ -53,7 +53,7 @@ def monthly(p):
             "excess_mmbtu": "Excess_MMBtu", "waste_usd": "Waste_USD", "recoverable_usd": "Recoverable_USD",
             "gas_cost_final": "gas_cost_final", "cost_source": "cost_source", "heat_content_drift": "heat_content_drift",
             "firm_delivery_share": "firm_delivery_share", "spot_share": "spot_share", "thermal_share": "thermal_share",
-            "chp_cohort": "chp_cohort", "resp_freq": "respondent_freq", "scoreable": "scoreable", "qc_flags": "qc_flags"}
+            "cooling_signal": "cooling_signal", "chp_cohort": "chp_cohort", "resp_freq": "respondent_freq", "scoreable": "scoreable", "qc_flags": "qc_flags"}
     m = m[list(cols)].rename(columns=cols).sort_values(["plant_id", "tech_class", "year", "month"])
     m.to_parquet(OUT / "gas_monthly.parquet", index=False)
     return m
@@ -107,7 +107,8 @@ def plant_summary(p, risk, leads_df, onset, renewal):
     base["dominant_component"] = sig.groupby(["plant_id", "cls"])["signature"].agg(lambda x: x.value_counts().index[0])
     base["dominant_component"] = base["dominant_component"].fillna("HEALTHY")
     rec = s.groupby(["plant_id", "cls", "signature"])["recoverable_usd"].sum().unstack(fill_value=0)
-    base["dominant_recoverable"] = rec[["FOULING", "HGP"]].idxmax(axis=1).where(rec[["FOULING", "HGP"]].max(axis=1) > 0)
+    rc = [c for c in ["FOULING", "HGP", "COOLING_DEGRADATION", "BOP_INTERMITTENT"] if c in rec.columns]
+    base["dominant_recoverable"] = rec[rc].idxmax(axis=1).where(rec[rc].max(axis=1) > 0)
     tmax = p["t_idx"].max()
     r24 = s[s["t_idx"] > tmax - 24].groupby(["plant_id", "cls"])["recoverable_usd"].sum() / 2
     base["recoverable_usd_per_yr"] = r24

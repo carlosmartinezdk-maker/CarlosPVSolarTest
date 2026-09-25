@@ -112,7 +112,7 @@
   <div class="controls" id="controls"></div>
   <div class="stat" id="stats"></div>
 
-  <div class="maphint">Dot size is nameplate capacity, colour is the performance band. Hover for detail; click to drill the table into that site; click a state to filter.</div>
+  <div class="maphint" id="maphint">Dot size is nameplate capacity, colour is the performance band. Hover for detail; click to drill the table into that site; click a state to filter.</div>
   <div class="mapbox" id="mapbox"><svg id="map" viewBox="0 0 980 600" role="img" aria-label="Map of sites coloured by performance band"></svg><div class="tip" id="tip"></div></div>
   <div class="legend" id="legend"></div>
 
@@ -126,7 +126,7 @@
   <div class="tblsec">
     <div class="tblhead">
       <div><span class="tbltitle" id="tbltitle"></span><div class="tblnote" id="tblnote"></div></div>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="backbtn" id="back" style="display:none">&lsaquo; Back</button><div class="seg" id="rowmode"></div></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="backbtn" id="back" style="display:none">&lsaquo; Back</button><div class="seg" id="rowmode"></div><div class="seg" id="bsort"></div><button class="backbtn" id="copytsv" type="button" style="display:none">Copy target list</button><span class="tblnote" id="copymsg"></span></div>
     </div>
     <div class="tblscroll" id="tscroll"><table class="grid" id="grid"><thead></thead><tbody></tbody></table></div>
   </div>
@@ -165,8 +165,9 @@ function sum(a){ let s=0; for(const v of a) if(v!=null&&isFinite(v)) s+=v; retur
 
 function defaultState(){ return {tech:new Set(DATA.tech.map((_,i)=>i)), cust:-1, state:-1, rel:'all', year:'all', gran:'year',
   band:'all', sigs:new Set(DATA.sigs.map((_,i)=>i)), conv:'all', rec:'all', conf:'all', sel:-1, mode:'site', chart:'stack',
-  growBasis:'5y', growMin:'all',
-  sort:{site:null, cust:null, sig:null}}; }
+  growBasis:'5y', growMin:'all', view:'perf',
+  btier:'all', bband:'all', bev:'all', bage:'all', bcyc:'all', bconf:'cems', bsort:'rec', bchart:'cap', smallOpen:false,
+  sort:{site:null, cust:null, sig:null, bsite:null, bcust:null}}; }
 function yearsOf(st){ return st.year==='all' ? DATA.years.slice() : [ +st.year ]; }
 function lastYear(st){ const y=yearsOf(st); return y[y.length-1]; }
 function periodsOf(st){
@@ -290,6 +291,66 @@ function groupRows(idx, st, by){
   }
   return rows;
 }
+
+/* ---------- balance-of-plant targeting view (gas only): Part B outputs ---------- */
+const BOP_MIN_SHARE_SITES=3;
+function bopTier(s, st){ if(!s.b) return 3; if(st.year==='all') return s.b.t; const v=s.b.ty[DATA.years.indexOf(+st.year)]; return (v==null||v<0)? 3 : v; }
+/* shared filters + confidence: the customer's fleet in scope (denominator of share at risk) */
+function passBopBase(s, st){
+  if(!s.b) return false;
+  if(!st.tech.has(s.t)) return false;
+  if(st.cust>=0 && s.c!==st.cust) return false;
+  if(st.state>=0 && s.s!==st.state) return false;
+  if(st.rel==='ssi' && !s.ssi) return false;
+  if(st.rel==='prospect' && s.ssi) return false;
+  if(st.bconf==='cems' && !s.b.cf) return false;
+  return true;
+}
+function passBop(s, st){
+  if(!passBopBase(s, st)) return false;
+  const b=s.b;
+  if(st.btier!=='all' && bopTier(s, st)!==+st.btier) return false;
+  if(st.bband!=='all' && !(b.bp!=null && b.bp>+st.bband)) return false;
+  if(st.bev==='ev' && !b.ev) return false;
+  if(st.bev==='ex' && !b.ex) return false;
+  if(st.bage!=='all' && !(b.age!=null && b.age>+st.bage)) return false;
+  if(st.bcyc==='heavy' && !b.hv) return false;
+  return true;
+}
+function bopFiltered(st){ const out=[]; DATA.sites.forEach((s,i)=>{ if(passBop(s,st)) out.push(i); }); return out; }
+function bopBaseFiltered(st){ const out=[]; DATA.sites.forEach((s,i)=>{ if(passBopBase(s,st)) out.push(i); }); return out; }
+function bopStats(idx, st){
+  const S=idx.map(i=>DATA.sites[i]);
+  const cap=sum(S.map(s=>s.mw)); const risk=sum(S.filter(s=>bopTier(s,st)<=1).map(s=>s.mw));
+  const tiers=[0,0,0,0]; for(const s of S) tiers[bopTier(s,st)]++;
+  return {sites:S.length, cap, atRisk:risk, pctAtRisk: cap>0? risk/cap*100 : 0, tiers,
+    custConfirmed:new Set(S.filter(s=>bopTier(s,st)===0).map(s=>s.c)).size,
+    rec:sum(S.map(s=>s.b.rc)), medAge:median(S.map(s=>s.b.age)), cems:S.filter(s=>s.b.cf).length};
+}
+/* customer prospect list: roll-up over the customer's in-scope fleet (shared filters + confidence), listed when at least
+   one of its sites passes the prospecting filters */
+function bopCustRows(st){
+  const shown=new Set(bopFiltered(st).map(i=>DATA.sites[i].c)), groups=new Map();
+  for(const i of bopBaseFiltered(st)){ const s=DATA.sites[i]; if(!shown.has(s.c)) continue; if(!groups.has(s.c)) groups.set(s.c,[]); groups.get(s.c).push(s); }
+  const rows=[];
+  for(const [k,S] of groups){
+    const mw=sum(S.map(s=>s.mw)), n=[0,0,0,0], mwt=[0,0,0,0]; let bw=0, bwm=0, worst=null;
+    for(const s of S){ const t=bopTier(s,st); n[t]++; mwt[t]+=s.mw||0; if(s.b.bp!=null){ bw+=s.b.bp*(s.mw||0); bwm+=(s.mw||0); if(!worst||s.b.bp>worst.b.bp) worst=s; } }
+    rows.push({key:k, name:DATA.custs[k], ssi:S.some(s=>s.ssi), n:S.length, mw, conf:n[0], lik:n[1], exp:n[2],
+      mwRisk:mwt[0]+mwt[1], share: mw>0? (mwt[0]+mwt[1])/mw : 0, bpri: bwm>0? bw/bwm : null, rec:sum(S.map(s=>s.b.rc)),
+      worst: worst? worst.n : '', states:[...new Set(S.map(s=>DATA.states[s.s]))].sort(), bas:[...new Set(S.map(s=>s.ba).filter(Boolean))].sort(),
+      eligible:S.length>=BOP_MIN_SHARE_SITES});
+  }
+  return rows;
+}
+/* chart: capacity (nameplate that year) or cooling + BoP recoverable $ by that year's tier */
+function bopChart(idx, st, metric){
+  const coolSigs=new Set(['COOLING_DEGRADATION','BOP_INTERMITTENT'].map(z=>DATA.sigs.indexOf(z)));
+  return DATA.years.map((y,j)=>{ const v=[0,0,0,0];
+    for(const i of idx){ const s=DATA.sites[i]; const t=s.b.ty[j]; const r=s.y[y]; if(!r || t==null || t<0) continue;
+      if(metric==='rec'){ for(let m=0;m<12;m++) if(coolSigs.has(r.g[m])) v[t]+=r.r[m]||0; } else v[t]+=r.mw||0; }
+    return {key:String(y), v}; });
+}
 </script>
 
 <script id="ui">
@@ -311,6 +372,9 @@ function sel(opts, cur, onChange){ const s=document.createElement('select'); s.c
 
 function buildControls(){
   const c=byId('controls'); c.innerHTML='';
+  if(DATA.kind==='gas'){ const v=document.createElement('div');
+    seg(v, [['perf','Performance'],['bop','BoP targeting']], ST.view, x=>{ if(x===ST.view) return; ST.view=x; ST.sel=-1; backStack=[]; if(x==='bop' && ST.mode==='sig') ST.mode='site'; render(); });
+    const vc=ctl('View', v); vc.style.flex='1 1 100%'; c.appendChild(vc); }
   // technology: coloured multi-toggle with All / none (fleet infographic pattern)
   const t=document.createElement('div'); t.className='seg tech';
   DATA.tech.forEach((name,i)=>{ const b=document.createElement('button'); b.type='button'; b.textContent=name; const on=ST.tech.has(i);
@@ -335,6 +399,7 @@ function buildControls(){
   c.appendChild(ctl('State', sel([[-1,'All states'], ...DATA.states.map((z,i)=>[i,z])], ST.state, v=>{ ST.state=+v; ST.sel=-1; render(); })));
   const rel=document.createElement('div'); seg(rel, [['all','All'],['ssi','SSI customers'],['prospect','Prospects']], ST.rel, v=>{ ST.rel=v; ST.sel=-1; render(); });
   c.appendChild(ctl('Relationship', rel));
+  if(ST.view==='bop') return buildBopControls(c);
   const gb=document.createElement('div'); seg(gb, [['5y','5-yr 2019→25'],['2y','2-yr 2023→25']], ST.growBasis, v=>{ ST.growBasis=v; ST.sel=-1; render(); });
   c.appendChild(ctl('Capacity growth basis', gb));
   const gw=document.createElement('div'); seg(gw, [['all','All'],['0','>0%'],['10','>10%'],['25','>25%'],['50','>50%'],['new','New only'],['dec','Declining']], ST.growMin, v=>{ ST.growMin=v; ST.sel=-1; render(); });
@@ -362,7 +427,23 @@ function buildControls(){
   if(DATA.kind==='gas') c.appendChild(ctl('Recoverable $', sel([['all','All'],['100000','> $100k / yr'],['500000','> $500k / yr'],['1000000','> $1M / yr']], ST.rec, v=>{ ST.rec=v; render(); })));
   c.appendChild(ctl('Data confidence', sel(CONFIG.confOptions, ST.conf, v=>{ ST.conf=v; render(); })));
   const r=document.createElement('button'); r.className='backbtn'; r.type='button'; r.textContent='Reset all';
-  r.onclick=()=>{ Object.assign(ST, defaultState()); custQuery=''; backStack=[]; render(); };
+  r.onclick=()=>{ Object.assign(ST, defaultState(), {view:ST.view}); custQuery=''; backStack=[]; render(); };
+  c.appendChild(ctl('&nbsp;', r));
+}
+function buildBopControls(c){
+  const ys=document.createElement('div'); seg(ys, [['all','Current'], ...DATA.years.map(y=>[String(y),String(y)])], ST.year, v=>{ ST.year=v; ST.sel=-1; render(); });
+  c.appendChild(ctl('Year (tier as of)', ys));
+  const tr=document.createElement('div'); seg(tr, [['all','All'], ...CONFIG.tierLabels.map((l,i)=>[String(i),l])], ST.btier, v=>{ ST.btier=v; ST.sel=-1; render(); });
+  [...tr.children].forEach((b,i)=>{ if(i>0 && b.classList.contains('active')){ b.style.background=CONFIG.tierColors[i-1]; b.style.color='#fff'; } });
+  c.appendChild(ctl('Tier', tr));
+  c.appendChild(ctl('BPRI band', sel([['all','All'],['80','> 80'],['60','> 60'],['40','> 40']], ST.bband, v=>{ ST.bband=v; ST.sel=-1; render(); })));
+  c.appendChild(ctl('Evidence vs exposure', sel([['all','All'],['ev','Evidence-led (C1 or C2 ≥ p75)'],['ex','Exposure-led (no current signal)']], ST.bev, v=>{ ST.bev=v; ST.sel=-1; render(); })));
+  c.appendChild(ctl('BoP age', sel([['all','All'],['15','> 15 yrs'],['20','> 20 yrs']], ST.bage, v=>{ ST.bage=v; ST.sel=-1; render(); })));
+  c.appendChild(ctl('Cycling intensity', sel([['all','All'],['heavy','Heavy (starts/MW/yr > p75 = '+nf(DATA.bopHeavyP75,2)+')']], ST.bcyc, v=>{ ST.bcyc=v; ST.sel=-1; render(); })));
+  const cf=document.createElement('div'); seg(cf, [['cems','CEMS-backed only'],['all','All']], ST.bconf, v=>{ ST.bconf=v; ST.sel=-1; render(); });
+  c.appendChild(ctl('Confidence', cf));
+  const r=document.createElement('button'); r.className='backbtn'; r.type='button'; r.textContent='Reset all';
+  r.onclick=()=>{ Object.assign(ST, defaultState(), {view:'bop'}); custQuery=''; backStack=[]; render(); };
   c.appendChild(ctl('&nbsp;', r));
 }
 let sigOpen=false, custQuery='';
@@ -370,6 +451,10 @@ const custCap={}; DATA.sites.forEach(s=>{ custCap[s.c]=(custCap[s.c]||0)+(s.mw||
 const CUST_ORDER=DATA.custs.map((_,i)=>i).sort((a,b)=>(custCap[b]||0)-(custCap[a]||0));
 
 function renderStats(idx){
+  if(ST.view==='bop'){ const o=bopStats(idx, ST);
+    const items=[[nf(o.sites,0),'Sites in scope'], [fmtC(o.atRisk),'Capacity at risk (confirmed + likely)'], [nf(o.pctAtRisk,1)+'%','Of filtered capacity at risk',true],
+      [nf(o.custConfirmed,0),'Customers with ≥1 confirmed site'], [fmtUSD(o.rec),'Recoverable $ / yr (cooling + BoP)'], [o.medAge==null?'–':nf(o.medAge,0)+' yrs','Median BoP age']];
+    byId('stats').innerHTML=items.map(([v,l,h])=>'<div'+(h?' class="head"':'')+'><b>'+v+'</b><span>'+l+'</span></div>').join(''); return; }
   const o=stats(idx, ST), el=byId('stats'), ly=lastYear(ST);
   const items = DATA.kind==='gas' ? [
     [nf(o.sites,0),'Sites'], [fmtC(o.cap),'Capacity '+ly], [fmtUSD(o.recPerYr),'Recoverable $ / yr'],
@@ -398,9 +483,9 @@ function renderMap(idx){
   const tip=byId('tip'), box=byId('mapbox');
   svg.select('g.dots').selectAll('circle').data(pts, d=>d.i).join('circle')
     .attr('class',d=>'dot'+(d.i===ST.sel?' sel':'')).attr('cx',d=>d.p[0]).attr('cy',d=>d.p[1]).attr('r',d=>r(d.s.mw||0))
-    .attr('fill',d=>{ const b=bandOf(siteIndex(d.s,yrs)); return b? b.c : NA_COLOR; })
-    .on('mousemove',(e,d)=>{ tip.innerHTML=tipHTML(d.s, yrs); tip.style.opacity=1;
-      const bb=box.getBoundingClientRect(); let x=e.clientX-bb.left+14, y=e.clientY-bb.top+14; if(x>bb.width-310) x-=330; tip.style.left=x+'px'; tip.style.top=y+'px'; })
+    .attr('fill',d=>{ if(ST.view==='bop') return CONFIG.tierColors[bopTier(d.s,ST)]; const b=bandOf(siteIndex(d.s,yrs)); return b? b.c : NA_COLOR; })
+    .on('mousemove',(e,d)=>{ tip.innerHTML= ST.view==='bop' ? tipBop(d.s) : tipHTML(d.s, yrs); tip.style.opacity=1;
+      const bb=box.getBoundingClientRect(); let x=e.clientX-bb.left+14, y=e.clientY-bb.top+14; if(x>bb.width-310) x-=330; x=Math.max(0, Math.min(x, bb.width-tip.offsetWidth-4)); tip.style.left=x+'px'; tip.style.top=y+'px'; })
     .on('mouseleave',()=>{ tip.style.opacity=0; })
     .on('click',(e,d)=>{ ST.sel=(ST.sel===d.i)?-1:d.i; if(ST.sel>=0) ST.mode='site'; render(); if(ST.sel>=0) byId('tscroll').scrollIntoView({behavior:'smooth', block:'start'}); });
   svg.select('g.dots').selectAll('circle.sel').raise();
@@ -415,8 +500,17 @@ function tipHTML(s, yrs){
     idxLine+(b?' · <span style="color:'+b.c+'">●</span> '+b.label:'')+'<br>'+
     'Dominant: '+esc(CONFIG.sigLabels[s.dm])+'<br>'+CONFIG.valueName+', selected period: <b>'+fmtVal(tot)+'</b>';
 }
+function tipBop(s){
+  const b=s.b, t=bopTier(s,ST), f=(v,d,u)=>v==null?'–':nf(v,d)+(u||'');
+  return '<b>'+esc(s.n)+'</b><br><span class="k">'+esc(DATA.tech[s.t])+' · '+esc(DATA.states[s.s])+' · '+fmtC(s.mw)+'</span><br>'+
+    esc(DATA.custs[s.c])+(s.ssi?' (SSI)':' (prospect)')+'<br>'+
+    'BPRI <b>'+f(b.bp,0)+'</b> · <span style="color:'+CONFIG.tierColors[t]+'">●</span> <b>'+CONFIG.tierLabels[t]+'</b>'+(b.cf?'':' <span class="k">(low confidence: no CEMS)</span>')+'<br>'+
+    'Summer penalty '+f(b.sp,2,'%')+' · starts/MW/yr '+f(b.spm,2)+' · trips '+f(b.trp,2)+' /1,000 h<br>'+
+    'Recoverable (cooling + BoP): <b>'+fmtUSD(b.rc)+'/yr</b><br><span class="k" style="display:inline-block;white-space:normal;max-width:280px">'+esc(DATA.scopes[b.sc])+'</span>';
+}
 function renderLegend(){
   const el=byId('legend');
+  if(ST.view==='bop'){ el.innerHTML='<span class="grp">Conviction tier</span>'+CONFIG.tierLabels.map((l,i)=>'<span><i style="background:'+CONFIG.tierColors[i]+'"></i>'+l+'</span>').join('')+'<span style="margin-left:8px">Dot area &prop; nameplate MW</span>'; return; }
   el.innerHTML='<span class="grp">'+nc(CONFIG.indexName)+'</span>'+BANDS.map(b=>'<span><i style="background:'+b.c+'"></i>'+b.label+' '+bandRange(b)+'</span>').join('')+
     '<span><i style="background:'+NA_COLOR+'"></i>'+CONFIG.naLabel+'</span><span style="margin-left:8px">Dot area &prop; nameplate MW</span>';
 }
@@ -426,6 +520,7 @@ function renderChart(idx){
   const svg=d3.select('#chart'); svg.selectAll('*').remove();
   const W=Math.max(320, byId('chartbox').clientWidth-36), H=320; svg.attr('viewBox','0 0 '+W+' '+H).attr('width',W).attr('height',H);
   const modeEl=byId('chartmode');
+  if(ST.view==='bop') return renderBopChart(svg, idx, W, H, modeEl);
   if(DATA.kind==='bess') seg(modeEl, [['stack','MWh at stake'],['eff','Efficiency: RTE vs η_true']], ST.chart, v=>{ ST.chart=v; render(); }); else modeEl.innerHTML='';
   if(DATA.kind==='bess' && ST.chart==='eff') return renderEff(svg, idx, W, H);
   const rows=chartData(idx, ST);
@@ -459,6 +554,32 @@ function renderChart(idx){
       .on('mouseleave',()=>{ tip.style.opacity=0; });
   });
   renderChartLegend(keys);
+}
+function renderBopChart(svg, idx, W, H, modeEl){
+  seg(modeEl, [['cap','Capacity by tier'],['rec','Recoverable $ by tier']], ST.bchart, v=>{ ST.bchart=v; render(); });
+  const rec=ST.bchart==='rec', fmt=rec? fmtUSD : fmtC, fmtA=rec? (v=>fmtAxis(v)) : (v=>fmtC(v));
+  const rows=bopChart(idx, ST, ST.bchart), keys=[0,1,2,3];
+  byId('charttitle').textContent=chartLabel()+' — '+(rec?'cooling + BoP recoverable $':'nameplate capacity')+' by that year’s conviction tier';
+  byId('chartnote').textContent='Each year’s tier uses that year’s cooling signal and deficit share against peers, with static exposure. Watch the red and orange share grow or shrink across years.';
+  byId('chartlegend').innerHTML=CONFIG.tierLabels.map((l,i)=>'<span><i class="sq" style="background:'+CONFIG.tierColors[i]+'"></i>'+l+'</span>').join('');
+  const m={t:12,r:12,b:34,l:70};
+  const x=d3.scaleBand().domain(rows.map(r=>r.key)).range([m.l,W-m.r]).padding(0.22);
+  const tot=rows.map(r=>sum(r.v)), ymax=d3.max(tot)||0;
+  const y=d3.scaleLinear().domain([0, ymax>0?ymax*1.06:1]).nice().range([H-m.b,m.t]);
+  svg.append('g').attr('class','grid').attr('transform','translate('+m.l+',0)').call(d3.axisLeft(y).ticks(5).tickSize(-(W-m.l-m.r)).tickFormat(''));
+  svg.append('g').attr('class','axis').attr('transform','translate('+m.l+',0)').call(d3.axisLeft(y).ticks(5).tickFormat(fmtA));
+  svg.append('g').attr('class','axis').attr('transform','translate(0,'+(H-m.b)+')').call(d3.axisBottom(x).tickSizeOuter(0));
+  if(!idx.length || ymax<=0){ svg.append('text').attr('class','empty').attr('x',W/2).attr('y',H/2).attr('text-anchor','middle').text(idx.length?'Nothing to show for this selection':'No sites in this selection'); return; }
+  const stack=d3.stack().keys(keys).value((r,k)=>r.v[k])(rows);
+  const tip=byId('ctip'), box=byId('chartbox');
+  stack.forEach(layer=>{ const k=layer.key;
+    svg.append('g').selectAll('rect').data(layer.map((d,j)=>({d,j}))).join('rect')
+      .attr('x',o=>x(rows[o.j].key)).attr('width',x.bandwidth()).attr('y',o=>y(o.d[1])).attr('height',o=>Math.max(0,y(o.d[0])-y(o.d[1])))
+      .attr('fill',CONFIG.tierColors[k]).attr('stroke','#fff').attr('stroke-width',1)
+      .on('mousemove',(e,o)=>{ const v=o.d[1]-o.d[0]; tip.innerHTML='<b>'+rows[o.j].key+'</b><br><span class="sigdot" style="background:'+CONFIG.tierColors[k]+'"></span>'+CONFIG.tierLabels[k]+': <b>'+fmt(v)+'</b> ('+nf(tot[o.j]>0?v/tot[o.j]*100:0,1)+'%)<br><span class="k">Year total: '+fmt(tot[o.j])+'</span>';
+        tip.style.opacity=1; const bb=box.getBoundingClientRect(); let px=e.clientX-bb.left+14; if(px>bb.width-240) px-=260; tip.style.left=px+'px'; tip.style.top=(e.clientY-bb.top+14)+'px'; })
+      .on('mouseleave',()=>{ tip.style.opacity=0; });
+  });
 }
 function chartLabel(){ if(ST.sel>=0) return DATA.sites[ST.sel].n; if(ST.cust>=0) return DATA.custs[ST.cust]; if(ST.state>=0) return DATA.states[ST.state]; return 'All filtered sites'; }
 function renderChartLegend(keys){
@@ -497,6 +618,8 @@ function renderEff(svg, idx, W, H){
 /* ---------- table ---------- */
 const TABLE_CAP=700;
 function renderTable(idx){
+  byId('copytsv').style.display=ST.view==='bop'?'':'none'; byId('bsort').style.display='none'; byId('copymsg').textContent='';
+  if(ST.view==='bop') return renderBopTable(idx);
   const mode=ST.mode;
   seg(byId('rowmode'), [['site','By site'],['cust','By customer'],['sig','By signature']], mode, v=>{ if(v!==ST.mode){ backStack.push(snap()); ST.mode=v; ST.sel=-1; render(); } });
   const back=byId('back'); back.style.display=(backStack.length||ST.sel>=0||ST.cust>=0)?'':'none';
@@ -532,6 +655,89 @@ function renderTable(idx){
     if(mode==='site'){ ST.sel=(ST.sel===k)?-1:k; render(); if(ST.sel>=0) byId('mapbox').scrollIntoView({behavior:'smooth', block:'center'}); }
     else if(mode==='cust'){ backStack.push(snap()); ST.cust=k; ST.mode='site'; custQuery=''; render(); window.scrollTo({top:0,behavior:'smooth'}); }
     else { backStack.push(snap()); ST.sigs=new Set([k]); ST.mode='site'; render(); } });
+}
+/* ---------- BoP targeting table ---------- */
+const tierPill=t=>'<span class="pill" style="background:'+CONFIG.tierColors[t]+'">'+CONFIG.tierLabels[t]+'</span>';
+const fx=(v,d,u)=>v==null?'–':nf(v,d)+(u||'');
+let BOP_TSV=null;
+function bopSiteCols(){ return [{h:'Plant',l:1},{h:'Customer',l:1},{h:'St',l:1},{h:'MW'},{h:'Original COD'},{h:'BoP age'},{h:'BPRI'},{h:'Tier',l:1},
+  {h:'Summer penalty %'},{h:'Cooling trend %/yr'},{h:'Starts/MW/yr'},{h:'Trip rate /1,000 h'},{h:'Recoverable $/yr',cls:'tot'},{h:'Confidence',l:1},{h:'Suggested scope',l:1}]; }
+function bopSiteRow(i){ const s=DATA.sites[i], b=s.b, t=bopTier(s,ST);
+  const det=[DATA.tech[s.t], 'C1–C7: '+b.c.map(v=>v==null?'–':nf(v,0)).join(' / '), b.im?'evidence imputed (no monthly data)':null, s.ba||null].filter(Boolean).join(' · ');
+  const cells=[esc(s.n)+' <span class="muted" style="font-weight:400">#'+s.id+'</span><div class="det">'+esc(det)+'</div>', esc(DATA.custs[s.c])+' '+ssiPill(s.ssi),
+    esc(DATA.states[s.s]), fmtC(s.mw), b.cod||'–', fx(b.age,0), fx(b.bp,0), tierPill(t), fx(b.sp,2), fx(b.ct,2), fx(b.spm,2), fx(b.trp,2), fmtUSD(b.rc),
+    b.cf?'high (CEMS)':'<span class="muted">low (proxy)</span>', '<span style="display:inline-block;max-width:340px;white-space:normal">'+esc(DATA.scopes[b.sc])+'</span>'];
+  const sv=[s.n, DATA.custs[s.c], DATA.states[s.s], s.mw, b.cod, b.age, b.bp, -t, b.sp, b.ct, b.spm, b.trp, b.rc, b.cf, DATA.scopes[b.sc]];
+  const tsv=[s.n, s.id, DATA.tech[s.t], DATA.custs[s.c], s.ssi?'SSI':'prospect', DATA.states[s.s], s.ba||'', s.mw, b.cod, b.age, b.bp, CONFIG.tierLabels[t],
+    b.sp, b.ct, b.spm, b.trp, b.rc, b.cf?'high':'low', DATA.scopes[b.sc]];
+  return {key:i, cells, sv, tsv};
+}
+const BOP_SITE_TSV_HEAD=['Plant','Plant ID','Technology','Customer','Relationship','State','BA','MW','Original COD','BoP age','BPRI','Tier','Summer penalty %',
+  'Cooling trend %/yr','Starts/MW/yr','Trip rate /1000h','Recoverable $/yr','Confidence','Suggested scope'];
+function bopCustCols(){ return [{h:'Customer',l:1},{h:'Status',l:1},{h:'Gas sites'},{h:'Total gas MW'},{h:'Confirmed'},{h:'Likely'},{h:'Exposed'},
+  {h:'Share at risk %',cls:'tot'},{h:'BPRI (cap-wtd)'},{h:'Recoverable $/yr',cls:'tot'},{h:'Worst site',l:1},{h:'States',l:1},{h:'BAs',l:1}]; }
+function bopCustRow(r){
+  const cells=[esc(r.name), ssiPill(r.ssi), nf(r.n,0), fmtC(r.mw), r.conf||'–', r.lik||'–', r.exp||'–', '<b>'+nf(r.share*100,1)+'%</b>', fx(r.bpri,0), fmtUSD(r.rec),
+    esc(r.worst), '<span style="display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom">'+esc(r.states.join(', '))+'</span>',
+    '<span style="display:inline-block;max-width:160px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom">'+esc(r.bas.join(', '))+'</span>'];
+  const sv=[r.name, r.ssi?1:0, r.n, r.mw, r.conf, r.lik, r.exp, r.share, r.bpri, r.rec, r.worst, r.states.join(', '), r.bas.join(', ')];
+  const tsv=[r.name, r.ssi?'SSI':'prospect', r.n, Math.round(r.mw), r.conf, r.lik, r.exp, (r.share*100).toFixed(1), r.bpri==null?'':r.bpri.toFixed(0), Math.round(r.rec), r.worst, r.states.join(', '), r.bas.join(', ')];
+  return {key:r.key, cells, sv, tsv};
+}
+const BOP_CUST_TSV_HEAD=['Customer','Relationship','Gas sites','Total gas MW','Confirmed','Likely','Exposed','Share at risk %','BPRI (cap-wtd)','Recoverable $/yr','Worst site','States','BAs'];
+function sortRows(rows, cols, sk){ if(!sk || !cols[sk.col]) return; rows.sort((a,b)=>{ const va=a.sv[sk.col], vb=b.sv[sk.col]; if(va==null&&vb==null) return 0; if(va==null) return 1; if(vb==null) return -1; return (va<vb?-1:va>vb?1:0)*sk.dir; }); }
+function renderBopTable(idx){
+  const mode=ST.mode==='cust'?'cust':'site', sk=ST.sort[mode==='cust'?'bcust':'bsite'];
+  seg(byId('rowmode'), [['site','By site'],['cust','By customer']], mode, v=>{ if(v!==mode){ backStack.push(snap()); ST.mode=v; ST.sel=-1; render(); } });
+  const back=byId('back'); back.style.display=(backStack.length||ST.sel>=0||ST.cust>=0)?'':'none';
+  back.innerHTML = ST.sel>=0 ? '&lsaquo; Back to all sites' : ST.cust>=0 ? '&lsaquo; Back to all customers' : '&lsaquo; Back';
+  back.onclick=()=>{ if(ST.sel>=0){ ST.sel=-1; render(); return; } const z=backStack.pop(); if(z) restore(z); else if(ST.cust>=0){ ST.cust=-1; ST.mode='cust'; } render(); };
+  const thead=byId('grid').querySelector('thead'), tbody=byId('grid').querySelector('tbody');
+  let cols, rows, note, extra='', tsvHead;
+  if(mode==='site'){
+    let list=idx.slice(); if(ST.sel>=0) list=list.filter(i=>i===ST.sel);
+    cols=bopSiteCols(); rows=list.map(bopSiteRow); tsvHead=BOP_SITE_TSV_HEAD;
+    rows.sort((a,b)=>(b.sv[6]??-1)-(a.sv[6]??-1)); sortRows(rows, cols, sk);
+    const n=rows.length;
+    note=nf(n,0)+' site'+(n===1?'':'s')+(ST.bconf==='cems'?' (CEMS-backed only)':'')+(sk?'':'; ranked by BPRI')+(n>TABLE_CAP?'; showing the first '+nf(TABLE_CAP,0)+' (Copy exports all)':'')+'. Click a row to pin it on the map.';
+    byId('tbltitle').textContent= ST.sel>=0 ? DATA.sites[ST.sel].n : ST.cust>=0 ? DATA.custs[ST.cust]+' — '+nf(n,0)+' site'+(n===1?'':'s') : 'Target sites';
+  } else {
+    const all=bopCustRows(ST); cols=bopCustCols(); tsvHead=BOP_CUST_TSV_HEAD;
+    const bs=byId('bsort'); bs.style.display='';
+    seg(bs, [['rec','Sort: Recoverable $'],['share','Sort: Share at risk']], ST.bsort, v=>{ ST.bsort=v; ST.sort.bcust=null; ST.smallOpen=false; render(); });
+    let small=[];
+    if(!sk && ST.bsort==='share'){ rows=all.filter(r=>r.eligible).map(bopCustRow); small=all.filter(r=>!r.eligible).map(bopCustRow);
+      const cmp=(a,b)=>(b.sv[7]-a.sv[7])||(b.sv[3]*b.sv[7]-a.sv[3]*a.sv[7]); rows.sort(cmp); small.sort(cmp); }
+    else { rows=all.map(bopCustRow); rows.sort((a,b)=>b.sv[9]-a.sv[9]); sortRows(rows, cols, sk); }
+    note=nf(all.length,0)+' customers with at least one site matching the filters. Roll-ups cover each customer’s in-scope gas fleet (technology, state, relationship and confidence filters). '+
+      'Recoverable $ ranks the biggest prize. Share at risk ranks the most systemic — a customer with eight of ten plants flagged has an O&M problem, not a plant problem, and that is a portfolio conversation with a different buyer.'+
+      (ST.bsort==='share'&&!sk?' Customers with fewer than '+BOP_MIN_SHARE_SITES+' gas sites in scope are excluded from this ordering and listed, collapsed, at the bottom.':'')+' Click a customer to drill into its sites.';
+    byId('tbltitle').textContent='Prospect list — customers';
+    if(small.length){ extra='<tr class="smallhdr" id="smallhdr"><td class="kcol" colspan="'+cols.length+'" style="cursor:pointer;color:#6b6b6b;font-style:italic">'+(ST.smallOpen?'▾':'▸')+' '+nf(small.length,0)+
+        ' customer'+(small.length===1?'':'s')+' with fewer than '+BOP_MIN_SHARE_SITES+' gas sites (excluded from the share-at-risk ordering) — click to '+(ST.smallOpen?'hide':'show')+'</td></tr>';
+      if(ST.smallOpen) extra+=small.map(r=>trHTML(r, cols, 'ovrow smallrow')).join(''); }
+    BOP_TSV=[tsvHead, ...rows.map(r=>r.tsv), ...small.map(r=>r.tsv)];
+  }
+  if(mode==='site') BOP_TSV=[tsvHead, ...rows.map(r=>r.tsv)];
+  const shown=rows.length>TABLE_CAP? rows.slice(0,TABLE_CAP) : rows;
+  byId('tblnote').textContent=note;
+  thead.innerHTML='<tr>'+cols.map((c,j)=>'<th data-j="'+j+'" class="'+(j===0?'kcol':'')+(c.l&&j>0?' lcol':'')+(c.cls?' '+c.cls:'')+'">'+c.h+(sk&&sk.col===j?' <span class="ar">'+(sk.dir>0?'▲':'▼')+'</span>':'')+'</th>').join('')+'</tr>';
+  thead.querySelectorAll('th').forEach(th=>th.onclick=()=>{ const j=+th.dataset.j, key=mode==='cust'?'bcust':'bsite', cur=ST.sort[key]; ST.sort[key]={col:j, dir:(cur&&cur.col===j)? -cur.dir : (cols[j].l? 1 : -1)}; renderTable(idx); });
+  tbody.innerHTML=(shown.map(r=>trHTML(r, cols, 'ovrow'+(mode==='site'&&r.key===ST.sel?' selrow':''))).join('')+extra) || '<tr><td class="kcol muted">No rows in this selection</td></tr>';
+  const sh=byId('smallhdr'); if(sh) sh.onclick=()=>{ ST.smallOpen=!ST.smallOpen; renderTable(idx); };
+  tbody.querySelectorAll('tr[data-k]').forEach(tr=>tr.onclick=()=>{ const k=+tr.dataset.k;
+    if(mode==='site'){ ST.sel=(ST.sel===k)?-1:k; render(); if(ST.sel>=0) byId('mapbox').scrollIntoView({behavior:'smooth', block:'center'}); }
+    else { backStack.push(snap()); ST.cust=k; ST.mode='site'; custQuery=''; render(); window.scrollTo({top:0,behavior:'smooth'}); } });
+  byId('copytsv').onclick=()=>copyTSV(BOP_TSV);
+}
+function trHTML(r, cols, cls){ return '<tr class="'+cls+'" data-k="'+r.key+'">'+r.cells.map((c,j)=>'<td class="'+(j===0?'kcol ':'')+(cols[j].l&&j>0?'lcol ':'')+(cols[j].cls||'')+'">'+c+'</td>').join('')+'</tr>'; }
+function copyTSV(t){
+  const clean=v=>v==null?'':String(v).replace(/[\t\n\r]+/g,' ');
+  const txt=t.map(r=>r.map(clean).join('\t')).join('\n'), msg=byId('copymsg'), n=t.length-1;
+  const done=()=>{ msg.textContent='Copied '+nf(n,0)+' row'+(n===1?'':'s')+' as TSV'; setTimeout(()=>{ msg.textContent=''; }, 3000); };
+  const fallback=()=>{ const ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); done(); }catch(e){ msg.textContent='Copy failed'; } ta.remove(); };
+  if(navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(txt).then(done, fallback); else fallback();
 }
 function snap(){ return {mode:ST.mode, cust:ST.cust, sigs:new Set(ST.sigs)}; }
 function restore(s){ ST.mode=s.mode; ST.cust=s.cust; ST.sigs=s.sigs; }
@@ -576,12 +782,15 @@ function groupRow(mode, r){
   return {key:r.key, cells, sv};
 }
 
-function renderFooter(){ byId('footer').innerHTML=CONFIG.footer.map(p=>'<p>'+p+'</p>').join(''); }
+function renderFooter(){ byId('footer').innerHTML=(ST.view==='bop'?CONFIG.footerBop:CONFIG.footer).map(p=>'<p>'+p+'</p>').join(''); }
+const MAPHINT={perf:'Dot size is nameplate capacity, colour is the performance band. Hover for detail; click to drill the table into that site; click a state to filter.',
+  bop:'Dot size is nameplate capacity, colour is the balance-of-plant conviction tier. Hover for BPRI, evidence and the implied inspection scope; click to pin a site; click a state to filter.'};
 
 function render(keepSigOpen){
   if(!keepSigOpen) sigOpen=false;
-  const idx=filtered(ST);
-  buildControls(); renderStats(idx); renderMap(idx); renderLegend(); renderChart(idx); renderTable(idx);
+  const idx= ST.view==='bop' ? bopFiltered(ST) : filtered(ST);
+  byId('maphint').textContent=MAPHINT[ST.view];
+  buildControls(); renderStats(idx); renderMap(idx); renderLegend(); renderChart(idx); renderTable(idx); renderFooter();
 }
 /* ---------- tech-specific table columns ---------- */
 CONFIG.rankName='MWh at stake in the selected period';
@@ -605,9 +814,8 @@ CONFIG.siteRow=(o,pers)=>{ const s=o.s, yrs=yearsOf(ST), ly=lastYear(ST);
   const sv=[s.n, DATA.custs[s.c], DATA.tech[s.t], DATA.states[s.s], capAt(s,ly)||s.mw, mwh, s.oy, yo, rte, s.eta, s.pa, efc, uti, s.fs==='ok'?s.fd:null, s.ce, s.wu, CONFIG.sigLabels[s.dm], ...o.per, o.total];
   return {key:o.i, cells, sv}; };
 
-renderFooter();
 render();
-let rsz; window.addEventListener('resize',()=>{ clearTimeout(rsz); rsz=setTimeout(()=>renderChart(filtered(ST)),150); });
+let rsz; window.addEventListener('resize',()=>{ clearTimeout(rsz); rsz=setTimeout(()=>renderChart(ST.view==='bop'?bopFiltered(ST):filtered(ST)),150); });
 </script>
 </body>
 </html>

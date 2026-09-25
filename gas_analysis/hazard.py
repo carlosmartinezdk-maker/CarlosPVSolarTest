@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 
-FAULT_SIGS = ["FOULING", "HGP", "CYCLING"]
+FAULT_SIGS = ["FOULING", "HGP", "CYCLING", "COOLING_DEGRADATION", "BOP_INTERMITTENT"]
 MIN_EVENTS = 20
 K_RANDOM_BAND = (0.9, 1.1)
 
@@ -106,7 +106,7 @@ def plot(onset, renewal, path):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    col = {"FOULING": "#2a6fdb", "HGP": "#d9822b", "CYCLING": "#3d9970"}
+    col = {"FOULING": "#2a6fdb", "HGP": "#d9822b", "CYCLING": "#3d9970", "COOLING_DEGRADATION": "#b0452f", "BOP_INTERMITTENT": "#7a5c99"}
     fig, axs = plt.subplots(1, 3, figsize=(16, 4.8))
     specs = [("age", "Calendar age since COD (years)", np.linspace(0.5, 60, 200)),
              ("cum_eoh", "Cumulative EOH since COD (thousand hours)", np.linspace(1, 250, 200))]

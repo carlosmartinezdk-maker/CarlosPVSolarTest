@@ -32,6 +32,24 @@ GAS_FOOT = [
     "not quotes. Recoverable $ is capped at each unit's own best heat rate. EIA-923 annual respondents (most small GTs and engines) carry "
     "EIA-allocated monthly values, so their monthly components are unresolved. Gas Steam capacity matching is ~52–55%: indicative only.",
 ]
+BOP_FOOT = [
+    "<b>The balance-of-plant index is a propensity score, not a diagnosis.</b> It detects a system-level thermodynamic consequence "
+    "(a summer heat-rate penalty that survives ambient correction, consistent with condenser or cooling-water degradation), never a "
+    "component fault. The measured detection floor is a 4.5% heat-rate change in a single month and 1.30% sustained over twelve "
+    "(month-over-month noise σ = 2.25% on stable baseload combined cycle; this dataset measures 2.63%). Total failure of the largest "
+    "auxiliary pump on a 500 MW plant is about 1.2% of output, so individual pumps sit below the floor by construction. Confirming a "
+    "cause requires an on-site condenser performance test and a pump vibration survey.",
+    "<b>Confidence.</b> CEMS-backed rows use EPA CAMPD hourly gross load (2024–2025) for starts, trips and ramping, validated against "
+    "EIA-923 heat input (median ratio 1.00). Rows marked <i>low</i> confidence have no CEMS data; their cycling exposure is a weak "
+    "monthly proxy (load-factor variability), trip and ramp components are missing, and the remaining weights are renormalised. "
+    "Where monthly evidence is missing (annual respondents), the evidence components are set to the peer median.",
+    "<b>BPRI</b> = 0.30·cooling signal + 0.25·unattributed/BoP deficit share + 0.15·starts + 0.10·trips + 0.05·ramping + "
+    "0.10·BoP age (years since <i>original</i> COD) + 0.05·interruptible gas, each a 0–100 percentile within class × unit-size band "
+    "× climate region. The weights are judgement, not measurement. <b>Confirmed</b>: cooling and deficit evidence both ≥ p75 and "
+    "persistent ≥ 2 years. <b>Likely</b>: either ≥ p75 with exposure ≥ p60. <b>Exposed</b>: exposure ≥ p80 with no current "
+    "evidence (the preventative sale). Recoverable $ counts only cooling and BoP-intermittent months in the last 24 months, "
+    "annualised, with placeholder recovery fractions (0.75 / 0.60). It is not a quote.",
+]
 BESS_FOOT = [
     "<b>Efficiency is decomposed</b> by regressing charge/discharge on hours/discharge for each site: 1/intercept = conversion "
     "efficiency η_true, slope = continuous parasitic load P_aux. Apparent RTE (grid boundary) and η_true (conversion boundary) are both "
@@ -60,15 +78,18 @@ CONFIGS = {
         "chartTitle": "Excess fuel cost vs attainable target, stacked by signature",
         "chartNote": "Recoverable causes sit at the bottom (green/blue); non-recoverable (browns) and unresolved or by-design (greys) stack on top.",
         "indexName": "HRI (vs fleet p10 envelope)", "indexShort": "HRI", "naLabel": "No scoreable months",
-        "sigLabels": ["Compressor fouling", "Hot-gas-path deterioration", "Non-recoverable", "Cycling damage", "Unattributed",
+        "sigLabels": ["Compressor fouling", "Hot-gas-path deterioration", "Cooling / condenser degradation", "BoP intermittent",
+                      "Non-recoverable", "Cycling damage", "Unattributed",
                       "Annual reporter (unresolved)", "Duct firing (by design)", "Fuel-quality artefact", "Healthy (design gap to target)"],
-        "sigColors": ["#6a9c78", "#4a8ca8", "#8c5d3f", "#a9906b", "#9d9893", "#cdc8c2", "#b9b5b1", "#e0dcd7", "#ebe8e4"],
-        "sigHatch": [0, 0, 0, 0, 0, 1, 0, 1, 0],
-        "sigGroup": ["Recoverable", "Recoverable", "Non-recoverable", "Non-recoverable", "Unresolved / by design",
+        "sigColors": ["#6a9c78", "#4a8ca8", "#2f6680", "#8fb89c", "#8c5d3f", "#a9906b", "#9d9893", "#cdc8c2", "#b9b5b1", "#e0dcd7", "#ebe8e4"],
+        "sigHatch": [0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0],
+        "sigGroup": ["Recoverable", "Recoverable", "Recoverable", "Recoverable", "Non-recoverable", "Non-recoverable", "Unresolved / by design",
                      "Unresolved / by design", "Unresolved / by design", "Unresolved / by design", "Unresolved / by design"],
-        "stackOrder": [0, 1, 2, 3, 4, 5, 6, 7, 8], "recoverableSigs": [0, 1],
+        "stackOrder": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10], "recoverableSigs": [0, 1, 2, 3],
         "confOptions": [["all", "All"], ["plant", "Plant-tier fuel cost only"]],
-        "ssiSupplied": True, "footer": COMMON_FOOT + GAS_FOOT,
+        "ssiSupplied": True, "footer": COMMON_FOOT + GAS_FOOT, "footerBop": BOP_FOOT + COMMON_FOOT,
+        "tierColors": ["#b0452f", "#c47f45", "#c8b05a", "#b9b5b1"],
+        "tierLabels": ["Confirmed", "Likely", "Exposed", "Low"],
     },
     "bess": {
         "title": "BESS Efficiency Results",
@@ -121,7 +142,9 @@ def main(kind, d3path):
     shown = sum((s["y"].get("2025") or {}).get("mw", 0) for s in data["sites"])
     cov = (f"Sites shown carry {shown / 1e3:,.1f} GW of the {full / 1e3:,.1f} GW EIA-860 fleet nameplate for 2025 "
            f"({shown / full * 100:.0f}%).")
-    cfg["footer"] = [p.replace("__COVERAGE__", cov) for p in cfg["footer"]]
+    for k in ("footer", "footerBop"):
+        if k in cfg:
+            cfg[k] = [p.replace("__COVERAGE__", cov) for p in cfg[k]]
     t = (HERE / "template.html").read_text()
     topo = (HERE / "states-10m.min.json").read_text()
     cols = (HERE / f"site_columns_{kind}.js").read_text()

@@ -50,6 +50,40 @@ def _idx(values):
     return u, {v: i for i, v in enumerate(u)}
 
 
+BOP_TIERS = ["CONFIRMED", "LIKELY", "EXPOSED", "LOW"]
+
+
+def bop_payload(G, keys):
+    """Part B per-site payload keyed by (plant_id, cls): b = {bp BPRI, t tier, ty tier by year, cf CEMS-backed, ...}."""
+    t = pd.read_csv(G / "outputs" / "bop_site_targets.csv")
+    yt = pd.read_parquet(G / "outputs" / "bop_tiers_by_year.parquet")
+    t = t[[k in keys for k in zip(t["plant_id"], t["tech"])]].copy()
+    scopes = sorted(t["suggested_scope"].dropna().unique())
+    sc_i = {v: i for i, v in enumerate(scopes)}
+    ty = {(a, b): {} for a, b in zip(t["plant_id"], t["tech"])}
+    for a, b, y, tr in zip(yt["plant_id"], yt["cls"], yt["year"], yt["tier"]):
+        if (a, b) in ty:
+            ty[(a, b)][int(y)] = BOP_TIERS.index(tr)
+    heavy_p75 = float(np.nanpercentile(t.loc[t["has_cems"], "starts_per_MW_yr"], 75))
+    out = {}
+    for _, r in t.iterrows():
+        k = (int(r["plant_id"]), r["tech"])
+        f = lambda c, d=3: None if pd.isna(r[c]) else round(float(r[c]), d)
+        out[k] = {"bp": f("BPRI", 1), "t": BOP_TIERS.index(r["tier"]), "ty": [ty[k].get(y, -1) for y in YEARS],
+                  "c": [f(c, 0) for c in ["C1", "C2", "C3", "C4", "C5", "C6", "C7"]],
+                  "cod": None if pd.isna(r["original_cod"]) else int(r["original_cod"]),
+                  "age": None if pd.isna(r["bop_age"]) else int(r["bop_age"]),
+                  "sp": f("summer_penalty_pct", 2), "cs": f("cooling_signal_pct", 2), "ct": f("cooling_trend_pct_per_yr", 2),
+                  "spm": f("starts_per_MW_yr", 3), "trp": f("trip_rate", 2), "rc": rint(r["recoverable_usd"]),
+                  "cf": 1 if bool(r["has_cems"]) else 0, "ev": 1 if bool(r["evidence_led"]) else 0,
+                  "ex": 1 if bool(r["exposure_led"]) else 0, "im": 1 if bool(r["evidence_imputed"]) else 0,
+                  "hv": 1 if (bool(r["has_cems"]) and pd.notna(r["starts_per_MW_yr"]) and r["starts_per_MW_yr"] > heavy_p75) else 0,
+                  "sc": sc_i[r["suggested_scope"]]}
+    exp = {"bop_sites": len(t), "bop_tier_counts": t["tier"].value_counts().to_dict(),
+           "bop_cems_sites": int(t["has_cems"].sum()), "bop_recoverable_total": float(t["recoverable_usd"].sum())}
+    return out, scopes, heavy_p75, exp
+
+
 def gas():
     G = REPO / "gas_analysis"
     m = pd.read_parquet(G / "outputs" / "gas_monthly.parquet")
@@ -57,7 +91,7 @@ def gas():
     pl = pd.read_parquet(G / "data" / "cache" / "eia860_plants.parquet")[["plant_id", "lat", "lon", "ba_860"]]
     tech_code = ["CC", "GT", "ST", "IC"]
     tech = ["Combined Cycle", "Gas Turbine", "Gas Steam", "Gas Recip"]
-    sigs = ["FOULING", "HGP", "NONRECOVERABLE", "CYCLING", "UNATTRIBUTED", "ANNUAL_ONLY", "DUCT_FIRING",
+    sigs = ["FOULING", "HGP", "COOLING_DEGRADATION", "BOP_INTERMITTENT", "NONRECOVERABLE", "CYCLING", "UNATTRIBUTED", "ANNUAL_ONLY", "DUCT_FIRING",
             "FUEL_QUALITY", "HEALTHY"]
     sig_i = {s: i for i, s in enumerate(sigs)}
     keep = m.groupby(["plant_id", "tech_class"])["scoreable"].transform("any")
@@ -76,6 +110,7 @@ def gas():
     tier = {"plant": 0, "state": 1, "state_fill": 1, "national": 2, "national_fill": 2}
     sites = []
     grp = {k: d for k, d in m.groupby(["plant_id", "tech_class"])}
+    bop, scopes, heavy_p75, bop_expect = bop_payload(G, s_keys)
     for _, r in summ.iterrows():
         d = grp[(r["plant_id"], r["cls"])].sort_values("t_idx")
         flag = (d["HRI_own"] < 0.95).to_numpy() & d["scoreable"].to_numpy()
@@ -119,15 +154,18 @@ def gas():
                   "db": 1 if r["duct_burners"] == "Y" else 0, "chp": 1 if bool(r["chp_cohort"]) else 0,
                   "fd": r3(d["firm_delivery_share"].mean()) if d["firm_delivery_share"].notna().any() else None},
             "y": y})
+        b = bop.get((int(r["plant_id"]), r["cls"]))
+        if b is not None:
+            sites[-1]["b"] = b
     capf = pd.read_parquet(G / "data" / "cache" / "eia860_gas_capacity.parquet")
     fleet = {str(i): [round(float(capf[(capf["cls"] == c) & (capf["year"] == y)]["nameplate_mw"].sum()), 1) for y in YEARS]
              for i, c in enumerate(tech_code)}
     data = {"kind": "gas", "fleetCap": fleet, "tech": tech, "states": states, "custs": custs, "sigs": sigs, "conv": CONV,
-            "years": YEARS, "sites": sites}
+            "years": YEARS, "sites": sites, "tiers": BOP_TIERS, "scopes": scopes, "bopHeavyP75": r3(heavy_p75)}
     sc = m[m["scoreable"]]
     expect = {"recoverable_usd_total": float(sc["Recoverable_USD"].sum()), "waste_usd_total": float(sc["Waste_USD"].sum()),
               "excess_mmbtu_total": float(sc["Excess_MMBtu"].sum()),
-              "cc_median_hr_2025_spec": 7307, "cap_2025_gw": {"CC": 333, "GT": 160}}
+              "cc_median_hr_2025_spec": 7307, "cap_2025_gw": {"CC": 333, "GT": 160}, **bop_expect}
     return data, expect
 
 

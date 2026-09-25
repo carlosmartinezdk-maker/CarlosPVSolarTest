@@ -196,3 +196,113 @@ def add_wash_clock(p):
     p["eoh_since_wash"] = np.where(grp == 0, since + p["eoh_backlog"].fillna(0), since)
     p["wash_seen"] = grp > 0
     return p
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Part B signatures: COOLING_DEGRADATION and BOP_INTERMITTENT (second pass, after assign())
+# ---------------------------------------------------------------------------------------------------------------
+SUMMER_M = [6, 7, 8, 9]
+SHOULDER_M = [3, 4, 5, 10, 11]
+SEASON_MIN_MONTHS = 2
+COOLING_SIGNAL_MIN = 0.015       # 1.5 points of extra summer HRI penalty surviving the ambient correction
+COOLING_PEER_PCTL = 75
+COOLING_CLASSES = ("CC", "ST")   # plants with a steam condenser
+COOLING_MIN_YEARS_TREND = 3
+COOLING_BLOCK_SHARE = 0.5        # summer months already fouling / duct firing above this share -> not cooling
+BOP_CV_MIN = 0.50                # CV of monthly deficit
+BOP_MIN_DEFICIT_MONTHS = 3
+BOP_SEASONAL_RATIO = 1.3         # summer-mean / annual-mean deficit above this = seasonal, not intermittent
+RECOVERY.update({"COOLING_DEGRADATION": 0.75, "BOP_INTERMITTENT": 0.60})
+LEDGER.update({"COOLING_DEGRADATION": "fault", "BOP_INTERMITTENT": "fault"})
+BOP_OVERRIDABLE = {"UNATTRIBUTED", "NONRECOVERABLE", "HGP", "CYCLING", "HEALTHY"}
+
+
+def cooling_signal(p):
+    """plant x class x year: summer and shoulder residuals of (1 - HRI), cooling_signal = summer - shoulder."""
+    s = p[p["scoreable"] & (p["resp_freq"] == "M") & p["hri"].notna()].copy()
+    s["res"] = 1 - s["hri"]
+    s["season"] = np.select([s["month"].isin(SUMMER_M), s["month"].isin(SHOULDER_M)], ["summer", "shoulder"], "winter")
+    s = s[s["season"] != "winter"]
+    g = s.groupby(["plant_id", "cls", "year", "season"])["res"].agg(["mean", "size"]).unstack("season")
+    g.columns = [f"{a}_{b}" for a, b in g.columns]
+    g = g.reset_index()
+    ok = (g.get("size_summer", 0) >= SEASON_MIN_MONTHS) & (g.get("size_shoulder", 0) >= SEASON_MIN_MONTHS)
+    g = g[ok].rename(columns={"mean_summer": "summer_residual", "mean_shoulder": "shoulder_residual"})
+    g["cooling_signal"] = g["summer_residual"] - g["shoulder_residual"]
+    return g[["plant_id", "cls", "year", "summer_residual", "shoulder_residual", "cooling_signal"]]
+
+
+def _trend(d):
+    d = d.dropna(subset=["cooling_signal"])
+    if len(d) < 2:
+        return np.nan
+    return np.polyfit(d["year"], d["cooling_signal"], 1)[0]
+
+
+def cooling_flags(p, cool_type):
+    """Plant-year COOLING_DEGRADATION flags. cool_type: plant_id -> cooling type group."""
+    cs = cooling_signal(p)
+    attrs = p.drop_duplicates(["plant_id", "cls"])[["plant_id", "cls", "climate_region"]]
+    cs = cs.merge(attrs, on=["plant_id", "cls"], how="left")
+    cs["cooling_type"] = cs["plant_id"].map(cool_type).fillna("unknown")
+    cs["peer_p75"] = cs.groupby(["cls", "climate_region", "cooling_type", "year"])["cooling_signal"] \
+        .transform(lambda x: np.percentile(x, COOLING_PEER_PCTL) if len(x) >= 5 else np.nan)
+    fb = cs.groupby(["cls", "year"])["cooling_signal"].transform(lambda x: np.percentile(x, COOLING_PEER_PCTL))
+    cs["peer_p75"] = cs["peer_p75"].fillna(fb)
+    tr = cs.groupby(["plant_id", "cls"]).apply(_trend, include_groups=False).rename("cooling_trend")
+    ny = cs.groupby(["plant_id", "cls"])["year"].nunique().rename("cooling_years")
+    cs = cs.merge(tr.reset_index(), on=["plant_id", "cls"]).merge(ny.reset_index(), on=["plant_id", "cls"])
+    # fouling / duct-firing share of summer months (exclusion)
+    sm = p[p["month"].isin(SUMMER_M) & p["scoreable"]]
+    blk = sm.assign(b=sm["signature"].isin(["FOULING", "DUCT_FIRING"])).groupby(["plant_id", "cls", "year"])["b"].mean()
+    cs = cs.merge(blk.rename("summer_blocked_share").reset_index(), on=["plant_id", "cls", "year"], how="left")
+    cand = cs["cls"].isin(COOLING_CLASSES) & (cs["cooling_signal"] >= COOLING_SIGNAL_MIN) \
+        & (cs["cooling_signal"] > cs["peer_p75"]) & (cs["summer_blocked_share"].fillna(0) < COOLING_BLOCK_SHARE)
+    cs["cand"] = cand
+    cs = cs.sort_values(["plant_id", "cls", "year"])
+    prev = cs.groupby(["plant_id", "cls"])["cand"].shift(1).fillna(False).astype(bool)
+    nxt = cs.groupby(["plant_id", "cls"])["cand"].shift(-1).fillna(False).astype(bool)
+    consec = cand & ((prev & (cs["year"] - cs.groupby(["plant_id", "cls"])["year"].shift(1) == 1))
+                     | (nxt & (cs.groupby(["plant_id", "cls"])["year"].shift(-1) - cs["year"] == 1)))
+    trending = cand & (cs["cooling_trend"] > 0) & (cs["cooling_years"] >= COOLING_MIN_YEARS_TREND)
+    cs["cooling_flag"] = consec | trending
+    return cs
+
+
+def bop_intermittent_flags(p, heavy):
+    """Plant-year BOP_INTERMITTENT flags. heavy: set of (plant_id, cls) with elevated cycling or trip exposure."""
+    s = p[p["scoreable"] & (p["resp_freq"] == "M") & p["hri_own"].notna()].copy()
+    s["d"] = (1 - s["hri_own"]).clip(lower=0)
+    rows = []
+    for (pid, cls, y), d in s.groupby(["plant_id", "cls", "year"]):
+        if (pid, cls) not in heavy or d["wash"].any() or d["foul"].any():
+            continue
+        dm = d.loc[d["d"] > 1 - DEFICIT_HRI_OWN, "d"]
+        if len(dm) < BOP_MIN_DEFICIT_MONTHS or d["d"].mean() <= 0:
+            continue
+        cv = d["d"].std() / d["d"].mean()
+        summer = d.loc[d["month"].isin(SUMMER_M), "d"].mean()
+        seasonal = summer / d["d"].mean() > BOP_SEASONAL_RATIO if not np.isnan(summer) else False
+        if cv >= BOP_CV_MIN and not seasonal:
+            rows.append((pid, cls, y, cv))
+    return pd.DataFrame(rows, columns=["plant_id", "cls", "year", "deficit_cv"])
+
+
+def add_bop_signatures(p, cool_type, heavy):
+    cs = cooling_flags(p, cool_type)
+    p = p.drop(columns=[c for c in ["cooling_signal", "cooling_flag"] if c in p.columns])
+    p = p.merge(cs[["plant_id", "cls", "year", "cooling_signal", "cooling_flag"]], on=["plant_id", "cls", "year"], how="left")
+    p["cooling_flag"] = p["cooling_flag"].fillna(False).astype(bool)
+    deficit = p["hri_own"] < DEFICIT_HRI_OWN
+    cool_m = p["cooling_flag"] & p["month"].isin(SUMMER_M) & p["scoreable"] & (p["resp_freq"] == "M") \
+        & deficit.fillna(False) & p["signature"].isin(BOP_OVERRIDABLE)
+    p.loc[cool_m, "signature"] = "COOLING_DEGRADATION"
+    bi = bop_intermittent_flags(p, heavy)
+    bi["bop_flag"] = True
+    p = p.drop(columns=[c for c in ["bop_flag"] if c in p.columns]).merge(
+        bi[["plant_id", "cls", "year", "bop_flag"]], on=["plant_id", "cls", "year"], how="left")
+    p["bop_flag"] = p["bop_flag"].fillna(False).astype(bool)
+    bop_m = p["bop_flag"] & deficit.fillna(False) & p["signature"].isin(BOP_OVERRIDABLE - {"HEALTHY"})
+    p.loc[bop_m, "signature"] = "BOP_INTERMITTENT"
+    p["recovery"] = p["signature"].map(RECOVERY).fillna(0.0)
+    return p, cs, bi

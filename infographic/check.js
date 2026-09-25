@@ -15,7 +15,7 @@ const ctx = {}; vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(d3Path, 'utf8'), ctx);
 const dataScript = scripts.find(s => s.id === 'data').code.replace(/const (\w+) =/g, 'globalThis.$1 =');
 vm.runInContext(dataScript, ctx);
-vm.runInContext(scripts.find(s => s.id === 'core').code.replace(/^(const|function) /gm, (m) => m) + '\nglobalThis.__core={defaultState,filtered,stats,chartData,periodsOf,sitePeriodVals,groupRows,effSeries,siteIndex,median,sum,passSite};', ctx);
+vm.runInContext(scripts.find(s => s.id === 'core').code.replace(/^(const|function) /gm, (m) => m) + '\nglobalThis.__core={defaultState,filtered,stats,chartData,periodsOf,sitePeriodVals,groupRows,effSeries,siteIndex,median,sum,passSite,bopFiltered,bopBaseFiltered,bopStats,bopCustRows,bopChart,bopTier};', ctx);
 const C = ctx.__core, D = ctx.DATA;
 const near = (a, b, tol) => Math.abs(a - b) <= Math.abs(b) * tol;
 // 1. totals reconcile
@@ -83,6 +83,30 @@ const P = ctx.d3.geoAlbersUsa(); const nulls = D.sites.filter(s => P([s.lo, s.la
 ok('Every site has a valid Albers projection', nulls === 0, nulls + ' null');
 // grouped rows sanity
 const gc = C.groupRows(idx, st, 'cust'); ok('By-customer rows cover all sites', gc.reduce((a, r) => a + r.n, 0) === idx.length, gc.length + ' customers');
+// 4b. BoP targeting view (gas)
+if (D.kind === 'gas') {
+  const b0 = C.defaultState(); b0.view = 'bop'; b0.bconf = 'all';
+  const bi = C.bopFiltered(b0), bs = C.bopStats(bi, b0);
+  ok('4b BoP: tier counts sum to site count', bs.tiers.reduce((a, b) => a + b, 0) === bi.length, bs.tiers.join('+') + '=' + bi.length);
+  const perTier = [0, 1, 2, 3].map(t => { const s = C.defaultState(); s.bconf = 'all'; s.btier = String(t); return C.bopFiltered(s).length; });
+  ok('4b BoP: tier filters partition the sites', perTier.reduce((a, b) => a + b, 0) === bi.length, perTier.join('+'));
+  const ec = exp.bop_tier_counts, want = ['CONFIRMED', 'LIKELY', 'EXPOSED', 'LOW'].map(k => ec[k] || 0);
+  ok('4b BoP: tier counts match bop_site_targets.csv', want.every((v, i) => v === bs.tiers[i]) && bi.length === exp.bop_sites, want.join('/') + ' vs ' + bs.tiers.join('/'));
+  let maxd = 0, nc = 0;
+  for (const stx of [b0, Object.assign(C.defaultState(), { bconf: 'cems' }), Object.assign(C.defaultState(), { bconf: 'all', rel: 'ssi' })]) {
+    const base = C.bopBaseFiltered(stx).map(i => D.sites[i]);
+    for (const r of C.bopCustRows(stx)) {
+      const S = base.filter(s => s.c === r.key); const mw = S.reduce((a, s) => a + s.mw, 0);
+      const risk = S.filter(s => s.b.t <= 1).reduce((a, s) => a + s.mw, 0);
+      maxd = Math.max(maxd, Math.abs(r.share - (mw > 0 ? risk / mw : 0))); nc++; } }
+  ok('4b BoP: share_at_risk = (confirmed+likely MW)/total gas MW from site rows', maxd < 1e-9, nc + ' customer rows, max abs diff ' + maxd);
+  const bc = C.defaultState(); const ncems = C.bopFiltered(bc).length;
+  ok('4b BoP: CEMS-backed filter changes the row count', ncems !== bi.length && ncems === exp.bop_cems_sites, ncems + ' CEMS-backed vs ' + bi.length + ' all (default = CEMS-backed only: ' + (bc.bconf === 'cems') + ')');
+  ok('4b BoP: recoverable $ reconciles to bop_site_targets.csv (0.1%)', near(bs.rec, exp.bop_recoverable_total, 1e-3), bs.rec.toFixed(0) + ' vs ' + exp.bop_recoverable_total.toFixed(0));
+  const ch = C.bopChart(bi, b0, 'cap'), j25 = D.years.indexOf(2025);
+  const cap25 = bi.reduce((a, i) => { const s = D.sites[i]; return a + (s.b.ty[j25] >= 0 && s.y['2025'] ? s.y['2025'].mw : 0); }, 0);
+  ok('4b BoP: chart 2025 capacity by tier = site sum', Math.abs(ch[j25].v.reduce((a, b) => a + b, 0) - cap25) < 1e-6, (cap25 / 1e3).toFixed(1) + ' GW');
+}
 const w = Math.max(...res.map(r => r.name.length));
 for (const r of res) console.log(`[${r.pass ? 'PASS' : 'FAIL'}] ${r.name.padEnd(w)}  ${r.got}`);
 const nf = res.filter(r => !r.pass).length; console.log(`${res.length - nf}/${res.length} passed`); process.exit(nf ? 1 : 0);
