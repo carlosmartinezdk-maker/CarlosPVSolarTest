@@ -1,0 +1,173 @@
+8.2 Europe
+AES Wind Generation
+AGL Australia
+ATCO
+Aer Soléir
+Akuo Energy France
+Allete Clean Energy
+Alliant Energy
+Allianz Capital Partners
+Ameren Energy
+American Electric Power Company, Inc.
+Apex Clean Energy
+Arjun Infrastructure Partners Ltd
+Aspenall Energies
+Avangrid Renewables
+BE Energy GmbH
+BHE Renewables
+BNRG Renewables Ltd
+BOREAS
+BVP Investments Limited
+BayWa r.e. North America
+BluEarth Renewables
+Boralex EU
+Borusan EnBW Enerji
+Brookfield Renewable
+CAMS (Consolidated Asset Management Services)
+CGN Europe
+CNR
+Capital Power Corporation
+Carleton College
+Clearlight Energy
+Clearway Energy Operating LLC
+Commerz Real
+Constellation Energy Corp.
+DESRI
+DNV North America
+DTE Energy
+Deriva Energy
+EDF Power Solutions Europe
+EDF Power Solutions North America
+EDF Power Solutions UK
+EDP Renewables (Europe)
+EDP Renewables (North America)
+EOS Holding
+ESB
+EVN Naturkraft GmbH
+EWZ
+Ecopower Erkende cv
+Electricity Distribution Services Ltd.
+Elgin Energy
+EnBW
+Encavis AG
+Eneco
+Enel Green Power
+Enercon
+Energia
+EnergieKontor
+EnergyPro
+Engie EU
+Engie North America
+Eolus Wind Power Management AB
+European Energy
+Eurus Energy America Corporation
+Evergy
+Evolugen
+Exus Management Renewables EU
+Exus North America Management Partners LLC
+FRONTERIS
+Fortum
+Fu-Gen AG
+GAEL Energy
+GE EU
+GE Vernova North America
+GRI Outdoors LLC
+Galetech Energy Developments
+Geronimo Power
+Goldwind Australia
+Green Development
+GreenPower International Ltd
+Greenbacker Renewable Energy
+Greensolver
+Groupe Eurowatt
+Ilmatar Energy
+ImWind Betriebsführungs GmbH
+Ingka Investments EU
+Ingka Investments US
+Innovair
+Intersect
+Invenergy North America
+Juwi
+KGAL GmbH & Co KG
+Kruger Energy
+Leeward Renewable Energy
+Lirion Power Limited
+Longroad Energy
+Mashav Energia
+MidAmerican Energy Company
+NTR PLC
+Nadara
+Natural Power
+Naturgy
+Neoen Europe
+Nergica
+NextEra Energy Resources
+Nordex Acciona North America
+Northland Power North America
+Nuveen Infrastructure
+Octopus Energy Ltd
+Oklahoma Gas and Electric
+Opsis Solutions
+Orsted North America
+PEI Energy Corporation
+Pacificorp
+Parkwind
+Partnerships for Renewables
+Patriot Renewables
+Pattern Energy
+Portland General Electric
+Potentia Renewables
+Preformed Line Products (PLP)
+PÜSPÖK Erneuerbare Energie
+Qair Europe
+Qualitas Energy
+REVento
+RNWBL
+RWE North America
+RWE Renewables GmbH
+Rabbalshede Kraft AB
+Re:Cap
+ReNew Energy Maintenance
+Renantis
+Renewable Field Services Ltd.
+SEGHeliotec Uruguay S.A.
+SL NaturEnergie
+SSE
+Schroders Greencoat
+Scottish Power Renewables
+Scout Clean Energy
+Siemens Gamesa Europe
+Siemens Gamesa North America
+Solo Wind MX
+Southern Power
+Squadron Energy Pty Ltd
+Statkraft
+Suzlon Australia
+Swire Renewable Energy A/S
+Swisspower
+Terraform Power
+TotalEnergies
+Trac Energy
+TransAlta
+Trianel GmbH
+UPC Power Solutions, LLC
+Unmapped
+Ventolines
+Vestas Europe
+Vineyard Wind
+Volkswind GmbH
+WPD Windmanager
+WPO
+We Energies
+WestWind Service GmbH
+WestfalenWIND Service GmbH & Co. KG.
+Whitewater Maintenance Corporation
+Wien Energie GmbH
+Wind Energy Ireland
+Wind Revive Solutions LLC
+WindHQ
+Windcluster
+Windheimat GmbH
+ZEPHYR Wind Services MN, LLC
+enercity
+oekostrom AG

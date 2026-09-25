@@ -1,0 +1,22 @@
+check,expected,got,status,note
+"Fleet median apparent RTE 2025, standalone (site annual D/C)",0.851 ±0.02,0.84,PASS,median of monthly RTE 0.842; throughput-weighted 0.855
+"Decomposed eta_true, fleet median",0.889 ±0.02,0.889,PASS,"p10 0.778, p90 0.954; standalone only 0.888"
+Naive RTE on the same fitted sites (site mean of monthly RTE),0.844 ±0.02,0.84,PASS,throughput-weighted per site 0.854
+Gap eta_true - naive (points),~4.5 ±1.5,4.87,PASS,with throughput-weighted naive: 3.42
+eta_true above naive RTE (regression not inverted),True,True,PASS,
+"P_aux % of nameplate, median",0.21 (p90 < ~1%),0.221,PASS,"p10 -0.07%, p90 0.84%"
+Sites with a usable aux decomposition,~600 of ~960,623 of 988,PASS,
+Total BESS discharge 2025 (MWh),"26,500,000 ±1,000,000","26,706,620",PASS,
+Total BESS discharge 2019 (MWh),"430,000 ±30,000","456,006",PASS,
+"BESS nameplate 2025 (GW, EIA-860 3_4 BA)",~40-43,44.0,WARN,year-end operable incl. units commissioned late 2025
+Median duration 2025 (h),2.0,2.0,PASS,
+Capacity join rate to EIA-860 (plant-months),>=0.98,0.9942,PASS,same-vintage 0.9837
+"Fleet RTE vs EIA published anchor (standalone 2025, throughput-weighted)",~0.82-0.85 (and <0.95),0.855,PASS,above 0.95 would mean hybrids included or Quantity/Grossgen swapped
+"Variance/mean of fault counts, FULL_OUTAGE",>1 (overdispersion -> NB),1.1,WARN,NB alpha=0.000; used: poisson (alpha~0)
+"Variance/mean of fault counts, PARTIAL_AVAILABILITY",>1 (overdispersion -> NB),0.93,WARN,NB alpha=0.000; used: poisson (alpha~0)
+"Variance/mean of fault counts, THERMAL_AUX",>1 (overdispersion -> NB),1.18,WARN,NB alpha=1.041; used: negative binomial
+"Variance/mean of fault counts, UNATTRIBUTED",>1 (overdispersion -> NB),1.26,WARN,NB alpha=0.000; used: poisson (alpha~0)
+"Backtest FULL_OUTAGE (fit<=Y, predict Y+1, 2023-2025)","AUC>0.65, slope~1, chi2/df~1, beats mean","AUC 0.63, slope 0.65, chi2/df 3.9",WARN,40% of test plant-years are sites with no prior history; beats mean: True
+"Backtest PARTIAL_AVAILABILITY (fit<=Y, predict Y+1, 2023-2025)","AUC>0.65, slope~1, chi2/df~1, beats mean","AUC 0.61, slope 0.48, chi2/df 11.3",WARN,40% of test plant-years are sites with no prior history; beats mean: False
+"Backtest THERMAL_AUX (fit<=Y, predict Y+1, 2023-2025)","AUC>0.65, slope~1, chi2/df~1, beats mean","AUC 0.74, slope 0.83, chi2/df 3.9",WARN,40% of test plant-years are sites with no prior history; beats mean: True
+"Backtest UNATTRIBUTED (fit<=Y, predict Y+1, 2023-2025)","AUC>0.65, slope~1, chi2/df~1, beats mean","AUC 0.61, slope 0.41, chi2/df 6.2",WARN,40% of test plant-years are sites with no prior history; beats mean: False

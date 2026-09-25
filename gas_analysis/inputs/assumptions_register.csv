@@ -1,0 +1,38 @@
+id,area,assumption,value,source / rationale,validated
+A1,Data,EIA-923 2025 file used is the Final release (EIA now serves Final; the spec named the early release),2025 Final,eia.gov f923_2025.zip,yes
+A2,Aggregation,Heat rate on gas-fuel rows only (plus CA waste-heat rows) aggregated to plant x class before HR; EIA allocates netgen per fuel,NG OG PG BFG LFG OBG SGC SGP (+CA WH/OTH),Spec,yes
+A3,Aggregation,GT block merged into CC for plant-years where >=50% of GT months breach the GT floor and the plant has CA generation,rule,Spec 'check CA/CT re-aggregation',partly
+A4,QC,CC months whose steam (CA) share falls below 20% of the block's median (median >=15%) are quarantined as ca_generation_missing,0.2 / 0.15,Found on Bethlehem Energy Center (CA netgen reported 0 from 2023),partly
+A5,QC,CHP cohort = EIA CHP flag or median thermal share >5%; its below-floor months are EIA CHP fuel-allocation artefacts,0.05,Spec M10,yes
+A6,QC,EIA-923 annual respondents (Respondent Frequency A) have EIA-allocated monthly values (flat HR within year); monthly components not resolved (signature ANNUAL_ONLY),-,Observed median within-year HR CV = 0,yes
+A7,Weather,Ambient = NOAA nClimGrid county monthly mean (NSRDB PSM3 needs an API key); unmatched counties borrow nearest matched county within 150 km,-,Spec fallback,partly
+A8,Temperature,Correction applied in hinge form on max(T-15 degC 0); symmetric linear form fits ~0 because below-ISO months show no response,k_T per class,Diagnostic by temperature band,partly
+A9,Reference,Reference curve = isotonic (non-increasing) fit of per-LF-bin p10 of HR_corr on the non-CHP QC-passed fleet,p10,Spec M4,yes
+A10,Scoring,Months with LF < 0.02 or > 1.10 not scored,0.02 / 1.10,Start-up fuel dominates at very low LF,no
+A11,Peers,Relaxation ladder when <8 healthy peers: tier1 spec match; tier2 drop region; tier3 vintage +-10y,tiers,Coverage 17% at tier 1 only,no
+A12,Own baseline,eta = p95 of HRI over first 24 scoreable months (min 6),p95,Spec M8,yes
+A13,Deficit,Month in deficit if HRI_own < 0.95,0.95,Monthly noise MAD 1-3%,no
+A14,Fouling,Sawtooth: >=2 of 3 month-on-month declines totalling >=0.8% then step up >=1.5% that persists; LF change <0.25,see components.py,Spec + industry trigger 0.8%,no
+A15,HGP,18-month window slope <=-1.5%/yr with Spearman(HRI_own cum_EOH) <=-0.4 and no wash,see components.py,Spec,no
+A16,Cycling,Same decline window but tracking starts proxy and in a cycling duty regime (>=40 starts per 1000 EOH),heuristic,Starts proxy is derived from LF so separation from EOH is approximate,no
+A17,Starts proxy,Full-load hours per start by LF regime (4/8/24/72/300 h) at 80% typical loading; heuristic,heuristic,No start counts in EIA-923 (CEMS needed),no
+A18,EOH,Cumulative EOH before 2019 = first-12-month EOH rate x months since COD,estimate,No pre-2019 data loaded,no
+A19,Economics,HR_target = HR_ref / p75 HRI of class x LF bin x year (non-CHP),p75,Spec,yes
+A20,Economics,Recovery fractions FOULING 0.85 HGP 0.50 others 0,spec table,Spec,no - vendor validation needed
+A21,Economics,Remediation costs in inputs/remediation_costs.csv are UNVALIDATED placeholders,placeholder,-,no
+A22,Fuel cost,Page 5 prices outside 0.5-50 $/MMBtu replaced by state then national tier (542 plant-months); plants without receipts take state-month median then national,0.5-50,Implausible values up to 562572 in file,partly
+A23,Reliability,Credibility tau_s = phi_s / lambda_pool (Buhlmann with gamma-Poisson heterogeneity),-,Derived from NB,yes
+A24,Reliability,Pool ladder: class+size+vintage decade+NERC -> class+climate region -> class -> fleet; min 5 units and 120 exposure-months,5 / 120,Spec R5,no
+A25,Climate,Coastal = within 30 km of Natural Earth 1:50m coastline; arid = county precip <400 mm/yr; industrial = industrial/commercial sector,30 km / 400 mm,-,no
+A26,Hazard,EOH-axis likelihood converted to calendar-time density via the EOH accrual rate at each event so AICs compare,-,-,yes
+A27,Leads,Both HRI_own<0.95 and PRI<0.95 for >=2 consecutive months; ranked by recoverable USD in the last 24 months,0.95 / 2,Spec deliverable 6,no
+A28,Owner,"Customer group from the fleet production workbook mapping (plant, then owner/operator tables); SSI status from the supplied SSI customer list",-,crm/ (workbook + SSI list),yes
+A29,Part B,"COOLING_DEGRADATION: summer (Jun-Sep) minus shoulder (Mar-May, Oct-Nov) mean of 1-HRI >= 1.5 pts, above peer p75 (class x climate region x EIA-860 cooling type x year, fallback class x year), >=2 consecutive years or positive trend over >=3 years, summer fouling/duct-firing share <50%; overrides unattributed/non-recoverable/HGP/cycling/healthy summer deficit months",1.5 pts / p75,Spec v2,no
+A30,Part B,"BOP_INTERMITTENT: plant-year with heavy cycling/trip exposure (CEMS starts/MW/yr or trip rate > class p75; proxy LF CV > p75), no wash or sawtooth, >=3 deficit months, CV of monthly deficit >=0.5, not summer-seasonal (summer/annual mean <=1.3)",CV 0.5 / 3 months,Spec v2 (thresholds judgement),no
+A31,Part B,"Recovery fractions COOLING_DEGRADATION 0.75, BOP_INTERMITTENT 0.60; remediation costs placeholders",0.75 / 0.60,Spec v2,no
+A32,Part B,"BPRI weights 0.30/0.25/0.15/0.10/0.05/0.10/0.05; percentiles within class x size band x climate region (>=5 peers, else class x size band, else class); missing CEMS components renormalised with bpri_confidence=low; C1 absent for GT/IC (no condenser) renormalised; evidence missing for lack of monthly data imputed at p50 and flagged",-,Spec v2 B1-B2,no
+A33,Part B,Tiers: CONFIRMED C1>=p75 & C2>=p75 & persistent >=2 yrs (cooling flag years or C2>=p75 years); LIKELY C1 or C2 >=p75 & exposure >=p60; EXPOSED exposure >=p80 & no evidence. Yearly tiers use that year C1/C2 with static exposure,p75/p60/p80,Spec v2 B3,no
+A34,Part B,CEMS: EPA CAMPD hourly state files 2024-2025; start = off->on sustained >=2 h above 5% of unit max; trip = >40% of max to 0 in one hour; cold/warm/hot >48/8-48/<8 h offline; units mapped to class by EPA unit type. Validated: median CEMS/EIA-923 heat input 1.00,2024-2025,Spec optional uplift,partly
+A35,Part B,"BoP age = 2025 minus earliest generator operating year at the plant x class (original COD, not latest uprate)",-,Spec v2 C6,yes
+A36,Part B,"Month-over-month HR noise gate: raw HR % change on CC monthly respondents, non-CHP, LF>=0.6 both months, |dLF|<=0.10",-,Spec v2 gate,yes
+A37,Part B,Recoverable $ for targeting = cooling + BoP-intermittent recoverable in the last 24 months / 2,-,-,no

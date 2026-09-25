@@ -1,0 +1,516 @@
+plant_id,plant_name,state,hybrid_reasons
+141,Agua Fria,AZ,"rte_gt_1,pv_same_plant"
+260,Dynegy Moss Landing Power Plant Hybrid,CA,rte_gt_1
+645,Big Bend,FL,pv_same_plant
+1016,Butler-Warner Generation Plant,NC,pv_same_plant
+2830,Walter C Beckjord,OH,rte_gt_1
+6304,Kotzebue Hybrid,AK,"colocated_firming,pv_same_plant"
+6377,Ocracoke Hybrid,NC,rte_gt_1
+10444,"Lockhart Solar PV, LLC",CA,pv_same_plant
+50064,University of California Santa Cruz,CA,"colocated_firming,pv_same_plant"
+54296,Biola University Hybrid,CA,rte_gt_1
+56981,Pyron Wind Farm LLC Hybrid,TX,rte_gt_1
+57082,Kaheawa Wind Power II LLC,HI,colocated_firming
+57242,Mililani South Solar Farm,HI,"rte_gt_1,pv_same_plant"
+57325,FPL Energy Illinois Wind LLC Hybrid,IL,rte_gt_1
+57560,Chino Valley Solar,AZ,pv_same_plant
+57561,Cotton Center Solar Hybrid,AZ,pv_same_plant
+57562,Paloma Solar Hybrid,AZ,pv_same_plant
+57563,Hyder Solar Hybrid,AZ,pv_same_plant
+57693,DOE Golden NWTC Research Side Hybrid,CO,pv_same_plant
+57997,Foothills Solar Plant Hybrid,AZ,pv_same_plant
+58236,Marshalltown Generating Station,IA,"colocated_firming,pv_same_plant"
+58256,Los Alamos PV Site,NM,pv_same_plant
+58383,Hyder II Hybrid,AZ,pv_same_plant
+58405,ESS Battery Microgrid,AK,colocated_firming
+58462,McCoy Solar Energy Project Hybrid,CA,pv_same_plant
+58537,OCI Alamo Solar I Hybrid,TX,"rte_gt_1,pv_same_plant"
+58585,Sierra Nevada Brewing Co Hybrid,CA,pv_same_plant
+58625,Santa Rita Jail Hybrid,CA,pv_same_plant
+58639,KRS I Anahola Solar Hybrid,HI,"colocated_firming,pv_same_plant"
+58640,KRS II Koloa Solar,HI,pv_same_plant
+58899,Prosperity Energy Storage Facility Hybri,NM,pv_same_plant
+59020,Gila Bend Hybrid,AZ,pv_same_plant
+59150,RE Mustang LLC,CA,pv_same_plant
+59296,Northwest Ohio Wind,OH,"colocated_firming,pv_same_plant,dc_tight"
+59444,Desert Star Hybrid,AZ,pv_same_plant
+59871,Desert Quartzite,CA,pv_same_plant
+59939,RE Tranquillity,CA,"pv_same_plant,dc_coupled"
+59957,Grand Ridge Battery Projects,IL,"rte_gt_1,dc_coupled"
+59966,Camp Lejeune Solar and Energy Storage,NC,pv_same_plant
+59993,Babcock Solar Energy Center Hybrid,FL,"rte_gt_1,colocated_firming,pv_same_plant"
+60014,Manatee Solar Energy Center,FL,pv_same_plant
+60061,Citrus Solar Energy Center Hybrid,FL,"rte_gt_1,colocated_firming,pv_same_plant,dc_tight"
+60092,"Blythe Solar II, LLC",CA,pv_same_plant
+60093,"Blythe Solar 110, LLC",CA,pv_same_plant
+60094,"Blythe Solar III, LLC Hybrid",CA,pv_same_plant
+60095,"Blythe Solar IV, LLC",CA,pv_same_plant
+60123,Castle Gap Solar Hybrid,TX,pv_same_plant
+60231,Genentech-Oceanside Hybrid,CA,pv_same_plant
+60233,RE Garland,CA,"pv_same_plant,dc_coupled"
+60299,HMV Minster Energy Storage System,OH,rte_gt_1
+60316,Scott Solar Farm,VA,pv_same_plant
+60390,Beech Ridge Energy Storage,WV,dc_coupled
+60441,Salem Smart Power Center,OR,"colocated_firming,dc_coupled"
+60467,Red Rock,AZ,pv_same_plant
+60491,Springbok 3 Solar Farm Hybrid,CA,"pv_same_plant,dc_coupled"
+60506,ETT Presidio NaS Battery,TX,rte_gt_1
+60518,Stafford Hill Solar Hybrid,VT,"rte_gt_1,pv_same_plant,dc_coupled"
+60546,KIUC Kapaia PV and BA Storage Project Hy,HI,pv_same_plant
+60561,Cedartown Battery Energy Storage Project,GA,colocated_firming
+60562,GMP Solar - Panton Hybrid,VT,"rte_gt_1,pv_same_plant,dc_coupled"
+60565,Borrego Springs Energy Storage,CA,rte_gt_1
+60566,Pala Energy Storage Yard,CA,rte_gt_1
+60567,Ortega Highway Energy Storage,CA,rte_gt_1
+60568,Canyon Crest Academy,CA,rte_gt_1
+60607,CMEEC - Polaris Park Solar Hybrid,CT,pv_same_plant
+60609,CMEEC - Norwich Stott St Solar Hybrid,CT,"rte_gt_1,pv_same_plant"
+60654,Townsite Solar Project Hybrid,NV,"colocated_firming,pv_same_plant"
+60698,Stanton Energy Reliability Center Hybrid,CA,rte_gt_1
+60791,SunAnza,CA,"colocated_firming,pv_same_plant"
+60815,Hampshire College Hybrid,MA,pv_same_plant
+60906,Mt. Tom Solar Project Hybrid,MA,"pv_same_plant,dc_coupled"
+60959,Chocksett Rd Energy Storage Project,MA,rte_gt_1
+60964,Apache Solar I,AZ,pv_same_plant
+60974,Glendale Battery Energy Storage System,CA,rte_gt_1
+60996,Iron Horse Battery Storage Hybrid,AZ,pv_same_plant
+61068,AES Lawai Solar Hybrid,HI,"rte_gt_1,pv_same_plant,dc_tight"
+61098,Battle Mountain Solar Project,NV,"rte_gt_1,pv_same_plant,dc_coupled"
+61107,Vanadium Redox Flow Battery Plant,CA,colocated_firming
+61168,"Eland Solar & Storage Center, Phase 1 Hy",CA,pv_same_plant
+61169,"Eland Solar & Storage Center, Phase 2 Hy",CA,pv_same_plant
+61197,Pima Energy Storage System,AZ,rte_gt_1
+61334,Volkman Road Solar Array Hybrid,IN,pv_same_plant
+61431,Beacon BESS 1,CA,colocated_firming
+61439,Panasonic Carport Solar Hybrid,CO,"rte_gt_1,pv_same_plant"
+61446,RE Gaskell West 2 LLC,CA,pv_same_plant
+61473,Hopewell Valley High School Hybrid,NJ,"colocated_firming,pv_same_plant"
+61552,Fort Detrick Solar PV,MD,"pv_same_plant,dc_coupled"
+61647,ENO Paterson Solar,LA,"colocated_firming,pv_same_plant"
+61667,Wimauma Solar and Battery Storage,FL,"colocated_firming,pv_same_plant"
+61678,Pinal Central Energy Center Hybrid,AZ,"rte_gt_1,pv_same_plant"
+61679,Cox Battery Energy Storage,MO,rte_gt_1
+61721,Baldwin (CA),CA,rte_gt_1
+61730,MA Solar Storage 1 Hybrid,MA,"pv_same_plant,dc_coupled"
+61737,Navy Yard Peaker Station,PA,rte_gt_1
+61741,Kingsberry Energy Storage System,TX,colocated_firming
+61763,Sunshine Gateway Solar Energy Center,FL,pv_same_plant
+61795,Pacific Union College BESS,CA,rte_gt_1
+61851,Campbell Industrial Park BESS,HI,"rte_gt_1,colocated_firming"
+61861,AES ES GILBERT,AZ,rte_gt_1
+61901,Redstone Arsenal Hybrid,AL,"rte_gt_1,pv_same_plant"
+61956,MCRD Parris Island PV Hybrid,SC,"rte_gt_1,pv_same_plant,dc_coupled"
+61990,TAC-Distributed Energy Resource Hybrid,IL,pv_same_plant
+61993,Gavilan Community College Solar Project,CA,pv_same_plant
+61995,UC Merced Solar Hybrid,CA,"rte_gt_1,pv_same_plant"
+62027,Caldwell Wastewater Treatment Plant Hybr,NJ,"colocated_firming,pv_same_plant"
+62219,Ashburnham Energy Storage Project,MA,rte_gt_1
+62235,Lone Star Solar,SC,"colocated_firming,pv_same_plant,dc_coupled"
+62241,NorWest Energy 9 LLC,OR,pv_same_plant
+62248,Arrow Canyon Solar Hybrid,NV,"rte_gt_1,pv_same_plant,dc_tight"
+62381,GMP Solar/Storage-Milton Hybrid,VT,"rte_gt_1,pv_same_plant"
+62382,GMP Solar/Storage-Ferrisburgh Hybrid,VT,"rte_gt_1,pv_same_plant"
+62383,GMP Solar/Storage-Essex Hybrid,VT,"rte_gt_1,pv_same_plant"
+62441,Kearny Mesa Storage LLC,CA,colocated_firming
+62444,Meyersdale Battery,PA,rte_gt_1
+62490,Echo River Solar,FL,pv_same_plant
+62494,Skeleton Creek Energy Center Hybrid,OK,pv_same_plant
+62529,Hale Kuawehi Solar Hybrid,HI,pv_same_plant
+62541,Lake Placid Solar Power Plant,FL,"colocated_firming,pv_same_plant,dc_coupled"
+62561,"Roadrunner, LLC Hybrid",TX,pv_same_plant
+62579,Plainfield Community Solar LLC,MA,"colocated_firming,pv_same_plant"
+62617,Searcy Solar Hybrid,AR,"pv_same_plant,dc_coupled"
+62652,Happy Hollow CSG Hybrid,MA,"pv_same_plant,dc_tight"
+62682,Noland Wastewater Treatment Plant Hybrid,AR,"rte_gt_1,pv_same_plant"
+62683,Westside Wastewater Treatment Plant Hybr,AR,"rte_gt_1,pv_same_plant"
+62695,CED Northampton Solar LLC Hybrid,MA,"colocated_firming,pv_same_plant"
+62745,Wheatridge Hybrid,OR,"pv_same_plant,dc_coupled"
+62753,Prospect Storage,TX,rte_gt_1
+62839,98th Street Battery Storage Station,NY,rte_gt_1
+62856,Marengo Battery Storage LLC,IL,rte_gt_1
+62937,Athens BESS,MN,colocated_firming
+62968,Syncarpha Tewksbury Hybrid CSG,MA,pv_same_plant
+62969,Syncarpha Puddon I Hybrid CSG,MA,pv_same_plant
+62970,Syncarpha Puddon II Hybrid CSG,MA,pv_same_plant
+62971,Syncarpha Westminster Hybrid CSG,MA,pv_same_plant
+62972,Syncarpha Leicester Hybrid CSG,MA,"rte_gt_1,pv_same_plant,dc_coupled"
+62973,Syncarpha Halifax Hybrid CSG,MA,"rte_gt_1,pv_same_plant"
+62974,Syncarpha Millbury Hybrid (CSG),MA,pv_same_plant
+62975,Syncarpha Blandford Hybrid CSG,MA,"rte_gt_1,pv_same_plant"
+62976,Syncarpha Northampton Hybrid CSG,MA,pv_same_plant
+62977,Syncarpha Northbridge I Hybrid(CSG),MA,pv_same_plant
+62978,Syncarpha Northbridge II Hybrid CSG,MA,pv_same_plant
+62999,"Finchville Solar, LLC Hybrid CSG",NY,"rte_gt_1,pv_same_plant,dc_tight"
+63000,"RT 52 Walden Solar 1, LLC Hybrid",NY,"rte_gt_1,pv_same_plant"
+63011,"Cronin Road Solar 1, LLC CSG Hybrid",MA,"rte_gt_1,pv_same_plant,dc_tight"
+63044,Ryan Road Solar LLC Hybrid(CSG),MA,"pv_same_plant,dc_tight"
+63090,Athens - Coopers Corner BESS,MN,colocated_firming
+63091,UC Santa Cruz Solar,CA,pv_same_plant
+63150,Pohatcong Solar Farm,NJ,pv_same_plant
+63172,Arroyo Solar Energy Storage Hybrid,NM,pv_same_plant
+63186,Imeson Solar,FL,"pv_same_plant,dc_tight"
+63214,Middleton Solar Park,MA,pv_same_plant
+63255,2W Permian Solar Project Hybrid,TX,pv_same_plant
+63264,Partridge Hill Solar Hybrid,MA,"pv_same_plant,dc_tight"
+63280,"AES Kekaha Solar, LLC Hybrid",HI,"rte_gt_1,pv_same_plant,dc_tight"
+63324,Camp Atterbury Microgrid Hybrid,IN,"rte_gt_1,pv_same_plant"
+63337,"Lansing Renewables, LLC",NY,"pv_same_plant,dc_coupled"
+63338,"Granby Solar, LLC CSG",MA,"pv_same_plant,dc_coupled"
+63339,"Hales Mills Solar, LLC",NY,"pv_same_plant,dc_coupled"
+63340,"Owlville Creek Solar 2, LLC",NY,"pv_same_plant,dc_coupled"
+63341,"Owlville Creek Solar, LLC",NY,"pv_same_plant,dc_coupled"
+63352,Gemini Solar Hybrid,NV,"pv_same_plant,dc_coupled"
+63398,Kearsarge Amesbury Hybrid,MA,"colocated_firming,pv_same_plant"
+63415,"Middletown Solar 1, LLC Hybrid CSG",NY,"rte_gt_1,pv_same_plant,dc_tight"
+63420,Fresno Bullard High School Hybrid,CA,"rte_gt_1,pv_same_plant"
+63421,Fresno Hoover High School Hybrid,CA,"rte_gt_1,pv_same_plant"
+63422,Fresno Sunnyside High School Hybrid,CA,pv_same_plant
+63435,Partridge Solar Project CSG Hybrid,MA,pv_same_plant
+63468,Hurteau Solar Project Hybrid,MA,"rte_gt_1,pv_same_plant,dc_tight"
+63469,Alicea Solar Project Hybrid CSG,MA,"pv_same_plant,dc_tight"
+63470,McDougle-Mitchell Solar Project Hybrid C,MA,"pv_same_plant,dc_tight"
+63472,Cycz Solar Project CSG Hybrid,MA,"rte_gt_1,pv_same_plant,dc_tight"
+63473,West A&B Solar Project Hybrid CSG,MA,"pv_same_plant,dc_tight"
+63474,Annese Solar Project Hybrid CSG,MA,"pv_same_plant,dc_tight"
+63475,Randall Solar Project Hybrid,MA,"rte_gt_1,pv_same_plant,dc_tight"
+63486,D'Arrigo Brothers - Phase 4,CA,pv_same_plant
+63510,Walnut Unified School District Walnut HS,CA,pv_same_plant
+63522,Hickory Park Solar Hybrid,GA,"rte_gt_1,colocated_firming,pv_same_plant,dc_coupled"
+63535,Solar BESS Hybrid,GA,pv_same_plant
+63554,Mohave Electric Cooperative at Joy Lane,AZ,pv_same_plant
+63585,NY3 Battery,NY,rte_gt_1
+63721,Cool Springs Solar (Hybrid),GA,"rte_gt_1,pv_same_plant,dc_coupled"
+63722,Rawhide Prairie Solar Hybrid,CO,pv_same_plant
+63723,Ho'Ohana Solar 1,HI,"colocated_firming,pv_same_plant"
+63727,Slate Hybrid,CA,"colocated_firming,pv_same_plant"
+63728,Taos Mesa Energy Facility Hybrid,NM,pv_same_plant
+63731,Neptune Energy Center Hybrid,CO,"colocated_firming,pv_same_plant"
+63763,CES Agawam Tuckahoe Solar Hybrid,MA,"rte_gt_1,colocated_firming,pv_same_plant,dc_coupled"
+63774,Mount Kisco Landfill Solar & Storage CSG,NY,"colocated_firming,pv_same_plant"
+63776,Thunder Wolf Energy Center Hybrid,CO,"colocated_firming,pv_same_plant"
+63804,Partridgeville Hybrid CSG,MA,pv_same_plant
+63805,Williamsville Hybrid CSG,MA,pv_same_plant
+63843,"Johanna Energy Center, LLC",CA,colocated_firming
+63848,Solar Blue,CA,pv_same_plant
+63849,Chestnut,CA,pv_same_plant
+63859,"Golden Field Solar III, LLC",CA,pv_same_plant
+63891,Saticoy,CA,rte_gt_1
+63892,Lily Solar Hybrid,TX,pv_same_plant
+63900,AES Waikoloa Solar Hybrid,HI,"rte_gt_1,pv_same_plant,dc_tight"
+63905,Azure Sky Solar,TX,pv_same_plant
+63913,Dodge Flat,NV,"rte_gt_1,pv_same_plant,dc_tight"
+63930,Cal Flats BESS,CA,"rte_gt_1,colocated_firming"
+63933,Dry Lake Solar Energy Center,NV,pv_same_plant
+64000,Amaterasu LLC,MA,"pv_same_plant,dc_tight"
+64042,Montague Road Solar,MA,"colocated_firming,pv_same_plant"
+64050,Fort Bragg - Camp Mackall PV BESS System,NC,"pv_same_plant,dc_coupled"
+64084,Blanchard Road 1 Community Solar,NY,"pv_same_plant,dc_tight"
+64087,Blanchard Road 2 Community Solar,NY,"pv_same_plant,dc_tight"
+64090,NYS Rte 12 Community Solar,NY,"pv_same_plant,dc_tight"
+64092,Great Lakes Seaway Community Solar,NY,"pv_same_plant,dc_tight"
+64103,Desert Harvest II LLC,CA,"pv_same_plant,dc_coupled"
+64105,"Maverick Solar 6, LLC",CA,"rte_gt_1,pv_same_plant,dc_coupled"
+64128,Ware Palmer Road Solar LLC CSG,MA,"colocated_firming,pv_same_plant,dc_coupled"
+64129,East Brookfield Adams Road Solar LLC CSG,MA,"colocated_firming,pv_same_plant,dc_coupled"
+64140,"BWC Stony Brook, LLC Hybrid",MA,"rte_gt_1,pv_same_plant,dc_tight"
+64147,ZPD-PT Solar Project 2017-038 Hybrid LLC,MA,"rte_gt_1,pv_same_plant,dc_tight"
+64148,Fish Springs,NV,"rte_gt_1,pv_same_plant,dc_tight"
+64170,"BWC Muddy Brook, LLC Hybrid",MA,"pv_same_plant,dc_tight"
+64182,"BWC Lake Lashaway, LLC Hybrid",MA,"pv_same_plant,dc_tight"
+64185,ZPD-PT Solar Project 2017-023 LLC Hybrid,MA,"rte_gt_1,pv_same_plant,dc_tight"
+64187,ZPD-PT Solar Project 2017-021 LLC Hybrid,MA,"rte_gt_1,pv_same_plant,dc_tight"
+64197,"Fifth Standard Solar PV, LLC (Hybrid)",CA,pv_same_plant
+64198,"Horn Rapids Solar, Storage and Training",WA,"rte_gt_1,colocated_firming,pv_same_plant"
+64202,"Big Star Solar, LLC (Hybrid)",TX,pv_same_plant
+64210,Bellefield Solar and Energy Storage Farm,CA,pv_same_plant
+64213,Auburn Solar Project,MA,"pv_same_plant,dc_coupled"
+64222,Burt County Solar Hybrid,NE,"colocated_firming,pv_same_plant"
+64223,Dodge County Solar Hybrid,NE,"colocated_firming,pv_same_plant"
+64231,Hadley 3 Solar (North),MA,pv_same_plant
+64232,Hadley 3 Solar (South),MA,"colocated_firming,pv_same_plant"
+64256,AES Maui Kuihelani Solar Hybrid,HI,"pv_same_plant,dc_coupled"
+64374,Norwich Solar and Energy Storage CSG,NY,"rte_gt_1,colocated_firming,pv_same_plant,dc_tight"
+64395,ZPD-PT Solar Project 2017-006 LLC Hybrid,MA,"rte_gt_1,pv_same_plant,dc_tight"
+64400,BYU - Hawaii,HI,pv_same_plant
+64426,Wilmot Energy Center LLC,AZ,pv_same_plant
+64432,Breckenridge Solar,MA,pv_same_plant
+64436,Wilmarth Solar,MA,pv_same_plant
+64442,Mt Pleasant Community Center,NY,pv_same_plant
+64446,Arlington Microgrid,WA,"colocated_firming,pv_same_plant"
+64450,"Grissom Solar, LLC",NC,pv_same_plant
+64453,Volney II,NY,"colocated_firming,pv_same_plant,dc_tight"
+64481,Arlington Energy Center II,CA,pv_same_plant
+64489,Resurgence Solar,CA,pv_same_plant
+64508,Hall Solar Energy Storage,NC,pv_same_plant
+64509,South River H4 Solar Energy Storage,NC,pv_same_plant
+64510,Arba Solar Energy Storage,NC,pv_same_plant
+64511,Rose Acre Solar Energy Storage,NC,pv_same_plant
+64512,Hamlet Solar Energy Storage,NC,pv_same_plant
+64513,Wake RJ3 Solar Energy Storage,NC,pv_same_plant
+64514,Ludie Brown Solar Energy Storage,NC,pv_same_plant
+64516,Lowe Solar Energy Storage,NC,pv_same_plant
+64520,Spencer Meadow Solar Energy Storage,NC,pv_same_plant
+64522,Old Cedar Solar Energy Storage,NC,"rte_gt_1,pv_same_plant"
+64529,Golden Triangle,MS,pv_same_plant
+64534,Darien Solar,WI,pv_same_plant
+64564,Arlington Energy Center III,CA,pv_same_plant
+64601,County of San Diego COC Hybrid,CA,"rte_gt_1,pv_same_plant"
+64611,SEPV Sierra,CA,"rte_gt_1,colocated_firming,pv_same_plant,dc_coupled"
+64617,Kearsarge William Way,MA,pv_same_plant
+64618,Kearsarge Haverhill,MA,pv_same_plant
+64619,Kearsarge Upper Union,MA,pv_same_plant
+64620,Kearsarge Montague BD(CSG),MA,pv_same_plant
+64624,Hudson - High Desert Hybrid,CA,"pv_same_plant,dc_coupled"
+64627,Blodgett Solar CSG,MA,pv_same_plant
+64630,"Rabbitbrush Solar, LLC",CA,"pv_same_plant,dc_tight"
+64633,Rexford Solar Farm,CA,pv_same_plant
+64640,Hot Springs Energy Storage & Microgrid,NC,"pv_same_plant,dc_coupled"
+64656,AES West Oahu Solar Hybrid,HI,"rte_gt_1,pv_same_plant,dc_coupled"
+64664,"Clark Road Solar 1, LLC",MA,"colocated_firming,pv_same_plant,dc_coupled"
+64672,"Blue Jay Solar I, LLC",TX,pv_same_plant
+64686,Orangeville Storage,NY,"rte_gt_1,dc_coupled"
+64695,Angel Fire Energy Facility,NM,pv_same_plant
+64696,"Dunstable Solar 1, LLC",MA,"rte_gt_1,pv_same_plant,dc_tight"
+64719,Glenmere Lake,NY,"rte_gt_1,pv_same_plant,dc_tight"
+64726,West Haydenville PJ Community Solar,MA,"rte_gt_1,pv_same_plant,dc_tight"
+64727,Brookwood Drive Community Solar,MA,"pv_same_plant,dc_tight"
+64731,Maple(CSG),MA,pv_same_plant
+64752,John Hopkins Middle School Microgrid,FL,"rte_gt_1,pv_same_plant,dc_coupled"
+64759,Old Middleboro Road Solar,MA,"pv_same_plant,dc_coupled"
+64766,Redwood Coast Airport Microgrid,CA,"colocated_firming,pv_same_plant,dc_coupled"
+64844,Three Rivers Solar LLC,MA,"pv_same_plant,dc_coupled"
+64851,Daggett 2,CA,"rte_gt_1,pv_same_plant"
+64852,Daggett 3,CA,pv_same_plant
+64864,Chaparral Springs,CA,"pv_same_plant,dc_tight"
+64875,276 Federal Rd(CSG),MA,"rte_gt_1,pv_same_plant"
+64876,0 Hammond St CSG,MA,"rte_gt_1,pv_same_plant"
+64877,Edwards Sanborn E3,CA,"rte_gt_1,pv_same_plant"
+64878,Edwards Sanborn E1A,CA,"rte_gt_1,pv_same_plant"
+64879,Edwards Sanborn E2,CA,pv_same_plant
+64881,NMSU Solar and Storage,NM,"colocated_firming,pv_same_plant"
+64908,Scarlet Solar (CA),CA,pv_same_plant
+64928,Edwards Sanborn S3,CA,"rte_gt_1,pv_same_plant"
+64929,Edwards Sanborn S1,CA,"rte_gt_1,pv_same_plant"
+64970,59 Federal Rd(CSG),MA,pv_same_plant
+64980,UMass Boston,MA,pv_same_plant
+64993,"BigBeau Solar, LLC",CA,"rte_gt_1,pv_same_plant,dc_coupled"
+65007,Grant County,WI,"rte_gt_1,pv_same_plant"
+65011,Wood County,WI,"rte_gt_1,pv_same_plant"
+65014,ASD Cotuit MA Solar LLC,MA,"pv_same_plant,dc_coupled"
+65015,ASD Wallum MA Solar LLC(CSG),MA,"colocated_firming,pv_same_plant,dc_coupled"
+65028,"Roseland Solar Project, LLC",TX,pv_same_plant
+65029,Bissell Solar and Battery Generator,MI,"rte_gt_1,colocated_firming,pv_same_plant"
+65053,Blythe Mesa Solar II,CA,"colocated_firming,pv_same_plant"
+65054,71 Charlotte Furnace Rd Hybrid(CSG),MA,"rte_gt_1,pv_same_plant"
+65055,77 Farm to Market Rd Hybrid(CSG),MA,"rte_gt_1,pv_same_plant"
+65056,160 Tihonet Rd Hybrid(CSG),MA,"rte_gt_1,pv_same_plant"
+65057,299 Farm to Market Rd Hybrid(CSG),MA,"rte_gt_1,pv_same_plant"
+65058,Waiawa Solar Power Hybrid,HI,"rte_gt_1,pv_same_plant"
+65114,196 Tremont St(CSG),MA,pv_same_plant
+65132,University of the Pacific,CA,pv_same_plant
+65154,UMass PV Lot 22,MA,"pv_same_plant,dc_coupled"
+65174,Cranberry Highway Solar LLC,MA,"rte_gt_1,pv_same_plant,dc_coupled"
+65217,South Goshen Community Solar,NY,"pv_same_plant,dc_tight"
+65242,Charlemont A,MA,"pv_same_plant,dc_coupled"
+65271,Noble Solar,TX,pv_same_plant
+65291,Golden Triangle II,MS,"pv_same_plant,dc_coupled"
+65351,General Dynamics,AR,pv_same_plant
+65382,Lincoln WWTF Hybrid,CA,pv_same_plant
+65408,Gilead Oceanside Solar Project,CA,pv_same_plant
+65409,Gilead Foster City Solar Project,CA,"rte_gt_1,pv_same_plant"
+65422,FPL Chipola River Solar Energy Center,FL,pv_same_plant
+65429,FPL Shirer Branch Solar Energy Center,FL,pv_same_plant
+65433,Blackwater River Solar Energy Center,FL,pv_same_plant
+65441,USS Itasca Clean Energy Solar LLC,MN,pv_same_plant
+65468,Highland Park Borough Solar,NJ,"colocated_firming,pv_same_plant"
+65469,Sealed Air Madera Solar Project,CA,"pv_same_plant,dc_coupled"
+65562,Amazon Bakersfield 1 Solar Project,CA,pv_same_plant
+65568,Google Moffett Park Solar Project,CA,"pv_same_plant,dc_coupled"
+65569,Gilead Sciences La Verne Rooftop Solar,CA,pv_same_plant
+65614,Orange Coast College PH2 Solar Project,CA,"rte_gt_1,pv_same_plant"
+65644,Lumina II Solar Project,TX,pv_same_plant
+65645,Lumina Solar Project,TX,pv_same_plant
+65650,Brockelman Road Solar 2,MA,"colocated_firming,pv_same_plant,dc_coupled"
+65664,Sandrini Solar 100,CA,"colocated_firming,pv_same_plant"
+65669,Faunce Corner Community Solar,MA,pv_same_plant
+65670,Ventura,MA,pv_same_plant
+65674,Edwards Sanborn E1B,CA,pv_same_plant
+65675,Edwards Sanborn E4,CA,"pv_same_plant,dc_coupled"
+65676,Edwards Sanborn E5,CA,pv_same_plant
+65677,Edwards Sanborn S4,CA,"pv_same_plant,dc_coupled"
+65693,TX10 Hummingbird Storage,TX,dc_coupled
+65695,TX12 Silicon Hill Storage,TX,rte_gt_1
+65697,Walnut Grove Demonstration Plant,MS,"pv_same_plant,dc_coupled"
+65698,TX15 Limousin Oak Storage,TX,dc_coupled
+65711,Vikings Energy Farm,CA,pv_same_plant
+65734,Oberon Solar Project,CA,"colocated_firming,pv_same_plant"
+65735,Oberon II Solar Project,CA,"colocated_firming,pv_same_plant"
+65743,Victory Pass,CA,"rte_gt_1,pv_same_plant"
+65744,Arica Solar,CA,pv_same_plant
+65815,NY - Mines Press,NY,"colocated_firming,pv_same_plant,dc_coupled"
+65820,Ocotillo Wells,CA,pv_same_plant
+65866,Canoe,FL,pv_same_plant
+65886,Tenmile Creek,FL,pv_same_plant
+65888,Kayak,FL,pv_same_plant
+65927,Fourmile Creek,FL,pv_same_plant
+65940,Shasta College PH2 Solar Project,CA,pv_same_plant
+65945,Brookville Smart Bus Depot Microgrid,MD,pv_same_plant
+65950,Kearsarge 100 Sohier Rd,MA,pv_same_plant
+65956,Storey Solar and Storage,AZ,pv_same_plant
+65962,"Mesquite Solar 4, LLC",AZ,"rte_gt_1,pv_same_plant"
+65963,"Mesquite Solar 5, LLC",AZ,pv_same_plant
+65967,Paris Solar,WI,pv_same_plant
+65987,Desert Peak Energy Storage I,CA,rte_gt_1
+65988,Desert Peak Energy Storage II,CA,rte_gt_1
+66023,Grossmont-Cuyamaca-Cuyamaca Col. Solar &,CA,"colocated_firming,pv_same_plant"
+66048,"Middleton Biogas Solar, LLC",WI,"colocated_firming,pv_same_plant,dc_coupled"
+66075,Blacksmith Road Solar 1,MA,"colocated_firming,pv_same_plant"
+66076,Electric Avenue Lunenburg Solar 1,MA,"pv_same_plant,dc_coupled"
+66128,Lake Mabel Solar and Battery Storage,FL,"colocated_firming,pv_same_plant"
+66129,Dover Solar and Battery Storage,FL,"colocated_firming,pv_same_plant"
+66137,Zier Solar,TX,pv_same_plant
+66163,Jicarilla Solar 1 LLC,NM,pv_same_plant
+66178,"South 49th 013445 SCS Norfolk, LLC",NE,pv_same_plant
+66180,Huxley Solar,MA,"colocated_firming,pv_same_plant,dc_tight"
+66181,"Beacon Solar, LLC",MA,"colocated_firming,pv_same_plant,dc_tight"
+66182,Town of Amherst Solar,MA,"colocated_firming,pv_same_plant,dc_tight"
+66218,Dubois Solar (Hybrid),NY,"rte_gt_1,pv_same_plant,dc_coupled"
+66222,Landau II Solar (Hybrid),NY,"rte_gt_1,pv_same_plant,dc_coupled"
+66228,Salt Point Solar (Hybrid),NY,"rte_gt_1,pv_same_plant,dc_coupled"
+66232,Svenski Solar (Hybrid),NY,"pv_same_plant,dc_tight"
+66263,Eleven Mile Solar Center,AZ,pv_same_plant
+66270,Proxima,CA,pv_same_plant
+66271,Ameresco HCE Solar LLC,CO,pv_same_plant
+66357,Yellow Pine Solar,NV,pv_same_plant
+66408,Buena Vista Energy Center,NM,"pv_same_plant,dc_coupled"
+66420,Five Wells Solar Center - Hybrid,TX,"colocated_firming,pv_same_plant"
+66474,MA Blackstone,MA,"pv_same_plant,dc_coupled"
+66488,Davis Solar,NY,"pv_same_plant,dc_tight"
+66499,Federalsburg Energy Storage 1 LLC,MD,"pv_same_plant,dc_coupled"
+66501,Cicero Energy Storage 1 LLC,NY,"pv_same_plant,dc_coupled"
+66503,Cicero Energy Storage 2 LLC,NY,"pv_same_plant,dc_coupled"
+66509,CA Manteca 730 Spreckels Ave,CA,"pv_same_plant,dc_coupled"
+66517,TX Houston 7080 Express Lane,TX,pv_same_plant
+66532,BCE Los Alamitos 2,CA,pv_same_plant
+66533,BCE Los Alamitos 1,CA,pv_same_plant
+66540,Shamrock Wind,TX,colocated_firming
+66574,San Juan Solar I,NM,pv_same_plant
+66598,Baldy Mesa Solar & Storage,CA,"pv_same_plant,dc_coupled"
+66608,Craighead Electric Solar One,AR,pv_same_plant
+66620,Resurgence Solar II,CA,pv_same_plant
+66627,Sonoran Solar Energy,AZ,pv_same_plant
+66629,"Envoy Solar, LLC",MO,pv_same_plant
+66636,McFarland A Solar and Storage,AZ,pv_same_plant
+66637,McFarland B Solar and Storage,AZ,"pv_same_plant,dc_coupled"
+66688,"Bright Arrow Solar, LLC",TX,pv_same_plant
+66694,Atrisco Energy Storage,NM,rte_gt_1
+66699,Lockhart Solar PV II,CA,pv_same_plant
+66717,Eastover Solar,SC,"pv_same_plant,dc_coupled"
+66764,SCH - (2A) 156 Barhydt Rd Glenville,NY,"colocated_firming,pv_same_plant,dc_coupled"
+66765,SCH County - (2B) 4982 Rynex Corners Rd,NY,"pv_same_plant,dc_coupled"
+66767,Source Power Company - Richland,NY,"pv_same_plant,dc_coupled"
+66772,Estrella Solar & Storage,CA,pv_same_plant
+66773,Raceway Solar & Storage,CA,pv_same_plant
+66799,Bishop Ranch - BR 1-Y,CA,pv_same_plant
+66800,Bishop Ranch - BR 8-P,CA,pv_same_plant
+66801,"Fence Post Solar Hybrid Project, LLC",TX,pv_same_plant
+66807,SEPV Cuyama Hybrid,CA,"pv_same_plant,dc_coupled"
+66814,Sky Ranch Solar,NM,pv_same_plant
+66871,"GulfStar Power, LLC",TX,pv_same_plant
+66872,"Estonian Solar Project, LLC",TX,pv_same_plant
+66885,Baldy Mesa 2_Silver Peak Hybrid,CA,"pv_same_plant,dc_coupled"
+66890,"SF Azalea, LLC",CA,pv_same_plant
+66905,Ables Springs Solar & Storage,TX,pv_same_plant
+66925,SR McNeal,AZ,pv_same_plant
+66951,Scarlet II Hybrid,CA,pv_same_plant
+67019,"Copperhead Solar, LLC",TX,pv_same_plant
+67039,"Northern Orchard Solar PV, LLC",CA,"pv_same_plant,dc_coupled"
+67091,Yellow Pine II,NV,pv_same_plant
+67092,Paulsell,CA,pv_same_plant
+67119,Ring Road,MA,"pv_same_plant,dc_coupled"
+67170,Amazon SAN3 Solar Project,CA,"pv_same_plant,dc_coupled"
+67178,Mohave Energy - Hybrid,AZ,"colocated_firming,pv_same_plant,dc_coupled"
+67241,401 South,MA,pv_same_plant
+67242,5 Berry,MA,"pv_same_plant,dc_tight"
+67275,White Plains_RFP-Gedney Way Landfill,NY,"colocated_firming,pv_same_plant"
+67276,Upland,MA,"pv_same_plant,dc_coupled"
+67277,Bishop Ranch - BR 15-DD,CA,pv_same_plant
+67278,Bishop Ranch - BR 2600,CA,pv_same_plant
+67281,FFP - NY Urbanski,NY,"rte_gt_1,colocated_firming,pv_same_plant,dc_coupled"
+67282,FFP - NY Varano,NY,"colocated_firming,pv_same_plant,dc_coupled"
+67284,Ganado Solar,TX,pv_same_plant
+67285,Sun Streams 3,AZ,"colocated_firming,pv_same_plant"
+67288,Foster Clean Power A,CA,"pv_same_plant,dc_coupled"
+67291,Sun Streams 4,AZ,"colocated_firming,pv_same_plant"
+67296,CVEC Round 4 Brewster Captn Golf Course,MA,"colocated_firming,pv_same_plant"
+67321,Yuma Solar + Storage,AZ,pv_same_plant
+67322,Mamm Creek,CO,"colocated_firming,pv_same_plant,dc_coupled"
+67323,High Mesa CO,CO,"colocated_firming,pv_same_plant,dc_coupled"
+67457,665 Scenic Highway,MA,"pv_same_plant,dc_coupled"
+67464,1 Commercial,MA,"pv_same_plant,dc_coupled"
+67474,Harquahala 2,AZ,pv_same_plant
+67489,Cavalry Solar Hybrid,IN,pv_same_plant
+67503,Serrano,AZ,"colocated_firming,pv_same_plant"
+67528,Milagro Solar I,NM,pv_same_plant
+67545,Marshall Solar Plus LLC,MN,"colocated_firming,pv_same_plant"
+67577,Monument Valley,MA,"pv_same_plant,dc_tight"
+67578,Sandwich,MA,"pv_same_plant,dc_tight"
+67695,Holtville,CA,rte_gt_1
+67710,TAG,NM,pv_same_plant
+67743,Bishop Ranch BR 1-X,CA,pv_same_plant
+67745,White Plains RFP Shapham Place,NY,"colocated_firming,pv_same_plant"
+67762,Stampede Solar Hybrid,TX,pv_same_plant
+67764,Rosamond South 1,CA,pv_same_plant
+67843,Farmersville West,TX,rte_gt_1
+67850,Arrowleaf Solar and Storage,CA,pv_same_plant
+67859,Foster Clean Power B,CA,"pv_same_plant,dc_coupled"
+67867,Liberty Hybrid Solar and Storage Project,TX,pv_same_plant
+67893,Dunns Bridge II Solar,IN,pv_same_plant
+67898,Escape Solar Plant,NV,pv_same_plant
+68023,BCE Seal Beach,CA,"colocated_firming,pv_same_plant"
+68064,CA- US Foods- Livermore,CA,"colocated_firming,pv_same_plant"
+68069,Old Frontier Solar III,MA,"pv_same_plant,dc_coupled"
+68147,Coffeen Solar BESS,IL,pv_same_plant
+68148,Baldwin Solar BESS,IL,pv_same_plant
+68266,North Juvenile Detention Center Solar,CA,pv_same_plant
+68460,Roadrunner Crossing Energy Storage,TX,colocated_firming
+68522,Bishop Ranch - BR 8-O,CA,pv_same_plant
+68523,Bishop Ranch - BR 8-Q,CA,pv_same_plant
+68524,Bishop Ranch - BR 15-AA,CA,pv_same_plant
+68525,Bishop Ranch - BR 15-CC,CA,pv_same_plant
+68547,Tipton 1 - (CA),CA,pv_same_plant
+68548,Tipton 2 - (CA),CA,pv_same_plant
+68605,Mauna Loa Macadamia Nut,HI,pv_same_plant
+68679,Partridge Solar,MA,pv_same_plant
+68680,Saddleback Solar,MA,pv_same_plant
+68742,Skyline Solar,MA,pv_same_plant
+68743,Adams Grove Solar,MA,pv_same_plant
+68773,Apollo,MA,"colocated_firming,pv_same_plant,dc_coupled"
+68816,Google Bayhill Solar PV and Microgrid,CA,"pv_same_plant,dc_coupled"
+68868,Shallow Basket,NM,pv_same_plant
+68891,Visalia - (CA),CA,pv_same_plant
+68906,Pine Forest Solar I,TX,pv_same_plant
+68950,Marston Mills Solar,MA,pv_same_plant
+68997,Thermo Fisher Pleasanton,CA,"pv_same_plant,dc_coupled"
+69042,Kit Carson Co-Op,NM,pv_same_plant
+69072,Fresno-Clovis RWRF,CA,pv_same_plant
+69073,20 Bedford,MA,"pv_same_plant,dc_coupled"
+69075,376 Nash,MA,"pv_same_plant,dc_coupled"
+69076,342 Circuit,MA,"pv_same_plant,dc_coupled"
+69129,Dudley Landfill Solar LLC,MA,"pv_same_plant,dc_coupled"
+69131,Hampden Landfill Solar LLC,MA,"pv_same_plant,dc_coupled"
+69187,Big Bend 1 Solar and Battery Storage,FL,pv_same_plant
+69190,"GreenStruxure BBU004, LLC",CA,"pv_same_plant,dc_coupled"
+69191,"GreenStruxure REP009, LLC",CA,dc_coupled
+69210,Salem Henningsen,OR,pv_same_plant
+69288,Palm Springs DAC PV,CA,pv_same_plant
+69414,Blevins Solar & Storage,TX,pv_same_plant
+69544,0 Middle,MA,"pv_same_plant,dc_coupled"
+69545,15 Lincoln,MA,"pv_same_plant,dc_coupled"
+69568,NL MA - Division,MA,"pv_same_plant,dc_coupled"
+69680,BHER Ravenswood Solar 1,WV,pv_same_plant
+69712,San Diego Sockers,CA,pv_same_plant
+69727,Martinsville BESS,VA,rte_gt_1
+70111,Kern Co Sheriff,CA,pv_same_plant
+70307,"Milk Street Solar, LLC",MA,pv_same_plant
+70384,"Yorktown NY 1, LLC",NY,pv_same_plant
