@@ -12,9 +12,11 @@ COMMON_FOOT = [
     "<b>Sources.</b> EIA-923 Schedules 2–5 monthly (final revisions 2019–2024; 2025 Final release, published after the 30 Jun 2026 early "
     "release the analysis spec anticipated). 2025 is the first final vintage and may still be revised. EIA-860 annual vintages 2019–2025 "
     "(generator, plant and ownership schedules).",
-    "<b>Ownership.</b> Customer = EIA-860 Schedule 4 majority owner where reported, otherwise the operating utility. Owners are <i>not</i> "
-    "rolled up to parent groups, so many single-asset LLCs appear under their own names. <b>No SSI customer list was supplied</b>: every "
-    "site is shown as a prospect and the SSI capacity share reads 0%.",
+    "<b>Ownership.</b> Customer = parent-company group from the fleet production workbook's customer mapping "
+    "(plant-level where the plant appears there; otherwise the EIA-860 Schedule 4 owner or operating utility through the workbook's "
+    "owner-to-customer table). Owners the mapping does not cover, mostly single-asset LLCs and small engine plants, appear under "
+    "their own names. <b>SSI status</b> comes from the current SSI customer list: 43 of its 173 names appear as US customer groups, and the "
+    "rest (mainly European, Australian and other non-US entities) have no US sites in this data.",
     "<b>Capacity by year</b> is each year's EIA-860 nameplate (time-varying, including retirements and augmentation). It is not "
     "reconstructed from commissioning dates, so uprates are dated when EIA-860 reports them rather than backdated. Sites with no "
     "scoreable month are not shown, and sites outside the Albers USA projection are dropped from the map and data. __COVERAGE__",
@@ -66,7 +68,7 @@ CONFIGS = {
                      "Unresolved / by design", "Unresolved / by design", "Unresolved / by design", "Unresolved / by design"],
         "stackOrder": [0, 1, 2, 3, 4, 5, 6, 7, 8], "recoverableSigs": [0, 1],
         "confOptions": [["all", "All"], ["plant", "Plant-tier fuel cost only"]],
-        "ssiSupplied": False, "footer": COMMON_FOOT + GAS_FOOT,
+        "ssiSupplied": True, "footer": COMMON_FOOT + GAS_FOOT,
     },
     "bess": {
         "title": "BESS Efficiency Results",
@@ -90,7 +92,7 @@ CONFIGS = {
                      "Commercial / scheduled / data", "Commercial / scheduled / data"],
         "stackOrder": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "recoverableSigs": [0, 1, 2, 3],
         "confOptions": [["all", "All"], ["h24", "≥24 months history"]],
-        "ssiSupplied": False, "footer": COMMON_FOOT + BESS_FOOT,
+        "ssiSupplied": True, "footer": COMMON_FOOT + BESS_FOOT,
     },
 }
 OUTFILE = {"gas": REPO / "gas_analysis" / "outputs" / "gas_results_infographic.html",

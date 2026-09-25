@@ -64,7 +64,7 @@ def gas():
     m = m[keep].copy()
     m["t_idx"] = m["year"] * 12 + m["month"] - 1
     summ = summ.merge(pl, on="plant_id", how="left")
-    summ["owner"] = summ["owner"].fillna(summ["operator"]).fillna("Unknown")
+    summ["owner"] = summ["customer_group"].fillna(summ["owner"]).fillna(summ["operator"]).fillna("Unknown")
     s_keys = set(zip(m["plant_id"], m["tech_class"]))
     summ = summ[[k in s_keys for k in zip(summ["plant_id"], summ["cls"])]]
     cap = m.groupby(["plant_id", "tech_class"])["Nameplate_MW"].max()
@@ -103,7 +103,8 @@ def gas():
         dom = r["dominant_component"] if isinstance(r["dominant_component"], str) else "HEALTHY"
         sites.append({
             "n": r["plant_name"], "id": int(r["plant_id"]), "t": tech_code.index(r["cls"]), "c": c_i[r["owner"]],
-            "s": s_i[r["state"] if isinstance(r["state"], str) else "NA"], "ssi": 0, "mw": round(float(r["cap"]), 1),
+            "s": s_i[r["state"] if isinstance(r["state"], str) else "NA"], "ssi": int(r["ssi_prospect"] == "SSI customer"),
+            "mw": round(float(r["cap"]), 1),
             "la": r3(r["lat"]), "lo": r3(r["lon"]), "oy": rint(r["cod_year"]) if pd.notna(r["cod_year"]) else None,
             "ba": r["ba"] if isinstance(r["ba"], str) else "",
             "cv": CONV.index(conviction(d["t_idx"].to_numpy(), flag, scored)),
@@ -150,7 +151,7 @@ def bess():
     m = m[keep].copy()
     m["t_idx"] = m["year"] * 12 + m["month"] - 1
     summ = summ[summ["plant_id"].isin(m["plant_id"].unique())].merge(pl, on="plant_id", how="left")
-    summ["owner"] = summ["owner"].fillna(summ["operator"]).fillna("Unknown")
+    summ["owner"] = summ["customer_group"].fillna(summ["owner"]).fillna(summ["operator"]).fillna("Unknown")
     custs = list(summ.groupby("owner")["nameplate_mw"].sum().sort_values(ascending=False).index)
     c_i = {c: i for i, c in enumerate(custs)}
     states, s_i = _idx(summ["state"].fillna("NA"))
@@ -182,7 +183,8 @@ def bess():
         span = scored.sum()
         sites.append({
             "n": r["plant_name"], "id": int(r["plant_id"]), "t": tech.index(r["dur_band"]) if r["dur_band"] in tech else 1,
-            "c": c_i[r["owner"]], "s": s_i[r["state"] if isinstance(r["state"], str) else "NA"], "ssi": 0,
+            "c": c_i[r["owner"]], "s": s_i[r["state"] if isinstance(r["state"], str) else "NA"],
+            "ssi": int(r["ssi_prospect"] == "SSI customer"),
             "mw": round(float(r["nameplate_mw"] or 0), 1), "mwh": round(float(r["e_rated_mwh"] or 0), 1),
             "la": r3(r["lat"]), "lo": r3(r["lon"]), "oy": rint(r["cod_year"]) if pd.notna(r["cod_year"]) else None,
             "ba": r["ba"] if isinstance(r["ba"], str) else "", "hy": 1 if r["hybrid"] else 0,

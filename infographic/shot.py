@@ -21,9 +21,11 @@ async def run(html, tag, width):
         await pg.screenshot(path=str(SP / f"{tag}_{width}_full.png"), full_page=True)
         n = await pg.evaluate("document.querySelectorAll('circle.dot').length")
         # interactions
-        await pg.click("#controls .ctl:nth-child(6) .seg button:nth-child(1)")   # month granularity
+        await pg.click("#controls .ctl:nth-child(8) .seg button:nth-child(1)")   # month granularity
         await pg.wait_for_timeout(400)
         await pg.select_option("#controls .ctl:nth-child(3) select", label="TX")
+        await pg.click("#controls .ctl:nth-child(4) .seg button:nth-child(2)")   # SSI customers
+        await pg.wait_for_timeout(300)
         await pg.wait_for_timeout(400)
         n_tx = await pg.evaluate("document.querySelectorAll('circle.dot').length")
         await pg.click("#rowmode button:nth-child(2)"); await pg.wait_for_timeout(300)

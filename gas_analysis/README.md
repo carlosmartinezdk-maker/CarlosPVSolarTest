@@ -110,7 +110,7 @@ The full register is in `inputs/assumptions_register.csv` and in the workbook's 
 - 2025 is the first Final release and may still be revised.
 - Page 5 prices outside $0.5–50/MMBtu (542 plant-months, up to $562,572) were replaced by the state and then national tier.
 - National-tier prices are flagged in `qc_flags` and push a lead to conviction tier C.
-- Customer group and SSI/prospect columns are blank because no CRM input was supplied. Owner comes from EIA-860 Schedule 4, or the operating utility as fallback.
+- **Customer group and SSI status** come from `crm/`, the workbook customer mapping plus the current SSI customer list. 260 plant-blocks at SSI customers hold 16.9% of capacity: NextEra 27 GW, AEP, Southern Power, Constellation and OG&E. 60 of the 491 leads are at SSI customers. `customer_source` says how each site was mapped.
 - EIA-860 Gas Steam joins at 55% (the spec said ~52%) because coal co-firing units are filed under coal. Treat ST results as indicative.
 
 ## Data sources

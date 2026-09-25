@@ -1,8 +1,12 @@
 """Inspection leads: decision-matrix bottom-right (eta_true low AND throughput low vs peers -> availability) plus
 availability signatures and elevated / rising P_aux, persistent >= 2 consecutive months. Ranked by MWh at stake
 (last 24 months) and warranty headroom remaining."""
+import sys
 import numpy as np
 import pandas as pd
+from config import ROOT
+sys.path.insert(0, str(ROOT.parent))
+from crm import customers  # noqa: E402
 from signatures import ETA_OK, UTI_LOW, PAUX_BAND_PCT
 
 MIN_CONSEC = 2
@@ -34,6 +38,7 @@ def build(p):
                                          "duration_h", "dur_band", "cod_year", "chem", "enclosure", "hybrid",
                                          "hybrid_reasons", "eta_true", "P_aux_mw", "cum_efc", "throughput_used"]]
     L = L.merge(last.reset_index(), on="plant_id", how="left")
+    L = customers.assign(L, "BESS", owner_col="operator", operator_col="operator").drop(columns=["ssi"])
     L["P_aux_pct_nameplate"] = L["P_aux_mw"] / L["nameplate_mw"] * 100
     L["warranty_headroom"] = (1 - L["throughput_used"]).clip(lower=0)
     L["implausible_e_rated"] = L["duration_h"] < MIN_PLAUSIBLE_DURATION_H

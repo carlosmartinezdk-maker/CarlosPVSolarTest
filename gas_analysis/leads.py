@@ -1,6 +1,10 @@
 """Leads: both indices flag (HRI_own and PRI below threshold) for >= 2 consecutive months, ranked by recoverable USD."""
+import sys
 import numpy as np
 import pandas as pd
+from config import ROOT
+sys.path.insert(0, str(ROOT.parent))
+from crm import customers  # noqa: E402
 
 FLAG_HRI_OWN = 0.95
 FLAG_PRI = 0.95
@@ -46,6 +50,7 @@ def build(p):
                                                    "n_units", "unit_size_mw", "cod_year", "chp_cohort",
                                                    "eoh_since_wash", "wash_seen", "cum_eoh", "duct_burners"]]
     L = L.merge(last.reset_index(), on=["plant_id", "cls"], how="left")
+    L = customers.assign(L, L["cls"].map(customers.GAS_SHEET), owner_col="operator", operator_col="operator").drop(columns=["ssi"])
     L["wash_status"] = wash_status(L["eoh_since_wash"].to_numpy(), L["wash_seen"].to_numpy())
     L["recoverable_usd_per_yr"] = L["recoverable_usd_last24m"] / 2
     strong = L["dominant_signature"].isin(["FOULING", "HGP"])

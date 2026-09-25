@@ -7,6 +7,10 @@ import qc_floors
 import fuel_cost
 from load_860_allvintages import gas_capacity, owners
 from components import RECOVERY
+import sys as _sys
+from config import ROOT as _ROOT
+_sys.path.insert(0, str(_ROOT.parent))
+from crm import customers  # noqa: E402
 
 GATES = []   # filled by gate()
 
@@ -124,20 +128,20 @@ def plant_summary(p, risk, leads_df, onset, renewal):
     base = base.reset_index().merge(ow, on="plant_id", how="left")
     base["owner"] = base["owner_sched4"].fillna(base["operator"])
     base["owner_source"] = np.where(base["owner_sched4"].notna(), "EIA-860 Schedule 4", "operating utility (fallback)")
-    base["customer_group"] = ""        # not supplied: no customer / CRM file was provided
-    base["ssi_prospect"] = ""          # not supplied
+    base = customers.assign(base, base["cls"].map(customers.GAS_SHEET))
+    base["ssi_prospect"] = base["ssi_status"]
     if len(leads_df):
         base = base.merge(leads_df[["plant_id", "cls", "rank", "conviction_tier"]].rename(columns={"rank": "lead_rank"}),
                           on=["plant_id", "cls"], how="left")
     base["conviction_tier"] = base.get("conviction_tier", pd.Series(dtype=str)).fillna("-")
     front = ["plant_id", "plant_name", "cls", "class_name", "state", "nerc", "ba", "owner", "owner_source", "operator",
-             "customer_group", "ssi_prospect", "nameplate_mw", "n_units", "unit_size_mw", "cod_year", "climate_region",
+             "customer_group", "ssi_prospect", "customer_source", "nameplate_mw", "n_units", "unit_size_mw", "cod_year", "climate_region",
              "chp_cohort", "conviction_tier", "lead_rank", "dominant_component", "dominant_recoverable",
              "hri_own_slope_pct_per_yr", "nonrecoverable_pct_per_yr", "eoh_since_wash", "wash_status",
              "recoverable_usd_per_yr", "waste_usd_per_yr", "remediation_cost_usd", "payback_yr", "cost_status",
              "cost_source_main"]
     front = [c for c in front if c in base.columns]
-    return base[front + [c for c in base.columns if c not in front and c not in ("owner_sched4", "owner_pct")]]
+    return base[front + [c for c in base.columns if c not in front and c not in ("owner_sched4", "owner_pct", "ssi", "ssi_status")]]
 
 
 def gates(p, kt, curves, led, disp, onset, renewal, fouling_share, nonrec_med, bt):

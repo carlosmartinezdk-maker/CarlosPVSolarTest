@@ -44,6 +44,12 @@ for (const t of D.tech.map((_, i) => i)) for (const yr of ['all', '2025']) for (
 ok('Filter combinations return sane counts', bad === 0, `${combos} combos`);
 const perTech = D.tech.map((_, t) => { const s = C.defaultState(); s.tech = new Set([t]); return C.filtered(s).length; });
 ok('Per-technology counts sum to total', perTech.reduce((a, b) => a + b, 0) === idx.length, perTech.join('+') + '=' + idx.length);
+// SSI relationship filter partitions the fleet and matches the embedded flags
+{ const a=C.defaultState(); a.rel='ssi'; const b=C.defaultState(); b.rel='prospect';
+  const na=C.filtered(a).length, nb=C.filtered(b).length, flagged=idx.filter(i=>D.sites[i].ssi).length;
+  ok('SSI + prospect filters partition all sites', na+nb===idx.length && na===flagged && na>0, na+' SSI + '+nb+' prospect = '+idx.length);
+  const g=C.defaultState(); g.growMin='dec'; const h=C.defaultState(); h.growMin='all';
+  ok('Customer growth filter narrows the set', C.filtered(g).length < C.filtered(h).length, C.filtered(g).length+' declining-customer sites'); }
 // 3. chart segment totals = sum of site values per period
 for (const gran of ['year', 'quarter', 'month']) {
   const s = C.defaultState(); s.gran = gran; const ii = C.filtered(s); const rows = C.chartData(ii, s); const pers = C.periodsOf(s);

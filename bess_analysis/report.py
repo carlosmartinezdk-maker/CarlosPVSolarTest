@@ -3,6 +3,10 @@ import numpy as np
 import pandas as pd
 from config import OUT
 from load_860_allvintages import owners, APPS
+import sys as _sys
+from config import ROOT as _ROOT
+_sys.path.insert(0, str(_ROOT.parent))
+from crm import customers  # noqa: E402
 
 GATES = []
 
@@ -120,19 +124,19 @@ def site_summary(p, dec, fd, risk, L):
     ow = owners()
     b = b.merge(ow, on="plant_id", how="left")
     b["owner"] = b["owner_sched4"].fillna(b["operator"])
-    b["customer_group"] = ""
-    b["ssi_prospect"] = ""
+    b = customers.assign(b, "BESS")
+    b["ssi_prospect"] = b["ssi_status"]
     if len(L):
         b = b.merge(L[["plant_id", "rank", "conviction_tier", "dominant_reason"]].rename(columns={"rank": "lead_rank"}),
                     on="plant_id", how="left")
-    front = ["plant_id", "plant_name", "state", "ba", "owner", "operator", "customer_group", "ssi_prospect", "hybrid",
+    front = ["plant_id", "plant_name", "state", "ba", "owner", "operator", "customer_group", "ssi_prospect", "customer_source", "hybrid",
              "hybrid_reasons", "chem", "enclosure", "applications", "nameplate_mw", "e_rated_mwh", "duration_h",
              "dur_band", "cod_year", "lead_rank", "conviction_tier", "dominant_signature", "eta_true", "naive_rte_mean_month",
              "P_aux_pct_nameplate", "hvac_excess_mw", "eta_trend_pts_per_yr", "paux_trend_pct_per_yr", "trend_status",
              "fade_pct_per_yr", "fade_status", "cum_efc", "throughput_used", "warranty_headroom", "warranty_cycles_assumed",
              "envelope_breach_months", "availability_months", "asym_rated", "asym_realised_avgpower_proxy", "mwh_at_stake_total"]
     front = [c for c in front if c in b.columns]
-    return b[front + [c for c in b.columns if c not in front and c not in ("owner_sched4", "owner_pct")]]
+    return b[front + [c for c in b.columns if c not in front and c not in ("owner_sched4", "owner_pct", "ssi", "ssi_status")]]
 
 
 def reliability_gates(disp, bt):
