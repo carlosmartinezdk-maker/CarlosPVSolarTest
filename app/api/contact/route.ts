@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import nodemailer from 'nodemailer';
 import { EMAIL } from '@/lib/content';
 import { MESSAGE_MAX, bodyFor, subjectFor, validate, type Enquiry } from '@/lib/enquiry';
 
@@ -54,21 +55,33 @@ export async function POST(req: Request) {
   const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || req.headers.get('x-real-ip') || 'unknown';
   if (limited(ip)) return NextResponse.json({ error: 'rate_limited' }, { status: 429 });
 
-  const key = process.env.RESEND_API_KEY;
-  if (!key) return NextResponse.json({ error: 'not_configured' }, { status: 503 });
+  // Sent through Google Workspace: a mailbox on the domain signs in to Gmail's
+  // SMTP server with an app password.
+  const user = process.env.GMAIL_USER;
+  const pass = process.env.GMAIL_APP_PASSWORD;
+  if (!user || !pass) return NextResponse.json({ error: 'not_configured' }, { status: 503 });
 
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from: process.env.CONTACT_FROM || 'Sarasin Picquart website <website@sarasinpicquart.com>',
-      to: [EMAIL],
-      reply_to: enquiry.email.trim(),
+  try {
+    // Short timeouts so a visitor gets the mailto fallback quickly if Gmail is unreachable.
+    const transport = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: { user, pass },
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 15000,
+    });
+    await transport.sendMail({
+      from: { name: 'Sarasin Picquart website', address: user },
+      to: EMAIL,
+      replyTo: enquiry.email.trim(),
       subject: subjectFor(enquiry),
       text: bodyFor(enquiry),
-    }),
-  }).catch(() => null);
-
-  if (!res || !res.ok) return NextResponse.json({ error: 'delivery_failed' }, { status: 502 });
+    });
+  } catch (err) {
+    console.error('Contact form delivery failed', err);
+    return NextResponse.json({ error: 'delivery_failed' }, { status: 502 });
+  }
   return NextResponse.json({ ok: true });
 }
