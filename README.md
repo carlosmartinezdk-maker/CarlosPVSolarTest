@@ -71,13 +71,12 @@ These steps use Vercel, which is made by the company behind Next.js and runs thi
 
    **Do not touch the email records:** MX (pointing to `…mail.protection.outlook.com`), the `autodiscover` CNAME, TXT records with `v=spf1` or `MS=`, DKIM (`selector1._domainkey`, `selector2._domainkey`) and DMARC (`_dmarc`). Those deliver the company's Microsoft 365 email, and changing them stops email from working.
 7. **Wait for it to go live.** DNS changes usually take minutes, sometimes up to 48 hours. The Domains page shows "Valid Configuration" when it works, and Vercel then issues the HTTPS certificate automatically.
-8. **Open the site to search engines.** Remove the `robots: { index: false, follow: false }` line in `app/layout.tsx` and merge. Every push to `main` from then on deploys automatically, and every pull request gets its own preview address.
+8. **Tell Google about the site.** The site serves `/robots.txt` and `/sitemap.xml` for `https://www.sarasinpicquart.com` (set in `SITE_URL` in `lib/content.ts`). Add the domain in Google Search Console and submit the sitemap. Every push to `main` deploys automatically, and every pull request gets its own preview address.
 
 Other hosts that run Next.js with API routes (Netlify, Render, Google Cloud Run, or your own Node server with `npm run build && npm start`) also work. Static-only hosting such as GitHub Pages does not, because the contact form needs the server.
 
 ## Before launch
 
-- Remove `robots: { index: false }` in `app/layout.tsx`. It was carried over from the prototype.
 - Send a real enquiry from the live site and check it arrives at info@sarasinpicquart.com.
 - Fill in the placeholders: registered name, company number, registered office, privacy notice and the LinkedIn URL (`LINKEDIN` in `lib/content.ts`).
 - Supply the four black-and-white photos for "Who we work with". They currently show placeholder text in `components/WhoWeWorkWith.tsx`.

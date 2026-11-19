@@ -123,6 +123,9 @@ export const TILES: [string, number, number, 0 | 1 | 2][] = [
   ['BG', 8, 6, 0], ['MT', 4, 7, 0], ['AL', 7, 7, 0], ['GR', 8, 7, 1],
 ];
 
+// The main address; sarasinpicquart.com redirects here.
+export const SITE_URL = 'https://www.sarasinpicquart.com';
+
 export const EMAIL = 'info@sarasinpicquart.com';
 // LinkedIn URL is still to be confirmed.
 export const LINKEDIN = '#';
