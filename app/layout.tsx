@@ -3,14 +3,14 @@ import type { ReactNode } from 'react';
 import { Closing, Footer } from '@/components/Footer';
 import Header from '@/components/Header';
 import Reveal from '@/components/Reveal';
+import { SITE_URL } from '@/lib/content';
 import './globals.css';
 
 export const metadata: Metadata = {
   title: { default: 'Sarasin Picquart', template: '%s · Sarasin Picquart' },
   description:
     'We deliver an institutional-grade finance function through expert people, standardised processes, and AI-enabled technology.',
-  // Remove before launch to allow indexing.
-  robots: { index: false, follow: false },
+  metadataBase: new URL(SITE_URL),
 };
 
 export const viewport: Viewport = { themeColor: '#0A0A0A' };
