@@ -1,7 +1,9 @@
+import { COMPANY } from '@/lib/content';
+
 const ROWS = [
-  ['Company', '[Registered name]'],
-  ['Company number', '[Company number]'],
-  ['Registered office', '[Registered office]'],
+  ['Company', COMPANY.name],
+  ['CRO number', COMPANY.cro],
+  ['Registered office', COMPANY.office],
 ];
 
 export function LegalDetails() {

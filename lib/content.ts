@@ -126,6 +126,13 @@ export const TILES: [string, number, number, 0 | 1 | 2][] = [
 // The main address; sarasinpicquart.com redirects here.
 export const SITE_URL = 'https://www.sarasinpicquart.com';
 
+// Registered company details (Companies Registration Office, Ireland).
+export const COMPANY = {
+  name: 'Sarasin Picquart Fund Services Limited',
+  cro: '829108',
+  office: 'The Gables, Crannaghmore, Athlone, Roscommon, N37 DK68, Ireland',
+};
+
 export const EMAIL = 'info@sarasinpicquart.com';
 // LinkedIn URL is still to be confirmed.
 export const LINKEDIN = '#';
