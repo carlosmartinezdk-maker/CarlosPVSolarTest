@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { EMAIL, LINKEDIN } from '@/lib/content';
+import { COMPANY, EMAIL, LINKEDIN } from '@/lib/content';
 import logo from '@/public/sp-logo.png';
 
 const COLUMNS: { head: string; links: [string, string][] }[] = [
@@ -109,7 +109,9 @@ export function Footer() {
             color: '#8C8C8C',
           }}
         >
-          <span>[Registered name] · [Company number] · [Registered office] · © 2026</span>
+          <span>
+            {COMPANY.name} · Registered in Ireland, CRO {COMPANY.cro} · {COMPANY.office} · © 2026
+          </span>
           <span style={{ display: 'flex', gap: 20 }}>
             <Link href="/legal">Legal notice</Link>
             <Link href="/legal/privacy">Privacy</Link>

@@ -78,7 +78,7 @@ Other hosts that run Next.js with API routes (Netlify, Render, Google Cloud Run,
 ## Before launch
 
 - Send a real enquiry from the live site and check it arrives at info@sarasinpicquart.com.
-- Fill in the placeholders: registered name, company number, registered office, privacy notice and the LinkedIn URL (`LINKEDIN` in `lib/content.ts`).
+- Fill in the placeholders: the privacy notice and the LinkedIn URL (`LINKEDIN` in `lib/content.ts`). The registered company details are in `COMPANY` in `lib/content.ts`.
 - Supply the four black-and-white photos for "Who we work with". They currently show placeholder text in `components/WhoWeWorkWith.tsx`.
 
 ## Where things live
